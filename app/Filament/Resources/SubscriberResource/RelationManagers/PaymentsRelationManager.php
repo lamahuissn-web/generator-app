@@ -15,23 +15,27 @@ class PaymentsRelationManager extends RelationManager
 {
     protected static string $relationship = 'payments';
 
-    protected static ?string $title = 'Payments';
+    public static function getTitle(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): string
+    {
+        return __('mdl.payments');
+    }
 
     protected static string | \BackedEnum | null $icon = Heroicon::Banknotes;
 
     public function table(Table $table): Table
     {
         return $table
+            ->defaultNumberLocale("en")
             ->defaultSort('created_at', 'desc')
             ->columns([
-                Tables\Columns\TextColumn::make('amount')->label('Amount')->money('USD')->sortable()->weight('bold'),
-                Tables\Columns\TextColumn::make('collector.name')->label('Collected by')->placeholder('—'),
-                Tables\Columns\TextColumn::make('note')->label('Note')->limit(30)->toggleable(),
-                Tables\Columns\TextColumn::make('created_at')->label('When')->dateTime('M j, Y H:i')->sortable(),
+                Tables\Columns\TextColumn::make('amount')->label(__('t.amount'))->money('USD')->sortable()->weight('bold'),
+                Tables\Columns\TextColumn::make('collector.name')->label(__('t.collected_by'))->placeholder('—'),
+                Tables\Columns\TextColumn::make('note')->label(__('t.note'))->limit(30)->toggleable(),
+                Tables\Columns\TextColumn::make('created_at')->label(__('t.when'))->dateTime('M j, Y H:i')->sortable(),
             ])
             ->actions([
                 Action::make('reversePayment')
-                    ->label('Reverse payment')
+                    ->label(__('a.reverse_payment'))
                     ->icon(Heroicon::ArrowUturnLeft)
                     ->color('danger')
                     ->requiresConfirmation()

@@ -28,26 +28,26 @@ class ExpenseResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Section::make('Expense')->columns(2)->components([
+            Section::make(__('s.expense'))->columns(2)->components([
                 Forms\Components\Select::make('category')
-                    ->options(Expense::$categories)
+                    ->options(collect(Expense::$categories)->keys()->mapWithKeys(fn (string $c) => [$c => Expense::label($c)])->all())
                     ->live()
                     ->required(),
                 Forms\Components\DatePicker::make('expense_date')
-                    ->label('Date')
+                    ->label(__('exp.date'))
                     ->default(now())
                     ->required(),
                 Forms\Components\TextInput::make('amount')
-                    ->label('Amount (USD)')
+                    ->label(__('exp.amount'))
                     ->numeric()->minValue(0.01)->required()->prefix('$'),
                 Forms\Components\TextInput::make('quantity')
-                    ->label('Quantity (liters)')
+                    ->label(__('exp.quantity'))
                     ->numeric()->minValue(0)
-                    ->helperText('Fuel purchases: how many liters were bought')
+                    ->helperText(__('s.fuel_hint'))
                     ->visible(fn (Get $get): bool => $get('category') === Expense::CAT_FUEL),
-                Forms\Components\TextInput::make('description')->label('Description')->maxLength(200)->columnSpanFull(),
+                Forms\Components\TextInput::make('description')->label(__('exp.description'))->maxLength(200)->columnSpanFull(),
                 Forms\Components\FileUpload::make('receipt_path')
-                    ->label('Receipt photo')
+                    ->label(__('exp.receipt_photo'))
                     ->image()
                     ->imageEditor()
                     ->directory('expense-receipts')
@@ -60,11 +60,12 @@ class ExpenseResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->defaultNumberLocale("en")
             ->defaultSort('expense_date', 'desc')
             ->columns([
-                Tables\Columns\TextColumn::make('expense_date')->label('Date')->date('M j, Y')->sortable(),
-                Tables\Columns\TextColumn::make('category')
-                    ->formatStateUsing(fn (string $state): string => Expense::$categories[$state] ?? $state)
+                Tables\Columns\TextColumn::make('expense_date')->label(__('t.date'))->date('M j, Y')->sortable(),
+                Tables\Columns\TextColumn::make('category')->label(__('t.category'))
+                    ->formatStateUsing(fn (string $state): string => Expense::label($state))
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         Expense::CAT_FUEL => 'warning',
@@ -73,20 +74,20 @@ class ExpenseResource extends Resource
                         Expense::CAT_REPAIR => 'danger',
                         default => 'gray',
                     }),
-                Tables\Columns\TextColumn::make('description')->limit(40)->searchable()->placeholder('—'),
-                Tables\Columns\TextColumn::make('quantity')->label('Liters')->numeric()->placeholder('—')->toggleable(),
-                Tables\Columns\TextColumn::make('amount')->label('Amount')->money('USD')->sortable()->weight('bold'),
-                Tables\Columns\ImageColumn::make('receipt_path')->label('Receipt')->circular()->size(32)->toggleable(),
-                Tables\Columns\TextColumn::make('enteredBy.name')->label('By')->placeholder('—')->toggleable(),
+                Tables\Columns\TextColumn::make('description')->label(__('t.description'))->limit(40)->searchable()->placeholder('—'),
+                Tables\Columns\TextColumn::make('quantity')->label(__('t.liters'))->numeric()->placeholder('—')->toggleable(),
+                Tables\Columns\TextColumn::make('amount')->label(__('t.amount'))->money('USD')->sortable()->weight('bold'),
+                Tables\Columns\ImageColumn::make('receipt_path')->label(__('t.receipt'))->circular()->size(32)->toggleable(),
+                Tables\Columns\TextColumn::make('enteredBy.name')->label(__('t.by'))->placeholder('—')->toggleable(),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('category')
-                    ->options(Expense::$categories),
+                    ->options(collect(Expense::$categories)->keys()->mapWithKeys(fn (string $c) => [$c => Expense::label($c)])->all()),
                 Tables\Filters\Filter::make('expense_date')
-                    ->label('Month')
+                    ->label(__('exp.period'))
                     ->form([
                         Forms\Components\Select::make('month')
-                            ->label('Show month')
+                            ->label(__('t.show_month'))
                             ->options(fn (): array => Expense::query()
                                 ->selectRaw("substr(expense_date, 1, 7) as m")
                                 ->distinct()->orderByDesc('m')->pluck('m', 'm')->all()),
@@ -107,6 +108,21 @@ class ExpenseResource extends Resource
                     }),
             ])
             ->bulkActions([]);
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('mdl.expense');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('mdl.expenses');
+    }
+
+    public static function getNavigationGroup(): string|\UnitEnum|null
+    {
+        return __('nav.finance');
     }
 
     public static function getPages(): array

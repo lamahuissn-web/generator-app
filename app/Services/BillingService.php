@@ -24,6 +24,12 @@ class BillingService
         return (float) Setting::get('kwh_price', 0.25);
     }
 
+    /** Global default maintenance fee, or 0 when unset. */
+    public static function defaultMaintenanceFee(): float
+    {
+        return (float) Setting::get('default_maintenance_fee', 0);
+    }
+
     /** Sum of unpaid amounts on bills strictly older than $period. */
     public static function outstandingBefore(Subscriber $subscriber, string $period): float
     {
@@ -77,7 +83,7 @@ class BillingService
         $consumption = round($currentReading - $prevValue, 2);
         $price = self::kwhPrice();
         $usage = round($consumption * $price, 2);
-        $maintenance = (float) $subscriber->maintenance_fee;
+        $maintenance = $subscriber->effectiveMaintenanceFee();
         $prevDebt = self::outstandingBefore($subscriber, $period);
         $total = round($usage + $maintenance, 2);
 

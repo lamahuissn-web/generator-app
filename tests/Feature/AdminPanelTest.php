@@ -20,7 +20,7 @@ class AdminPanelTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->admin = User::create(['name' => 'Admin', 'email' => 'admin@x.com', 'password' => 'x', 'role' => 'admin']);
+        $this->admin = User::create(['name' => 'Admin', 'email' => 'admin@x.com', 'password' => 'x', 'role' => 'admin', 'locale' => 'en']);
 
         // Minimal network so lists and widgets have data to aggregate.
         $route = Route::create(['name' => 'Demo Route']);
@@ -101,5 +101,31 @@ class AdminPanelTest extends TestCase
 
         // outstanding() == billed - paid always
         $this->assertEqualsWithDelta($sumBills - $sumPayments, $sub->outstanding(), 0.01);
+    }
+
+    public function test_admin_panel_chrome_renders_in_arabic(): void
+    {
+        $arAdmin = User::create(['name' => 'مدير', 'email' => 'ar@x.com', 'password' => 'x', 'role' => 'admin', 'locale' => 'ar']);
+
+        $this->actingAs($arAdmin)
+            ->get('/admin/subscribers')
+            ->assertOk()
+            ->assertSee('المشتركون');
+
+        $this->actingAs($arAdmin)
+            ->get('/admin/profit-loss')
+            ->assertOk()
+            ->assertSee('صافي الربح');
+
+        // Table headers follow the locale too (not just chrome).
+        $this->actingAs($arAdmin)
+            ->get('/admin/bills')
+            ->assertOk()
+            ->assertSee('المشترك')
+            ->assertSee('الفترة')
+            ->assertSee('المدفوع')
+            // Numbers stay Western (0-9) even when the UI is Arabic.
+            ->assertSee('32.50')
+            ->assertDontSee('٣٢'); // Arabic-Indic digits must never appear
     }
 }

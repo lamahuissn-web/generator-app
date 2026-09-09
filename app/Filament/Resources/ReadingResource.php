@@ -26,20 +26,20 @@ class ReadingResource extends Resource
     {
         return $schema->components([
             Forms\Components\Select::make('subscriber_id')
-                ->label('Subscriber')
+                ->label(__('t.subscriber'))
                 ->relationship('subscriber', 'name')
                 ->searchable()
                 ->preload()
                 ->required()
                 ->optionsLimit(100),
             Forms\Components\TextInput::make('period')
-                ->label('Period (YYYY-MM)')
-                ->helperText('e.g. 2026-09 — one reading per subscriber per period')
+                ->label(__('t.period_ym'))
+                ->helperText(__('s.period_hint'))
                 ->default(now()->format('Y-m'))
                 ->regex('/^\d{4}-(0[1-9]|1[0-2])$/')
                 ->required(),
             Forms\Components\TextInput::make('current_reading')
-                ->label('Current meter reading')
+                ->label(__('t.cur_meter_reading'))
                 ->numeric()
                 ->minValue(0)
                 ->required(),
@@ -50,28 +50,29 @@ class ReadingResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->defaultNumberLocale("en")
             ->defaultSort('period', 'desc')
             ->columns([
-                Tables\Columns\TextColumn::make('subscriber.name')
-                    ->label('Subscriber')
+                Tables\Columns\TextColumn::make('subscriber.name')->label(__('t.subscriber'))
+                    ->label(__('t.subscriber'))
                     ->searchable()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('period')
+                Tables\Columns\TextColumn::make('period')->label(__('t.period'))
                     ->sortable()
                     ->searchable(),
-                Tables\Columns\TextColumn::make('previous_reading')
-                    ->label('Previous')
+                Tables\Columns\TextColumn::make('previous_reading')->label(__('t.prev_reading'))
+                    ->label(__('t.prev_reading'))
                     ->numeric(),
-                Tables\Columns\TextColumn::make('current_reading')
-                    ->label('Current')
+                Tables\Columns\TextColumn::make('current_reading')->label(__('t.current_reading'))
+                    ->label(__('t.current_reading'))
                     ->numeric(),
-                Tables\Columns\TextColumn::make('consumption')
-                    ->label('kWh')
+                Tables\Columns\TextColumn::make('consumption')->label(__('t.kwh'))
+                    ->label(__('t.kwh'))
                     ->numeric(),
-                Tables\Columns\TextColumn::make('enteredBy.name')
-                    ->label('Entered by')
+                Tables\Columns\TextColumn::make('enteredBy.name')->label(__('t.entered_by'))
+                    ->label(__('t.entered_by'))
                     ->placeholder('—'),
-                Tables\Columns\TextColumn::make('created_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('created_at')->label(__('t.created'))->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('period')
@@ -79,10 +80,25 @@ class ReadingResource extends Resource
             ])
             ->actions([
                 DeleteAction::make()
-                    ->modalHeading('Delete reading & its bill?')
-                    ->modalDescription('This also deletes the bill generated from this reading.'),
+                    ->modalHeading(__('a.del_reading_q'))
+                    ->modalDescription(__('a.del_reading_desc')),
             ])
             ->bulkActions([]);
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('mdl.reading');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('mdl.readings');
+    }
+
+    public static function getNavigationGroup(): string|\UnitEnum|null
+    {
+        return __('nav.billing');
     }
 
     public static function getPages(): array

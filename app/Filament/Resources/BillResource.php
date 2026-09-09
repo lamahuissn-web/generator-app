@@ -24,51 +24,52 @@ class BillResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->defaultNumberLocale("en")
             ->defaultSort('period', 'desc')
             ->columns([
-                Tables\Columns\TextColumn::make('subscriber.name')
-                    ->label('Subscriber')
+                Tables\Columns\TextColumn::make('subscriber.name')->label(__('t.subscriber'))
+                    ->label(__('t.subscriber'))
                     ->searchable()
                     ->sortable(),
-                Tables\Columns\TextColumn::make('period')
+                Tables\Columns\TextColumn::make('period')->label(__('t.period'))
                     ->sortable()
                     ->searchable(),
-                Tables\Columns\TextColumn::make('type')
-                    ->label('Type')
+                Tables\Columns\TextColumn::make('type')->label(__('t.type'))
+                    ->label(__('t.type'))
                     ->formatStateUsing(fn (string $state): string => $state === Subscriber::TYPE_METERED ? 'Metered' : 'Flat')
                     ->badge()
                     ->color(fn (string $state): string => $state === 'Metered' ? 'info' : 'violet'),
-                Tables\Columns\TextColumn::make('consumption')
-                    ->label('kWh')
+                Tables\Columns\TextColumn::make('consumption')->label(__('t.kwh'))
+                    ->label(__('t.kwh'))
                     ->numeric()
                     ->toggleable(),
-                Tables\Columns\TextColumn::make('usage_amount')
-                    ->label('Usage')
+                Tables\Columns\TextColumn::make('usage_amount')->label(__('t.usage'))
+                    ->label(__('t.usage'))
                     ->money('USD')
                     ->toggleable(),
-                Tables\Columns\TextColumn::make('maintenance_fee')
-                    ->label('Maintenance')
+                Tables\Columns\TextColumn::make('maintenance_fee')->label(__('t.maintenance'))
+                    ->label(__('t.maintenance'))
                     ->money('USD')
                     ->toggleable(),
-                Tables\Columns\TextColumn::make('flat_amount')
-                    ->label('Flat')
+                Tables\Columns\TextColumn::make('flat_amount')->label(__('t.flat'))
+                    ->label(__('t.flat'))
                     ->money('USD')
                     ->toggleable(),
-                Tables\Columns\TextColumn::make('prev_debt')
-                    ->label('Prev. debt')
+                Tables\Columns\TextColumn::make('prev_debt')->label(__('t.prev_debt'))
+                    ->label(__('t.prev_debt'))
                     ->money('USD')
                     ->color(fn (Bill $r): string => (float) $r->prev_debt > 0 ? 'danger' : 'gray')
                     ->toggleable(),
-                Tables\Columns\TextColumn::make('total')
-                    ->label('Total')
+                Tables\Columns\TextColumn::make('total')->label(__('t.total'))
+                    ->label(__('t.total'))
                     ->money('USD')
                     ->sortable(),
-                Tables\Columns\TextColumn::make('paid_amount')
-                    ->label('Paid')
+                Tables\Columns\TextColumn::make('paid_amount')->label(__('t.paid'))
+                    ->label(__('t.paid'))
                     ->money('USD')
                     ->sortable(),
                 Tables\Columns\TextColumn::make('paymentStatus')
-                    ->label('Status')
+                    ->label(__('t.status'))
                     ->getStateUsing(fn (Bill $r): string => ucfirst($r->paymentStatus()))
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
@@ -86,11 +87,26 @@ class BillResource extends Resource
                         Subscriber::TYPE_FLAT => 'Flat rate',
                     ]),
                 Tables\Filters\Filter::make('has_outstanding')
-                    ->label('Unpaid / partially paid only')
+                    ->label(__('f.unpaid_only'))
                     ->query(fn (Builder $query): Builder => $query->whereColumn('paid_amount', '<', 'total')),
             ])
             ->actions([])
             ->bulkActions([]);
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('mdl.bill');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('mdl.bills');
+    }
+
+    public static function getNavigationGroup(): string|\UnitEnum|null
+    {
+        return __('nav.billing');
     }
 
     public static function getPages(): array

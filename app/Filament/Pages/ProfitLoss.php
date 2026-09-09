@@ -31,6 +31,16 @@ class ProfitLoss extends Page implements HasSchemas
         return auth()->user()?->isAdmin() ?? false;
     }
 
+    public static function getNavigationGroup(): string|\UnitEnum|null
+    {
+        return __('nav.finance');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('mdl.profit_loss');
+    }
+
     public function mount(): void
     {
         $this->form->fill([
@@ -42,7 +52,7 @@ class ProfitLoss extends Page implements HasSchemas
     {
         return $schema->components([
             Select::make('month')
-                ->label('Month')
+                ->label(__('t.month'))
                 ->options($this->monthOptions())
                 ->live()
                 ->required(),
@@ -79,7 +89,7 @@ class ProfitLoss extends Page implements HasSchemas
             ->orderByDesc('total')
             ->get()
             ->map(fn ($row) => [
-                'label' => Expense::$categories[$row->category] ?? $row->category,
+                'label' => Expense::label($row->category),
                 'count' => (int) $row->count,
                 'total' => (float) $row->total,
             ])

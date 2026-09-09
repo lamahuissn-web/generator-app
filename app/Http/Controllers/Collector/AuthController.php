@@ -25,14 +25,14 @@ class AuthController extends Controller
         if (! Auth::attempt($credentials)) {
             return back()
                 ->withInput($request->only('email'))
-                ->withErrors(['email' => 'البريد أو كلمة المرور غير صحيحة']);
+                ->withErrors(['email' => __('portal.auth_failed')]);
         }
 
         $user = Auth::user();
         if ($user->isAdmin()) {
             Auth::logout();
 
-            return redirect()->route('login')->withErrors(['email' => 'حساب المدير يُستخدم من لوحة /admin']);
+            return redirect()->route('login')->withErrors(['email' => __('portal.auth_admin')]);
         }
 
         $request->session()->regenerate();

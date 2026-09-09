@@ -23,8 +23,8 @@ class CollectorPortalTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $admin = User::create(['name' => 'Admin', 'email' => 'admin@x.com', 'password' => 'x', 'role' => 'admin']);
-        $this->collector = User::create(['name' => 'Jad', 'email' => 'jad@x.com', 'password' => 'x', 'role' => 'collector']);
+        $admin = User::create(['name' => 'Admin', 'email' => 'admin@x.com', 'password' => 'x', 'role' => 'admin', 'locale' => 'en']);
+        $this->collector = User::create(['name' => 'Jad', 'email' => 'jad@x.com', 'password' => 'x', 'role' => 'collector', 'locale' => 'en']);
 
         $this->route = Route::create(['name' => 'Ramlet El Baida']);
         $this->metered = Subscriber::create([
@@ -124,5 +124,31 @@ class CollectorPortalTest extends TestCase
         ])->assertSessionHasErrors('email');
 
         $this->assertGuest();
+    }
+
+    public function test_arabic_collector_interface_renders_rtl(): void
+    {
+        $arCollector = User::create(['name' => 'سليم', 'email' => 'salim@x.com', 'password' => 'x', 'role' => 'collector', 'locale' => 'ar']);
+
+        $this->actingAs($arCollector)
+            ->get(route('collector.dashboard'))
+            ->assertOk()
+            ->assertSee('المناطق')
+            ->assertSee('المحصل اليوم');
+
+        $this->actingAs($arCollector)
+            ->get(route('collector.subscriber.show', $this->metered))
+            ->assertOk()
+            ->assertSee('الرصيد المطلوب')
+            ->assertSee('تسجيل قراءة');
+    }
+
+    public function test_locale_switch_updates_user_preference(): void
+    {
+        $this->actingAs($this->collector)
+            ->post(route('locale.switch'), ['locale' => 'ar'])
+            ->assertRedirect();
+
+        $this->assertSame('ar', $this->collector->fresh()->locale);
     }
 }

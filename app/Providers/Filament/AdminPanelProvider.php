@@ -40,6 +40,12 @@ class AdminPanelProvider extends PanelProvider
             \Filament\View\PanelsRenderHook::HEAD_START,
             fn (): string => '<link rel="stylesheet" href="'.asset('css/panel.css').'">',
         );
+
+        // Language toggle in the top bar: switches the signed-in user's locale.
+        \Filament\Support\Facades\FilamentView::registerRenderHook(
+            \Filament\View\PanelsRenderHook::TOPBAR_END,
+            fn (): string => view('filament.locale-toggle')->render(),
+        );
     }
 
     public function panel(Panel $panel): Panel
@@ -53,10 +59,10 @@ class AdminPanelProvider extends PanelProvider
                 'primary' => Color::Amber,
             ])
             ->navigationGroups([
-                NavigationGroup::make()->label('Network'),
-                NavigationGroup::make()->label('Billing'),
-                NavigationGroup::make()->label('Finance'),
-                NavigationGroup::make()->label('System'),
+                NavigationGroup::make()->label(__('nav.network')),
+                NavigationGroup::make()->label(__('nav.billing')),
+                NavigationGroup::make()->label(__('nav.finance')),
+                NavigationGroup::make()->label(__('nav.system')),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
@@ -80,6 +86,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 Authenticate::class,
+                \App\Http\Middleware\SetLocale::class,
             ]);
     }
 }

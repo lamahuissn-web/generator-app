@@ -17,7 +17,7 @@ class User extends Authenticatable implements FilamentUser
 
     public const ROLE_COLLECTOR = 'collector';
 
-    protected $fillable = ['name', 'email', 'password', 'role', 'phone'];
+    protected $fillable = ['name', 'email', 'password', 'role', 'phone', 'locale'];
 
     protected $hidden = ['password', 'remember_token'];
 
@@ -26,6 +26,7 @@ class User extends Authenticatable implements FilamentUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'locale' => 'string',
         ];
     }
 

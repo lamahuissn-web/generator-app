@@ -17,9 +17,20 @@ class Subscriber extends Model
 
     public const STATUS_INACTIVE = 'inactive';
 
+    public const MAINT_AUTO = 'auto';
+
+    public const MAINT_CUSTOM = 'custom';
+
+    public const MAINT_EXEMPT = 'exempt';
+
     protected $fillable = [
         'route_id', 'name', 'phone', 'address', 'meter_no', 'type',
-        'amperage', 'maintenance_fee', 'flat_fee', 'status', 'notes', 'created_by',
+        'amperage', 'maintenance_fee', 'maintenance_mode', 'flat_fee', 'status', 'notes', 'created_by',
+    ];
+
+    /** Every new subscriber starts in "custom" mode unless told otherwise. */
+    protected $attributes = [
+        'maintenance_mode' => self::MAINT_CUSTOM,
     ];
 
     public function route(): BelongsTo
@@ -65,6 +76,19 @@ class Subscriber extends Model
     public function isFlat(): bool
     {
         return $this->type === self::TYPE_FLAT;
+    }
+
+    /**
+     * Monthly maintenance fee actually billed for this subscriber:
+     * custom = their own amount, exempt = nothing, auto = the global default.
+     */
+    public function effectiveMaintenanceFee(): float
+    {
+        return match ($this->maintenance_mode) {
+            self::MAINT_EXEMPT => 0.0,
+            self::MAINT_CUSTOM => (float) $this->maintenance_fee,
+            default => \App\Services\BillingService::defaultMaintenanceFee(),
+        };
     }
 
     /** Latest recorded reading (any period). */

@@ -107,7 +107,7 @@ class SubscriberShow extends Component
         $prev = $this->previousReadingValue();
         $consumption = round((float) $input - $prev, 2);
         if ($consumption < 0) {
-            return ['error' => 'القراءة الجديدة أقل من القراءة السابقة ('.$prev.')'];
+            return ['error' => __('portal.err_reading_lower')];
         }
         $usage = round($consumption * $this->price(), 2);
         $maintenance = (float) $this->subscriber->maintenance_fee;
@@ -141,24 +141,24 @@ class SubscriberShow extends Component
         $this->flash = null;
 
         if (! $this->subscriber->isMetered()) {
-            $this->addError('reading', 'هذا المشترك بنظام الاشتراك الثابت — لا قراءة عداد.');
+            $this->addError('reading', __('portal.err_reading_flat'));
 
             return;
         }
         if ($this->subscriber->status !== Subscriber::STATUS_ACTIVE) {
-            $this->addError('reading', 'المشترك موقوف — لا يمكن تسجيل قراءة.');
+            $this->addError('reading', __('portal.err_reading_inactive'));
 
             return;
         }
         if ($this->currentReadingDone()) {
-            $this->addError('reading', 'تم تسجيل قراءة هذا الشهر مسبقاً.');
+            $this->addError('reading', __('portal.err_reading_exists'));
 
             return;
         }
 
         $input = trim((string) $this->readingInput);
         if ($input === '' || ! is_numeric($input) || (float) $input < 0) {
-            $this->addError('readingInput', 'أدخل قراءة صحيحة.');
+            $this->addError('readingInput', __('portal.err_reading_input'));
 
             return;
         }
@@ -173,7 +173,7 @@ class SubscriberShow extends Component
             );
             $this->subscriber->refresh();
             $this->readingInput = null;
-            $this->flashMessage('Reading recorded and bill generated ✅');
+            $this->flashMessage(__('portal.flash_reading_ok'));
             $this->view = 'reading';
         } catch (\RuntimeException $e) {
             $this->addError('reading', $e->getMessage());
@@ -187,14 +187,14 @@ class SubscriberShow extends Component
         $this->flash = null;
 
         if ($this->subscriber->status !== Subscriber::STATUS_ACTIVE) {
-            $this->addError('payment', 'المشترك موقوف — لا يمكن تحصيل.');
+            $this->addError('payment', __('portal.err_payment_inactive'));
 
             return;
         }
 
         $amount = trim((string) $this->paymentAmount);
         if ($amount === '' || ! is_numeric($amount) || (float) $amount <= 0) {
-            $this->addError('paymentAmount', 'أدخل مبلغاً صحيحاً.');
+            $this->addError('paymentAmount', __('portal.err_payment_input'));
 
             return;
         }
@@ -237,12 +237,15 @@ class SubscriberShow extends Component
             $this->view = 'payment';
 
             if ($result['excess'] > 0) {
-                $this->flashMessage('Collected '.money($result['applied']).' — excess '.money($result['excess']).' not applied (over the balance).', 'warning');
+                $this->flashMessage(__('portal.flash_collected', ['amount' => money($result['applied']), 'excess' => money($result['excess'])]), 'warning');
             } else {
-                $this->flashMessage('Payment recorded ✅');
+                $this->flashMessage(__('portal.flash_payment_ok'));
             }
         } catch (\RuntimeException $e) {
-            $this->addError('payment', $e->getMessage());
+            $message = $e->getMessage() === 'This subscriber has no outstanding balance to collect.'
+                ? __('portal.err_payment_nothing')
+                : $e->getMessage();
+            $this->addError('payment', $message);
         }
     }
 

@@ -25,7 +25,7 @@ class UserResource extends Resource
     public static function form(Schema $schema): Schema
     {
         return $schema->components([
-            Forms\Components\TextInput::make('name')->label('Full name')->required()->maxLength(255),
+            Forms\Components\TextInput::make('name')->label(__('t.full_name'))->required()->maxLength(255),
             Forms\Components\TextInput::make('email')->email()->unique(ignoreRecord: true)->required(),
             Forms\Components\Select::make('role')
                 ->options([
@@ -38,7 +38,7 @@ class UserResource extends Resource
             Forms\Components\TextInput::make('password')
                 ->password()
                 ->revealable()
-                ->helperText('Leave empty to keep the current password.')
+                ->helperText(__('s.pw_hint'))
                 ->dehydrated(fn (?string $state): bool => filled($state))
                 ->required(fn (string $operation): bool => $operation === 'create'),
         ]);
@@ -47,21 +47,37 @@ class UserResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->defaultNumberLocale("en")
             ->columns([
-                Tables\Columns\TextColumn::make('name')->searchable()->sortable(),
-                Tables\Columns\TextColumn::make('email')->searchable(),
-                Tables\Columns\TextColumn::make('role')
+                Tables\Columns\TextColumn::make('name')->label(__('t.name'))->searchable()->sortable(),
+                Tables\Columns\TextColumn::make('email')->label(__('t.email'))->searchable(),
+                Tables\Columns\TextColumn::make('role')->label(__('t.role'))
                     ->formatStateUsing(fn (string $state): string => ucfirst($state))
                     ->badge()
                     ->color(fn (string $state): string => $state === 'admin' ? 'warning' : 'info'),
-                Tables\Columns\TextColumn::make('phone')->toggleable(),
-                Tables\Columns\TextColumn::make('created_at')->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
+                Tables\Columns\TextColumn::make('phone')->label(__('t.phone'))->toggleable(),
+                Tables\Columns\TextColumn::make('created_at')->label(__('t.created'))->dateTime()->sortable()->toggleable(isToggledHiddenByDefault: true),
             ])
             ->actions([
                 EditAction::make(),
                 DeleteAction::make()->hidden(fn (User $record): bool => $record->is(auth()->user())),
             ])
             ->bulkActions([]);
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('mdl.user');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('mdl.users');
+    }
+
+    public static function getNavigationGroup(): string|\UnitEnum|null
+    {
+        return __('nav.system');
     }
 
     public static function getPages(): array

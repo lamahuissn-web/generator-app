@@ -1,11 +1,11 @@
 @extends('layouts.collector')
 
-@section('title', 'Dashboard')
+@section('title', __('portal.routes'))
 
 @section('content')
     @php
         $hour = (int) now()->format('G');
-        $greeting = $hour < 12 ? 'Good morning' : ($hour < 18 ? 'Good afternoon' : 'Good evening');
+        $greeting = $hour < 12 ? __('portal.gm') : ($hour < 18 ? __('portal.ga') : __('portal.ge'));
     @endphp
 
     {{-- Greeting + shift summary --}}
@@ -19,14 +19,14 @@
         </div>
         <div class="mt-4 grid grid-cols-2 gap-3">
             <div class="rounded-xl bg-white/5 p-3 ring-1 ring-white/10">
-                <p class="text-[11px] font-medium uppercase tracking-wide text-slate-400">Collected today</p>
+                <p class="text-[11px] font-medium uppercase tracking-wide text-slate-400">{{ __('portal.today_cash') }}</p>
                 <p class="mt-1 text-lg font-bold tabular-nums text-emerald-400">{{ money($stats['today_total']) }}</p>
-                <p class="text-[11px] text-slate-500">{{ $stats['today_count'] }} payments</p>
+                <p class="text-[11px] text-slate-500">{{ __('portal.today_payments', ['n' => $stats['today_count']]) }}</p>
             </div>
             <div class="rounded-xl bg-white/5 p-3 ring-1 ring-white/10">
-                <p class="text-[11px] font-medium uppercase tracking-wide text-slate-400">This month</p>
+                <p class="text-[11px] font-medium uppercase tracking-wide text-slate-400">{{ __('portal.month_cash') }}</p>
                 <p class="mt-1 text-lg font-bold tabular-nums text-amber-300">{{ money($stats['month_total']) }}</p>
-                <p class="text-[11px] text-slate-500">{{ $stats['month_count'] }} payments</p>
+                <p class="text-[11px] text-slate-500">{{ __('portal.today_payments', ['n' => $stats['month_count']]) }}</p>
             </div>
         </div>
     </section>
@@ -37,13 +37,13 @@
     {{-- Routes --}}
     <section>
         <div class="mb-2.5 flex items-baseline justify-between px-1">
-            <h2 class="text-sm font-bold uppercase tracking-wide text-slate-500">Routes</h2>
-            <span class="text-xs text-slate-400">{{ $routes->count() }} areas</span>
+            <h2 class="text-sm font-bold uppercase tracking-wide text-slate-500">{{ __('portal.routes') }}</h2>
+            <span class="text-xs text-slate-400">{{ __('portal.areas_count', ['n' => $routes->count()]) }}</span>
         </div>
 
         @if ($routes->isEmpty())
             <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">
-                No routes yet — add them from the admin panel.
+                {{ __('portal.no_routes') }}
             </div>
         @endif
 
@@ -56,13 +56,13 @@
                     <span class="min-w-0 flex-1">
                         <span class="block truncate font-bold text-slate-900">{{ $route->name }}</span>
                         <span class="block text-xs text-slate-500">
-                            {{ $route->active_count }} active · {{ $route->subscribers_count }} total
+                            {{ __('portal.route_stats', ['active' => $route->active_count, 'total' => $route->subscribers_count]) }}
                             @if ($owed > 0)
-                                <span class="font-semibold text-rose-500">· {{ money($owed) }} due</span>
+                                <span class="font-semibold text-rose-500">· {{ __('portal.due') }} {{ money($owed) }}</span>
                             @endif
                         </span>
                     </span>
-                    <svg class="h-5 w-5 shrink-0 text-slate-300 transition group-hover:text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                    <svg class="h-5 w-5 shrink-0 text-slate-300 transition group-hover:text-amber-500 rtl:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
                 </a>
             @endforeach
         </div>

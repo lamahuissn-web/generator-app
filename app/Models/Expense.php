@@ -42,6 +42,11 @@ class Expense extends Model
         ];
     }
 
+    public static function label(string $category): string
+    {
+        return __("exp.{$category}");
+    }
+
     public function enteredBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'entered_by');

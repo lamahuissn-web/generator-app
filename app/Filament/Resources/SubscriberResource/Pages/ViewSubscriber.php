@@ -25,7 +25,7 @@ class ViewSubscriber extends ViewRecord
         return $schema->components([
             \Filament\Schemas\Components\Section::make()->columns(4)->components([
                 \Filament\Infolists\Components\TextEntry::make('outstanding')
-                    ->label('Outstanding balance')
+                    ->label(__('t.outstanding_bal'))
                     ->state(fn (Subscriber $r): string => money($r->outstanding()))
                     ->color(fn (Subscriber $r): string => $r->outstanding() > 0 ? 'danger' : 'success')
                     ->size(\Filament\Support\Enums\TextSize::Large),
@@ -37,9 +37,9 @@ class ViewSubscriber extends ViewRecord
                     ->formatStateUsing(fn (string $state): string => $state === Subscriber::TYPE_METERED ? 'Metered' : 'Flat rate')
                     ->badge()
                     ->color(fn (string $state): string => $state === 'Metered' ? 'info' : 'violet'),
-                \Filament\Infolists\Components\TextEntry::make('route.name')->label('Route')->placeholder('—'),
-                \Filament\Infolists\Components\TextEntry::make('meter_no')->label('Meter')->placeholder('—'),
-                \Filament\Infolists\Components\TextEntry::make('amperage')->label('Amperage')->formatStateUsing(fn (?int $state): string => $state ? $state.'A' : '—'),
+                \Filament\Infolists\Components\TextEntry::make('route.name')->label(__('t.route'))->placeholder('—'),
+                \Filament\Infolists\Components\TextEntry::make('meter_no')->label(__('t.meter'))->placeholder('—'),
+                \Filament\Infolists\Components\TextEntry::make('amperage')->label(__('t.amperage'))->formatStateUsing(fn (?int $state): string => $state ? $state.'A' : '—'),
                 \Filament\Infolists\Components\TextEntry::make('phone')->copyable()->icon(Heroicon::Phone),
                 \Filament\Infolists\Components\TextEntry::make('address')->placeholder('—')->columnSpan(2),
             ]),
@@ -52,16 +52,16 @@ class ViewSubscriber extends ViewRecord
 
         return [
             Action::make('collect')
-                ->label('Collect payment')
+                ->label(__('a.collect_payment'))
                 ->icon(Heroicon::Banknotes)
                 ->color('success')
                 ->visible(fn (): bool => $record->outstanding() > 0 && $record->status === Subscriber::STATUS_ACTIVE)
                 ->schema([
                     Forms\Components\TextInput::make('amount')
-                        ->label('Amount received (USD)')
+                        ->label(__('t.amount_received'))
                         ->numeric()->minValue(0.01)->required()
                         ->helperText(fn (): string => 'Outstanding balance: '.money($record->outstanding())),
-                    Forms\Components\TextInput::make('note')->label('Note')->maxLength(200),
+                    Forms\Components\TextInput::make('note')->label(__('t.note'))->maxLength(200),
                 ])
                 ->action(function (array $data): void {
                     $record = $this->getRecord();
@@ -87,7 +87,7 @@ class ViewSubscriber extends ViewRecord
                             ->success();
                         if ($wa) {
                             $notification->actions([
-                                Action::make('send_receipt')->label('Send receipt via WhatsApp')->url($wa)->openUrlInNewTab(),
+                                Action::make('send_receipt')->label(__('portal.send_receipt'))->url($wa)->openUrlInNewTab(),
                             ]);
                         }
                         $notification->send();
@@ -96,20 +96,20 @@ class ViewSubscriber extends ViewRecord
                     }
                 }),
             Action::make('recordReading')
-                ->label('Record reading')
+                ->label(__('a.record_reading'))
                 ->icon(Heroicon::ClipboardDocumentList)
                 ->color('info')
                 ->visible(fn (): bool => $record->isMetered() && $record->status === Subscriber::STATUS_ACTIVE)
                 ->schema([
                     Forms\Components\TextInput::make('period')
-                        ->label('Period (YYYY-MM)')
+                        ->label(__('t.period_ym'))
                         ->default(BillingService::currentPeriod())
                         ->regex(BillingService::PERIOD_REGEX)
                         ->required(),
                     Forms\Components\TextInput::make('current_reading')
-                        ->label('Current meter reading')
+                        ->label(__('t.cur_meter_reading'))
                         ->numeric()->minValue(0)->required(),
-                    Forms\Components\TextInput::make('note')->label('Note')->maxLength(200),
+                    Forms\Components\TextInput::make('note')->label(__('t.note'))->maxLength(200),
                 ])
                 ->action(function (array $data): void {
                     try {

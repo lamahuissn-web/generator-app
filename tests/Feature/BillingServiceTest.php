@@ -18,10 +18,10 @@ class BillingServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->admin = User::create(['name' => 'Admin', 'email' => 'a@a.com', 'password' => 'x', 'role' => 'admin']);
+        $this->admin = User::create(['name' => 'Admin', 'email' => 'a@a.com', 'password' => 'x', 'role' => 'admin', 'locale' => 'en']);
     }
 
-    private function meteredSub(float $maintenance = 15, int $ampere = 5): Subscriber
+    private function meteredSub(float $maintenance = 15, int $ampere = 5, array $extra = []): Subscriber
     {
         $route = Route::create(['name' => 'Test Area']);
 
@@ -34,6 +34,7 @@ class BillingServiceTest extends TestCase
             'maintenance_fee' => $maintenance,
             'status' => Subscriber::STATUS_ACTIVE,
             'created_by' => $this->admin->id,
+            ...$extra,
         ]);
     }
 
@@ -241,5 +242,41 @@ class BillingServiceTest extends TestCase
 
         $this->assertDatabaseMissing('bills', ['id' => $bill->id]);
         $this->assertSame(0.0, $sub->outstanding());
+    }
+
+    public function test_auto_maintenance_mode_follows_global_default(): void
+    {
+        \App\Models\Setting::set('default_maintenance_fee', '20');
+        $sub = $this->meteredSub(99, 10, ['maintenance_mode' => Subscriber::MAINT_AUTO]); // stored 99 must be ignored
+        $this->baseline($sub, '2026-06', 1000);
+
+        $result = BillingService::enterMeteredReading($sub, '2026-07', 1040, $this->admin->id);
+
+        $this->assertSame(20.0, (float) $result['bill']->maintenance_fee);
+        $this->assertSame(30.0, (float) $result['bill']->total); // 10 usage + 20 maintenance
+    }
+
+    public function test_exempt_maintenance_mode_charges_no_fee(): void
+    {
+        \App\Models\Setting::set('default_maintenance_fee', '20');
+        $sub = $this->meteredSub(99, 10, ['maintenance_mode' => Subscriber::MAINT_EXEMPT]);
+        $this->baseline($sub, '2026-06', 1000);
+
+        $result = BillingService::enterMeteredReading($sub, '2026-07', 1040, $this->admin->id);
+
+        $this->assertSame(0.0, (float) $result['bill']->maintenance_fee);
+        $this->assertSame(10.0, (float) $result['bill']->total);
+    }
+
+    public function test_custom_maintenance_mode_uses_own_amount(): void
+    {
+        \App\Models\Setting::set('default_maintenance_fee', '20');
+        $sub = $this->meteredSub(7, 10, ['maintenance_mode' => Subscriber::MAINT_CUSTOM]);
+        $this->baseline($sub, '2026-06', 1000);
+
+        $result = BillingService::enterMeteredReading($sub, '2026-07', 1040, $this->admin->id);
+
+        $this->assertSame(7.0, (float) $result['bill']->maintenance_fee);
+        $this->assertSame(17.0, (float) $result['bill']->total);
     }
 }

@@ -1,10 +1,10 @@
 <x-filament-widgets::widget>
     <div class="gx-two-col">
         {{-- Latest payments --}}
-        <x-filament::section heading="Latest collections" icon="heroicon-o-banknotes">
+        <x-filament::section heading="{{ __('w.latest_collections') }}" icon="heroicon-o-banknotes">
             @php $payments = $this->payments(); @endphp
             @if ($payments->isEmpty())
-                <p class="gx-empty">No payments recorded yet.</p>
+                <p class="gx-empty">{{ __('w.no_payments') }}</p>
             @else
                 <div class="gx-feed">
                     @foreach ($payments as $p)
@@ -24,10 +24,10 @@
         </x-filament::section>
 
         {{-- Top debtors --}}
-        <x-filament::section heading="Top outstanding balances" icon="heroicon-o-exclamation-triangle">
+        <x-filament::section heading="{{ __('w.top_balances') }}" icon="heroicon-o-exclamation-triangle">
             @php $debtors = $this->topDebtors(); @endphp
             @if ($debtors->isEmpty())
-                <p class="gx-empty">Everyone is settled 🎉</p>
+                <p class="gx-empty">{{ __('w.all_settled') }}</p>
             @else
                 <div class="gx-feed">
                     @foreach ($debtors as $d)

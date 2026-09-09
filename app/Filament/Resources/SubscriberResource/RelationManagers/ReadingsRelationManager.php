@@ -18,7 +18,10 @@ class ReadingsRelationManager extends RelationManager
 {
     protected static string $relationship = 'readings';
 
-    protected static ?string $title = 'Meter readings';
+    public static function getTitle(\Illuminate\Database\Eloquent\Model $ownerRecord, string $pageClass): string
+    {
+        return __('mdl.readings');
+    }
 
     protected static string | \BackedEnum | null $icon = Heroicon::ClipboardDocumentList;
 
@@ -30,29 +33,30 @@ class ReadingsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->defaultNumberLocale("en")
             ->defaultSort('period', 'desc')
             ->columns([
-                Tables\Columns\TextColumn::make('period')->label('Period')->sortable()->searchable(),
-                Tables\Columns\TextColumn::make('previous_reading')->label('Previous')->numeric(),
-                Tables\Columns\TextColumn::make('current_reading')->label('Current')->numeric(),
-                Tables\Columns\TextColumn::make('consumption')->label('kWh')->numeric(),
-                Tables\Columns\TextColumn::make('enteredBy.name')->label('Recorded by')->placeholder('—'),
-                Tables\Columns\TextColumn::make('created_at')->label('When')->dateTime('M j, Y H:i')->toggleable(),
+                Tables\Columns\TextColumn::make('period')->label(__('t.period'))->sortable()->searchable(),
+                Tables\Columns\TextColumn::make('previous_reading')->label(__('t.prev_reading'))->numeric(),
+                Tables\Columns\TextColumn::make('current_reading')->label(__('t.current_reading'))->numeric(),
+                Tables\Columns\TextColumn::make('consumption')->label(__('t.kwh'))->numeric(),
+                Tables\Columns\TextColumn::make('enteredBy.name')->label(__('t.entered_by'))->placeholder('—'),
+                Tables\Columns\TextColumn::make('created_at')->label(__('t.when'))->dateTime('M j, Y H:i')->toggleable(),
             ])
             ->headerActions([
                 Action::make('recordReading')
-                    ->label('Record reading')
+                    ->label(__('a.record_reading'))
                     ->icon(Heroicon::Plus)
                     ->schema([
                         Forms\Components\TextInput::make('period')
-                            ->label('Period (YYYY-MM)')
+                            ->label(__('t.period_ym'))
                             ->default(\App\Services\BillingService::currentPeriod())
                             ->regex(\App\Services\BillingService::PERIOD_REGEX)
                             ->required(),
                         Forms\Components\TextInput::make('current_reading')
-                            ->label('Current meter reading')
+                            ->label(__('t.cur_meter_reading'))
                             ->numeric()->minValue(0)->required(),
-                        Forms\Components\TextInput::make('note')->label('Note')->maxLength(200),
+                        Forms\Components\TextInput::make('note')->label(__('t.note'))->maxLength(200),
                     ])
                     ->action(function (array $data): void {
                         try {
@@ -71,7 +75,7 @@ class ReadingsRelationManager extends RelationManager
             ])
             ->actions([
                 Action::make('deleteReading')
-                    ->label('Delete reading & bill')
+                    ->label(__('a.del_reading'))
                     ->icon(Heroicon::Trash)
                     ->color('danger')
                     ->requiresConfirmation()

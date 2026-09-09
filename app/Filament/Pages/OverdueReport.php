@@ -33,6 +33,16 @@ class OverdueReport extends Page implements HasSchemas
         return auth()->user()?->isAdmin() ?? false;
     }
 
+    public static function getNavigationGroup(): string|\UnitEnum|null
+    {
+        return __('nav.finance');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('mdl.overdue_report');
+    }
+
     public function mount(): void
     {
         $this->form->fill([
@@ -45,18 +55,18 @@ class OverdueReport extends Page implements HasSchemas
     {
         return $schema->components([
             Select::make('bucket')
-                ->label('Debt age')
+                ->label(__('over.age'))
                 ->options([
-                    'all' => 'All with debt',
-                    'red' => 'Red — 2+ months (disconnection list)',
-                    'yellow' => 'Yellow — 1 month overdue',
-                    'current' => 'Due this month',
-                    'settled' => 'Green — settled',
+                    'all' => __('over.opt_all'),
+                    'red' => __('over.opt_red'),
+                    'yellow' => __('over.opt_yellow'),
+                    'current' => __('over.opt_current'),
+                    'settled' => __('over.opt_settled'),
                 ])
                 ->live()
                 ->required(),
             Select::make('route_id')
-                ->label('Route')
+                ->label(__('over.route'))
                 ->options(Route::query()->orderBy('name')->pluck('name', 'id')->all())
                 ->nullable()
                 ->live(),
@@ -150,7 +160,7 @@ class OverdueReport extends Page implements HasSchemas
     {
         return [
             Action::make('export')
-                ->label('Export CSV')
+                ->label(__('over.export_btn'))
                 ->icon(Heroicon::ArrowDownTray)
                 ->action(function () {
                     $rows = array_values(array_filter($this->rows(), fn ($r) => $r['bucket'] !== 'settled'));

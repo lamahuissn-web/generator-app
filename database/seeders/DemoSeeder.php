@@ -17,7 +17,7 @@ class DemoSeeder extends Seeder
     private array $plan = [
         // Route 1 — Ramlet El Baida
         ['route' => 0, 'name' => 'محمد عيتاني', 'phone' => '03 123456', 'meter' => '1123', 'ampere' => 10, 'maint' => 25, 'open' => 1200, 'aug_cur' => 1270, 'sep_cur' => 1340, 'aug_pay' => 42.5, 'sep_pay' => 30, 'collector' => 0],
-        ['route' => 0, 'name' => 'رنا الحاج', 'phone' => '70 555123', 'meter' => '1124', 'ampere' => 5, 'maint' => 15, 'open' => 800, 'aug_cur' => 856, 'sep_cur' => 902, 'aug_pay' => 99999, 'sep_pay' => null, 'collector' => 1],
+        ['route' => 0, 'name' => 'رنا الحاج', 'phone' => '70 555123', 'meter' => '1124', 'ampere' => 5, 'maint' => 15, 'mode' => 'auto', 'open' => 800, 'aug_cur' => 856, 'sep_cur' => 902, 'aug_pay' => 99999, 'sep_pay' => null, 'collector' => 1],
         ['route' => 0, 'name' => 'جورج صليبا', 'phone' => '76 444000', 'meter' => '1125', 'ampere' => 20, 'maint' => 40, 'open' => 2400, 'aug_cur' => 2520, 'sep_cur' => null, 'aug_pay' => null, 'sep_pay' => null, 'collector' => 0],
         ['route' => 0, 'name' => 'ناديا خليل', 'phone' => '03 987654', 'flat' => 60, 'aug_pay' => 99999, 'sep_pay' => null, 'collector' => 0],
         ['route' => 0, 'name' => 'زياد قانصو', 'phone' => '81 222333', 'flat' => 90, 'aug_pay' => null, 'sep_pay' => 90, 'collector' => 1],
@@ -45,6 +45,7 @@ class DemoSeeder extends Seeder
         Setting::flush();
 
         Setting::set('kwh_price', '0.25', 'USD price per kWh applied to new metered bills');
+        Setting::set('default_maintenance_fee', '15', 'USD default monthly maintenance for metered subscribers on Auto');
 
         $admin = User::create([
             'name' => 'Generator Admin', 'email' => 'admin@example.com',
@@ -85,6 +86,7 @@ class DemoSeeder extends Seeder
                 'type' => isset($row['flat']) ? Subscriber::TYPE_FLAT : Subscriber::TYPE_METERED,
                 'amperage' => $row['ampere'] ?? null,
                 'maintenance_fee' => $row['maint'] ?? 0,
+                'maintenance_mode' => $row['mode'] ?? Subscriber::MAINT_CUSTOM,
                 'flat_fee' => $row['flat'] ?? null,
                 'status' => ! empty($row['inactive']) ? Subscriber::STATUS_INACTIVE : Subscriber::STATUS_ACTIVE,
                 'created_by' => $this->admin->id,
