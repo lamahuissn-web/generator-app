@@ -1,0 +1,1 @@
+A web-based management system tailored for private electricity generator operators in Lebanon to handle subscriber billing, meter readings, cash collections, operational expenses, and WhatsApp customer communication.
