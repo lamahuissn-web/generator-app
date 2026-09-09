@@ -1,0 +1,169 @@
+/* Custom styles for Generator Manager custom Filament pages/widgets.
+   Plain CSS on purpose: Filament's compiled bundle only contains the
+   Tailwind utilities Filament itself uses, so custom blades must not
+   rely on arbitrary utility classes. Namespaced gx-* to avoid collisions. */
+
+/* ---------- cards & stat grids ---------- */
+.gx-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 1rem 1.1rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.gx-card-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+}
+
+.gx-stat-value {
+    margin-top: 4px;
+    font-size: 1.65rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+    color: #0f172a;
+}
+
+.gx-stat-sub {
+    margin-top: 2px;
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.gx-pos { color: #047857; }
+.gx-pos-bg { background: #ecfdf5; border-color: #a7f3d0; }
+.gx-neg { color: #be123c; }
+.gx-neg-bg { background: #fff1f2; border-color: #fecdd3; }
+.gx-warn-text { color: #b45309; }
+.gx-muted { color: #94a3b8; }
+.gx-strong { color: #0f172a; font-weight: 700; }
+.gx-title { font-size: 14px; font-weight: 700; color: #334155; margin: 0 0 10px; }
+
+/* ---------- report tables ---------- */
+.gx-table-wrap {
+    overflow-x: auto;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+table.gx-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    color: #334155;
+}
+
+table.gx-table th {
+    text-align: left;
+    padding: 11px 14px;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    white-space: nowrap;
+}
+
+table.gx-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+
+table.gx-table tbody tr:hover { background: #fffbeb; }
+table.gx-table tbody tr:last-child td { border-bottom: 0; }
+
+table.gx-table .gx-num,
+table.gx-table td.gx-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+table.gx-table .gx-text-red { color: #be123c; }
+table.gx-table .gx-text-strong { color: #0f172a; font-weight: 700; }
+table.gx-table .gx-cell-muted { color: #64748b; }
+table.gx-table .gx-cell-faint { color: #94a3b8; font-size: 12.5px; }
+
+table.gx-table tfoot td {
+    border-top: 2px solid #e2e8f0;
+    font-weight: 700;
+    color: #0f172a;
+    background: #f8fafc;
+}
+
+/* link to subscriber profile */
+a.gx-link { color: #0f172a; font-weight: 700; text-decoration: none; }
+a.gx-link:hover { color: #b45309; text-decoration: underline; }
+
+/* debt-age dot + label */
+.gx-dot { display: inline-block; width: 9px; height: 9px; border-radius: 9999px; margin-right: 6px; vertical-align: 1px; }
+.gx-dot-red { background: #f43f5e; }
+.gx-dot-amber { background: #f59e0b; }
+.gx-dot-sky { background: #0ea5e9; }
+.gx-dot-green { background: #10b981; }
+.gx-age-red { color: #be123c; font-weight: 600; }
+.gx-age { color: #334155; font-weight: 500; }
+
+.gx-chip {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 9999px;
+    background: #e2e8f0;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+/* summary strip above tables */
+.gx-strip { font-size: 13px; color: #64748b; }
+
+/* ghost button (Print / PDF) */
+.gx-btn {
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+}
+.gx-btn:hover { background: #f1f5f9; }
+
+/* empty state */
+.gx-empty { padding: 28px; text-align: center; color: #94a3b8; font-size: 13.5px; }
+
+/* ---------- dashboard widget feed (Recent activity) ---------- */
+.gx-two-col { display: grid; gap: 1rem; }
+@media (min-width: 1200px) {
+    .gx-two-col { grid-template-columns: 1fr 1fr; }
+}
+.gx-feed { display: flex; flex-direction: column; }
+.gx-feed-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 0;
+    border-top: 1px solid #f1f5f9;
+}
+.gx-feed-item:first-child { border-top: 0; }
+.gx-feed-name { font-size: 13.5px; font-weight: 600; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gx-feed-meta { font-size: 12px; color: #64748b; }
+.gx-feed-amount { font-size: 13.5px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gx-feed-pos { color: #059669; }
+.gx-feed-neg { color: #e11d48; }

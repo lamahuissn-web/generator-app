@@ -29,6 +29,8 @@ class DemoSeeder extends Seeder
         ['route' => 2, 'name' => 'حسن عواد', 'phone' => '76 888999', 'meter' => '3301', 'ampere' => 5, 'maint' => 15, 'open' => 100, 'aug_cur' => 131, 'sep_cur' => 150, 'aug_pay' => null, 'sep_pay' => 20, 'collector' => 0],
         ['route' => 2, 'name' => 'سامي دندشي', 'phone' => '81 444555', 'flat' => 90, 'aug_pay' => null, 'sep_pay' => 90, 'collector' => 0],
         ['route' => 2, 'name' => 'خليل حداد', 'phone' => '70 000777', 'meter' => '3302', 'ampere' => 20, 'maint' => 40, 'open' => 0, 'aug_cur' => 120, 'sep_cur' => null, 'aug_pay' => null, 'sep_pay' => null, 'collector' => 1, 'inactive' => true],
+        // Deep-debt case for the aging report: unpaid since July (2+ months → red).
+        ['route' => 2, 'name' => 'جوزيف حرب', 'phone' => '70 998877', 'meter' => '3303', 'ampere' => 10, 'maint' => 25, 'open' => 2000, 'open_period' => '2026-06'],
     ];
 
     public function run(): void
@@ -104,14 +106,23 @@ class DemoSeeder extends Seeder
             if (isset($row['open'])) {
                 $opening = \App\Models\Reading::create([
                     'subscriber_id' => $sub->id,
-                    'period' => '2026-07',
+                    'period' => $row['open_period'] ?? '2026-07',
                     'current_reading' => (float) $row['open'],
                     'previous_reading' => 0,
                     'consumption' => 0,
                     'entered_by' => $collectorId,
                     'note' => 'Opening reading',
                 ]);
-                $this->touchDates([$opening], Carbon::create(2026, 7, 25, 9, 0));
+                $openDate = ($row['open_period'] ?? '2026-07') === '2026-06'
+                    ? Carbon::create(2026, 6, 25, 9, 0)
+                    : Carbon::create(2026, 7, 25, 9, 0);
+                $this->touchDates([$opening], $openDate);
+            }
+
+            // Deep-debt demo: unpaid July + August bills (no September visit yet).
+            if (($row['name'] ?? '') === 'جوزيف حرب') {
+                [$rJul] = $this->reading($sub, '2026-07', 2044, $collectorId, Carbon::create(2026, 7, 26, 10, 0));
+                $this->reading($sub, '2026-08', 2088, $collectorId, Carbon::create(2026, 8, 26, 10, 0));
             }
 
             // ---------- AUGUST cycle ----------
@@ -148,6 +159,36 @@ class DemoSeeder extends Seeder
                 $result = $this->collectRaw($sub, $amount, $collectorId, 'September collection', null, $payDate);
                 $this->touchDates([$result['payment']], $payDate);
             }
+        }
+
+        $this->seedExpenses();
+    }
+
+    private function seedExpenses(): void
+    {
+        $admin = $this->admin;
+        $rows = [
+            // [category, amount, quantity (liters), date, description]
+            ['fuel', 45, 150, '2026-08-05', 'Diesel for generator 1'],
+            ['oil', 15, null, '2026-08-15', 'Engine oil change'],
+            ['salary', 100, null, '2026-08-31', 'Collector pay — August'],
+            ['rent', 40, null, '2026-08-01', 'Site rent'],
+            ['fuel', 40, 130, '2026-09-03', 'Diesel for generator 2'],
+            ['oil', 20, null, '2026-09-07', 'Oil + filter'],
+            ['salary', 100, null, '2026-09-01', 'Collector pay — September'],
+            ['rent', 40, null, '2026-09-01', 'Site rent'],
+            ['repair', 25, null, '2026-09-05', 'Generator servicing (spark plugs)'],
+        ];
+
+        foreach ($rows as [$category, $amount, $qty, $date, $description]) {
+            \App\Models\Expense::create([
+                'category' => $category,
+                'amount' => $amount,
+                'quantity' => $qty,
+                'expense_date' => $date,
+                'description' => $description,
+                'entered_by' => $admin->id,
+            ]);
         }
     }
 

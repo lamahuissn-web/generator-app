@@ -34,6 +34,12 @@ class AdminPanelProvider extends PanelProvider
                 ';</script>' .
                 '<script>document.addEventListener("DOMContentLoaded", function () { if (window.Livewire && ! window.__lwStarted) { window.__lwStarted = true; window.Livewire.start(); } });</script>',
         );
+
+        // Custom CSS for report pages & dashboard widgets (see public/css/panel.css).
+        \Filament\Support\Facades\FilamentView::registerRenderHook(
+            \Filament\View\PanelsRenderHook::HEAD_START,
+            fn (): string => '<link rel="stylesheet" href="'.asset('css/panel.css').'">',
+        );
     }
 
     public function panel(Panel $panel): Panel
@@ -49,6 +55,7 @@ class AdminPanelProvider extends PanelProvider
             ->navigationGroups([
                 NavigationGroup::make()->label('Network'),
                 NavigationGroup::make()->label('Billing'),
+                NavigationGroup::make()->label('Finance'),
                 NavigationGroup::make()->label('System'),
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')

@@ -45,6 +45,16 @@ class AdminPanelTest extends TestCase
         ]);
         BillingService::enterMeteredReading($sub, now()->format('Y-m'), 130, $this->admin->id);
         BillingService::collect($sub, 10, $this->admin->id, null, now()->format('Y-m'));
+
+        // Expense data so Finance pages render their populated (non-empty) state.
+        \App\Models\Expense::create([
+            'category' => \App\Models\Expense::CAT_FUEL,
+            'amount' => 40,
+            'quantity' => 100,
+            'expense_date' => now()->toDateString(),
+            'description' => 'Test diesel',
+            'entered_by' => $this->admin->id,
+        ]);
     }
 
     public function test_admin_can_open_dashboard_with_widgets(): void
@@ -68,6 +78,10 @@ class AdminPanelTest extends TestCase
             '/admin/readings/create',
             '/admin/bills',
             '/admin/payments',
+            '/admin/expenses',
+            '/admin/expenses/create',
+            '/admin/profit-loss',
+            '/admin/overdue-report',
             '/admin/users',
             '/admin/users/create',
             '/admin/settings',
