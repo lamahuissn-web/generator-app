@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Bill;
 use App\Models\Route;
 use App\Models\Subscriber;
 use App\Models\User;
@@ -84,6 +85,55 @@ class CollectorPortalTest extends TestCase
             ->assertOk()
             ->assertSee('محمد عيتاني')
             ->assertSee('Flat Sub');
+    }
+
+    /**
+     * Regression: the per-row lookup used to be assigned to a variable named after the
+     * collection it read from, so from the second row on the collector saw "$0 · settled"
+     * for every subscriber after the first — the field money was told to collect vanished.
+     */
+    public function test_route_page_shows_the_amount_due_on_every_row_not_just_the_first(): void
+    {
+        Bill::create([
+            'number' => 'INV-2026-09-9001', 'subscriber_id' => $this->metered->id, 'period' => '2026-09',
+            'type' => 'metered', 'usage_amount' => 15, 'maintenance_fee' => 25, 'total' => 40, 'paid_amount' => 0,
+        ]);
+        Bill::create([
+            'number' => 'INV-2026-09-9002', 'subscriber_id' => $this->flat->id, 'period' => '2026-09',
+            'type' => 'flat_rate', 'flat_amount' => 60, 'total' => 60, 'paid_amount' => 40,
+        ]);
+
+        $response = $this->actingAs($this->collector)
+            ->get(route('collector.route.show', $this->route))
+            ->assertOk();
+
+        $response->assertSee('$40.00')->assertSee('$20.00');
+    }
+
+    public function test_route_page_marks_a_fully_paid_subscriber_as_settled(): void
+    {
+        $settled = Subscriber::create([
+            'route_id' => $this->route->id,
+            'name' => 'Settled Sub',
+            'type' => Subscriber::TYPE_FLAT,
+            'flat_fee' => 50,
+            'status' => Subscriber::STATUS_ACTIVE,
+            'created_by' => $this->collector->id,
+        ]);
+        Bill::create([
+            'number' => 'INV-2026-09-9003', 'subscriber_id' => $settled->id, 'period' => '2026-09',
+            'type' => 'flat_rate', 'flat_amount' => 50, 'total' => 50, 'paid_amount' => 50,
+        ]);
+        Bill::create([
+            'number' => 'INV-2026-09-9004', 'subscriber_id' => $this->metered->id, 'period' => '2026-09',
+            'type' => 'metered', 'usage_amount' => 15, 'maintenance_fee' => 25, 'total' => 40, 'paid_amount' => 0,
+        ]);
+
+        // The metered subscriber owes $40: their row must not collapse into the settled branch.
+        $this->actingAs($this->collector)
+            ->get(route('collector.route.show', $this->route))
+            ->assertOk()
+            ->assertSee('$40.00');
     }
 
     public function test_metered_subscriber_page_offers_reading_entry(): void

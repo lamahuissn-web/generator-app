@@ -22,7 +22,10 @@
     <div class="space-y-2.5">
         @foreach ($subscribers as $subscriber)
             @php
-                $owed = (float) ($owed[$subscriber->id] ?? 0);
+                // NB: keep this name distinct from the $owed lookup array handed in by the
+                // controller — reusing $owed here overwrote it on the first row, so every
+                // later subscriber read a float as an array and silently showed $0 "settled".
+                $due = (float) ($owed[$subscriber->id] ?? 0);
                 $inactive = $subscriber->status === 'inactive';
             @endphp
             <a href="{{ route('collector.subscriber.show', $subscriber) }}"
@@ -42,8 +45,8 @@
                     </span>
                 </span>
                 <span class="shrink-0 text-right">
-                    @if ($owed > 0)
-                        <span class="block font-bold tabular-nums text-rose-600">{{ money($owed) }}</span>
+                    @if ($due > 0)
+                        <span class="block font-bold tabular-nums text-rose-600">{{ money($due) }}</span>
                         <span class="block text-[10px] font-semibold uppercase tracking-wide text-rose-400">{{ __('portal.due') }}</span>
                     @else
                         <span class="block font-bold tabular-nums text-emerald-600">0</span>
