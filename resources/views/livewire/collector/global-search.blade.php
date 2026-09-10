@@ -27,9 +27,15 @@
                             {{ collect([$r['meter_no'] ? __('portal.meter').' '.$r['meter_no'] : null, $r['route']])->filter()->implode(' · ') ?: __('portal.no_route') }}
                         </span>
                     </span>
-                    @if ($r['owed'] > 0)
-                        <span class="shrink-0 text-sm font-bold tabular-nums text-rose-600">{{ money($r['owed']) }}</span>
-                    @endif
+                    <span class="shrink-0 text-right">
+                        @if ($r['owed'] > 0)
+                            <span class="block text-sm font-bold tabular-nums text-rose-600">{{ money($r['owed']) }}</span>
+                            <span class="block text-[10px] font-semibold uppercase tracking-wide text-rose-400">{{ __('portal.due') }}</span>
+                        @else
+                            <span class="block text-sm font-bold tabular-nums text-emerald-600">0</span>
+                            <span class="block text-[10px] font-semibold uppercase tracking-wide text-emerald-500">{{ __('portal.settled') }}</span>
+                        @endif
+                    </span>
                 </a>
             @endforeach
         </div>

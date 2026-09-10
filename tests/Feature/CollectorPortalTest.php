@@ -2,11 +2,14 @@
 
 namespace Tests\Feature;
 
+use App\Livewire\Collector\GlobalSearch;
+use App\Livewire\Collector\SubscriberShow;
 use App\Models\Bill;
 use App\Models\Route;
 use App\Models\Subscriber;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 class CollectorPortalTest extends TestCase
@@ -134,6 +137,51 @@ class CollectorPortalTest extends TestCase
             ->get(route('collector.route.show', $this->route))
             ->assertOk()
             ->assertSee('$40.00');
+    }
+
+    /**
+     * The other two screens that print a per-subscriber balance: global search and the
+     * subscriber page itself. Both must report the subscriber's own figure — not the
+     * first row's, and not zero because the lookup was consumed by the row above.
+     */
+    public function test_global_search_reports_each_hit_the_balance_it_actually_owes(): void
+    {
+        foreach ([['زينب كرم', 70, 0], ['زينب سعد', 60, 40], ['زينب نصر', 50, 50]] as $i => [$name, $total, $paid]) {
+            $sub = Subscriber::create([
+                'route_id' => $this->route->id,
+                'name' => $name,
+                'type' => Subscriber::TYPE_FLAT,
+                'flat_fee' => $total,
+                'status' => Subscriber::STATUS_ACTIVE,
+                'created_by' => $this->collector->id,
+            ]);
+            Bill::create([
+                'number' => 'INV-2026-09-95'.$i, 'subscriber_id' => $sub->id, 'period' => '2026-09',
+                'type' => 'flat_rate', 'flat_amount' => $total, 'total' => $total, 'paid_amount' => $paid,
+            ]);
+        }
+
+        $component = Livewire::test(GlobalSearch::class)->set('q', 'زينب');
+
+        $owed = collect($component->get('results'))->pluck('owed', 'name');
+        $this->assertSame(70.0, $owed['زينب كرم']);
+        $this->assertSame(20.0, $owed['زينب سعد']);
+        $this->assertSame(0.0, $owed['زينب نصر']);
+
+        // Same shape as the route list: the amount with its state under it, for every hit —
+        // a settled subscriber reads "0 · settled" instead of showing nothing at all.
+        $component->assertSee('$70.00')->assertSee('$20.00')->assertSee('settled');
+    }
+
+    public function test_subscriber_page_shows_the_balance_still_owed(): void
+    {
+        Bill::create([
+            'number' => 'INV-2026-09-9005', 'subscriber_id' => $this->flat->id, 'period' => '2026-09',
+            'type' => 'flat_rate', 'flat_amount' => 60, 'total' => 60, 'paid_amount' => 25,
+        ]);
+
+        Livewire::test(SubscriberShow::class, ['subscriber' => $this->flat->fresh()])
+            ->assertSee('$35.00');
     }
 
     public function test_metered_subscriber_page_offers_reading_entry(): void
