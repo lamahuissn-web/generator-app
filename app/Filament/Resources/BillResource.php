@@ -5,11 +5,15 @@ namespace App\Filament\Resources;
 use App\Filament\Resources\BillResource\Pages;
 use App\Models\Bill;
 use App\Models\Subscriber;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+use Livewire\Component as Livewire;
 
 class BillResource extends Resource
 {
@@ -90,8 +94,65 @@ class BillResource extends Resource
                     ->label(__('f.unpaid_only'))
                     ->query(fn (Builder $query): Builder => $query->whereColumn('paid_amount', '<', 'total')),
             ])
-            ->actions([])
-            ->bulkActions([]);
+            ->headerActions([
+                Action::make('print_filtered')
+                    ->label(__('prt.print_filtered'))
+                    ->icon('heroicon-o-printer')
+                    ->color('gray')
+                    ->url(function (Livewire $livewire) {
+                        $ids = $livewire->getFilteredTableQuery()->pluck('bills.id')->implode(',');
+
+                        return route('print.bills', ['ids' => $ids, 'size' => config('pdf.default_bill_size')]);
+                    })
+                    ->openUrlInNewTab(),
+                Action::make('pdf_filtered')
+                    ->label(__('prt.pdf_filtered'))
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->color('gray')
+                    ->url(function (Livewire $livewire) {
+                        $ids = $livewire->getFilteredTableQuery()->pluck('bills.id')->implode(',');
+
+                        return route('print.bills', ['ids' => $ids, 'size' => config('pdf.default_bill_size'), 'format' => 'pdf']);
+                    })
+                    ->openUrlInNewTab(),
+            ])
+            ->actions([
+                Action::make('print')
+                    ->label(__('prt.print'))
+                    ->icon('heroicon-o-printer')
+                    ->url(fn (Bill $record): string => route('print.bill', ['bill' => $record->id, 'size' => config('pdf.default_bill_size')]))
+                    ->openUrlInNewTab(),
+                Action::make('pdf')
+                    ->label('PDF')
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->url(fn (Bill $record): string => route('print.bill.pdf', ['bill' => $record->id, 'size' => config('pdf.default_bill_size')]))
+                    ->openUrlInNewTab(),
+            ])
+            ->bulkActions([
+                BulkAction::make('print_selected')
+                    ->label(__('prt.print_selected'))
+                    ->icon('heroicon-o-printer')
+                    ->action(fn (Collection $records) => redirect()->to(route('print.bills', [
+                        'ids' => $records->pluck('id')->implode(','),
+                        'size' => config('pdf.default_bill_size'),
+                    ]))),
+                BulkAction::make('pdf_selected')
+                    ->label(__('prt.pdf_selected'))
+                    ->icon('heroicon-o-arrow-down-tray')
+                    ->action(fn (Collection $records) => redirect()->to(route('print.bills', [
+                        'ids' => $records->pluck('id')->implode(','),
+                        'size' => config('pdf.default_bill_size'),
+                        'format' => 'pdf',
+                    ]))),
+                BulkAction::make('zip_selected')
+                    ->label(__('prt.zip_selected'))
+                    ->icon('heroicon-o-archive-box-arrow-down')
+                    ->action(fn (Collection $records) => redirect()->to(route('print.bills', [
+                        'ids' => $records->pluck('id')->implode(','),
+                        'size' => config('pdf.default_bill_size'),
+                        'format' => 'zip',
+                    ]))),
+            ]);
     }
 
     public static function getModelLabel(): string

@@ -46,6 +46,10 @@ class DemoSeeder extends Seeder
 
         Setting::set('kwh_price', '0.25', 'USD price per kWh applied to new metered bills');
         Setting::set('default_maintenance_fee', '15', 'USD default monthly maintenance for metered subscribers on Auto');
+        Setting::set('company_name', 'مولّد البرج — أبو حسن', 'Printed in the header of bills and receipts');
+        Setting::set('company_phone', '03 123 456', 'Printed contact phone');
+        Setting::set('company_address', 'البرج — الشارع الرئيسي', 'Printed address / neighbourhood');
+        Setting::set('bill_footer', 'الرجاء تسديد الاشتراك عند زيارة المحصّل', 'Printed note at the bottom of a bill');
 
         $admin = User::create([
             'name' => 'Generator Admin', 'email' => 'admin@example.com',

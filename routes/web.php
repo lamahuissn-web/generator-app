@@ -4,6 +4,7 @@ use App\Http\Controllers\Collector\AuthController;
 use App\Http\Controllers\Collector\DashboardController;
 use App\Http\Controllers\Collector\RouteController;
 use App\Http\Controllers\Collector\SubscriberController;
+use App\Http\Controllers\PrintController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -19,6 +20,17 @@ Route::middleware('auth')->post('/locale', function (Request $request) {
 
     return back();
 })->name('locale.switch');
+
+// ---- Printable documents (bills, receipts, per-period batches) --------------
+Route::middleware(['auth', 'locale'])->prefix('print')->name('print.')->group(function () {
+    Route::get('/bill/{bill}', [PrintController::class, 'bill'])->name('bill');
+    Route::get('/bill/{bill}/pdf', [PrintController::class, 'billPdf'])->name('bill.pdf');
+    Route::get('/bills', [PrintController::class, 'bills'])->name('bills');
+
+    Route::get('/receipt/{payment}', [PrintController::class, 'receipt'])->name('receipt');
+    Route::get('/receipt/{payment}/pdf', [PrintController::class, 'receiptPdf'])->name('receipt.pdf');
+    Route::get('/receipts', [PrintController::class, 'receipts'])->name('receipts');
+});
 
 // ---- Collector mobile portal -------------------------------------------------
 Route::middleware(['guest', 'locale'])->group(function () {

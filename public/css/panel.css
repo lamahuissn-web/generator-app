@@ -90,6 +90,44 @@ table.gx-table td.gx-num {
     white-space: nowrap;
 }
 
+/* ---------- billing-run states & panels ---------- */
+.gx-chip-warn { background: #fef3c7; color: #b45309; }
+.gx-chip-dark { background: #0f172a; color: #f8fafc; }
+
+.gx-badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+.gx-badge-create { background: #fef3c7; color: #b45309; }
+.gx-badge-exists { background: #e0f2fe; color: #0369a1; }
+.gx-badge-no_reading { background: #ffe4e6; color: #be123c; }
+.gx-badge-inactive { background: #e2e8f0; color: #475569; }
+.gx-badge-zero { background: #f1f5f9; color: #94a3b8; }
+
+.gx-panel-ok {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 12px;
+    padding: 12px 16px;
+    border: 1px solid #a7f3d0;
+    background: #ecfdf5;
+    border-radius: 14px;
+}
+.gx-panel-ok-title { font-size: 14px; font-weight: 800; color: #047857; }
+.gx-panel-ok-sub { font-size: 12.5px; color: #059669; }
+.gx-panel-ok-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.gx-btn-primary { background: #0f172a; border-color: #0f172a; color: #fff; }
+.gx-btn-primary:hover { background: #1e293b; }
+a.gx-btn { display: inline-block; text-decoration: none; }
+
 table.gx-table .gx-text-red { color: #be123c; }
 table.gx-table .gx-text-strong { color: #0f172a; font-weight: 700; }
 table.gx-table .gx-cell-muted { color: #64748b; }

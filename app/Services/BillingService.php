@@ -14,6 +14,17 @@ class BillingService
 {
     public const PERIOD_REGEX = '/^\d{4}-(0[1-9]|1[0-2])$/';
 
+    /** Billing-run outcomes. */
+    public const RUN_CREATE = 'create';
+
+    public const RUN_EXISTS = 'exists';
+
+    public const RUN_NO_READING = 'no_reading';
+
+    public const RUN_INACTIVE = 'inactive';
+
+    public const RUN_ZERO = 'zero';
+
     public static function currentPeriod(): string
     {
         return now()->format('Y-m');
@@ -126,6 +137,173 @@ class BillingService
             ]);
 
             return ['reading' => $reading, 'bill' => $bill];
+        });
+    }
+
+    /**
+     * Preview (default) or commit the monthly billing run for $period for every
+     * subscriber, or only the ones on $routeId.
+     *
+     * Rules (agreed with the operator):
+     *  - subscribers already billed for that period are left untouched;
+     *  - inactive subscribers are never billed;
+     *  - metered subscribers without a reading for the period are skipped, not
+     *    billed a zero consumption;
+     *  - a bill that would total $0.00 is skipped.
+     *
+     * `summary` always describes the plan the run found (before writing), while
+     * `created` counts what this call actually wrote.
+     *
+     * @return array{period: string, route_id: ?int, rows: array<int,array<string,mixed>>, summary: array<string,int>, invoiced: float, created: int}
+     *
+     * @throws \RuntimeException on a malformed period
+     */
+    public static function periodRun(string $period, ?int $routeId = null, bool $commit = false, ?int $userId = null): array
+    {
+        if (! preg_match(self::PERIOD_REGEX, $period)) {
+            throw new \RuntimeException("Invalid period format: {$period}");
+        }
+
+        $subscribers = Subscriber::query()
+            ->with(['route:id,name', 'readings' => fn ($q) => $q->where('period', $period)])
+            ->when($routeId, fn ($q) => $q->where('route_id', $routeId))
+            ->orderBy('route_id')
+            ->orderBy('name')
+            ->get();
+
+        $rows = $subscribers->map(fn (Subscriber $subscriber) => self::previewRunRow($subscriber, $period))->all();
+
+        $created = 0;
+        if ($commit) {
+            foreach ($rows as $i => $row) {
+                if ($row['state'] !== self::RUN_CREATE) {
+                    continue;
+                }
+                $subscriber = $subscribers->firstWhere('id', $row['subscriber_id']);
+                $bill = self::createRunBill($subscriber, $period, $row, $userId);
+                $rows[$i]['bill_id'] = $bill->id;
+                $created++;
+            }
+        }
+
+        $summary = array_fill_keys([
+            self::RUN_CREATE, self::RUN_EXISTS, self::RUN_NO_READING, self::RUN_INACTIVE, self::RUN_ZERO,
+        ], 0);
+
+        $invoiced = 0.0;
+        foreach ($rows as $row) {
+            $summary[$row['state']]++;
+            if (in_array($row['state'], [self::RUN_CREATE, self::RUN_EXISTS], true)) {
+                $invoiced += (float) $row['total'];
+            }
+        }
+
+        return [
+            'period' => $period,
+            'route_id' => $routeId,
+            'rows' => $rows,
+            'summary' => $summary,
+            'invoiced' => round($invoiced, 2),
+            'created' => $created,
+        ];
+    }
+
+    /** What the run would do for one subscriber — never writes anything. */
+    private static function previewRunRow(Subscriber $subscriber, string $period): array
+    {
+        $existing = $subscriber->bills()->where('period', $period)->first();
+        $prevDebt = self::outstandingBefore($subscriber, $period);
+        $reading = $subscriber->readings->first();
+
+        $row = [
+            'subscriber_id' => $subscriber->id,
+            'name' => $subscriber->name,
+            'route' => $subscriber->route?->name,
+            'type' => $subscriber->type,
+            'phone' => $subscriber->phone,
+            'meter_no' => $subscriber->meter_no,
+            'prev_debt' => $prevDebt,
+            'reading' => $reading?->current_reading,
+            'consumption' => null,
+            'usage' => 0.0,
+            'maintenance' => 0.0,
+            'flat' => 0.0,
+            'total' => 0.0,
+            'bill_id' => null,
+            'paid_amount' => 0.0,
+        ];
+
+        if ($existing) {
+            return [...$row, ...[
+                'state' => self::RUN_EXISTS,
+                'consumption' => $existing->consumption,
+                'usage' => (float) $existing->usage_amount,
+                'maintenance' => (float) $existing->maintenance_fee,
+                'flat' => (float) $existing->flat_amount,
+                'total' => (float) $existing->total,
+                'paid_amount' => (float) $existing->paid_amount,
+                'bill_id' => $existing->id,
+            ]];
+        }
+
+        if ($subscriber->isMetered()) {
+            $consumption = $reading ? (float) $reading->consumption : null;
+            $usage = $consumption === null ? 0.0 : round($consumption * self::kwhPrice(), 2);
+            $maintenance = $subscriber->effectiveMaintenanceFee();
+        } else {
+            $consumption = null;
+            $usage = 0.0;
+            $maintenance = 0.0;
+        }
+
+        $flat = $subscriber->isFlat() ? (float) ($subscriber->flat_fee ?? 0) : 0.0;
+        $row['consumption'] = $consumption;
+        $row['usage'] = $usage;
+        $row['maintenance'] = $maintenance;
+        $row['flat'] = $flat;
+        $row['total'] = round($usage + $maintenance + $flat, 2);
+
+        $state = match (true) {
+            $subscriber->status !== Subscriber::STATUS_ACTIVE => self::RUN_INACTIVE,
+            $subscriber->isMetered() && $reading === null => self::RUN_NO_READING,
+            $row['total'] <= 0 => self::RUN_ZERO,
+            default => self::RUN_CREATE,
+        };
+
+        return [...$row, 'state' => $state];
+    }
+
+    /** Persist the bill a committed run row describes. */
+    private static function createRunBill(Subscriber $subscriber, string $period, array $row, ?int $userId): Bill
+    {
+        return DB::transaction(function () use ($subscriber, $period, $row, $userId) {
+            $isMetered = $subscriber->isMetered();
+
+            $bill = Bill::create([
+                'subscriber_id' => $subscriber->id,
+                'period' => $period,
+                'type' => $subscriber->type,
+                'reading_id' => $subscriber->readings->first()?->id,
+                'consumption' => $isMetered ? $row['consumption'] : null,
+                'kwh_price' => $isMetered ? self::kwhPrice() : null,
+                'usage_amount' => $row['usage'],
+                'maintenance_fee' => $row['maintenance'],
+                'flat_amount' => $row['flat'],
+                'prev_debt' => $row['prev_debt'],
+                'total' => $row['total'],
+                'paid_amount' => 0,
+            ]);
+
+            Audit::log('bill.generated', $bill, [
+                'period' => $period,
+                'new_total' => $row['total'],
+                'prev_debt' => $row['prev_debt'],
+                'type' => $subscriber->type,
+                'run' => true,
+                'by' => $userId,
+            ]);
+
+            return $bill;
         });
     }
 

@@ -82,6 +82,7 @@ class AdminPanelTest extends TestCase
             '/admin/expenses/create',
             '/admin/profit-loss',
             '/admin/overdue-report',
+            '/admin/generate-bills',
             '/admin/users',
             '/admin/users/create',
             '/admin/settings',

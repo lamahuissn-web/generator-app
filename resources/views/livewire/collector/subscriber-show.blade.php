@@ -312,6 +312,12 @@
                     <div class="border-t border-dashed border-slate-200 pt-3">
                         <p class="mb-2 text-center text-xs font-bold uppercase tracking-wide text-slate-500">{{ __('portal.send_receipt') }}</p>
                         <div class="grid gap-2">
+                            @if ($lastPaymentId)
+                                <a href="{{ route('print.receipt', ['payment' => $lastPaymentId, 'size' => '80mm']) }}" target="_blank" rel="noopener"
+                                   class="flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white py-3 font-bold text-slate-700 transition hover:border-slate-400">
+                                    🧾 {{ __('prt.print_receipt') }}
+                                </a>
+                            @endif
                             @if ($receipt['wa_ar'])
                                 <a href="{{ $receipt['wa_ar'] }}" target="_blank" rel="noopener"
                                    class="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 font-bold text-white shadow-sm transition hover:bg-emerald-600">
