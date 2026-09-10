@@ -1,4 +1,4 @@
-<div class="space-y-4">
+<div class="grid gap-4">
     @php
         $sub = $this->subscriber;
         $waBill = ($currentBill && $sub->phone)
@@ -10,193 +10,293 @@
     @endphp
 
     @if ($flash)
-        <div class="flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm font-medium shadow-sm
-            {{ $flashType === 'warning' ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800' }}">
-            <span>{{ $flash }}</span>
-            <button wire:click="dismissFlash" class="shrink-0 text-lg leading-none opacity-50 hover:opacity-100">×</button>
+        <div class="kt-alert kt-alert-light {{ $flashType === 'warning' ? 'kt-alert-warning' : 'kt-alert-success' }}" role="status">
+            <div class="kt-alert-icon">
+                <i class="ki-filled {{ $flashType === 'warning' ? 'ki-information' : 'ki-check-circle' }} text-base"></i>
+            </div>
+            <div class="kt-alert-content">
+                <div class="kt-alert-title">{{ $flash }}</div>
+            </div>
+            <div class="kt-alert-actions">
+                <button type="button" wire:click="dismissFlash" class="kt-btn kt-btn-icon kt-btn-ghost kt-btn-sm">
+                    <i class="ki-filled ki-cross"></i>
+                </button>
+            </div>
         </div>
     @endif
 
-    {{-- Header card --}}
-    <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div class="flex items-start gap-3">
-            <span class="grid shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 text-lg font-extrabold text-slate-900 shadow-sm" style="height:3.25rem;width:3.25rem">{{ $initials ?: '?' }}</span>
-            <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-1.5">
-                    <h1 class="text-lg font-bold leading-tight text-slate-900">{{ $sub->name }}</h1>
-                    <span class="rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide {{ $sub->type === 'metered' ? 'bg-sky-100 text-sky-700' : 'bg-violet-100 text-violet-700' }}">
-                        {{ $sub->type === 'metered' ? __('portal.metered') : __('portal.flat_rate') }}
-                    </span>
-                    @if ($sub->status === 'inactive')
-                        <span class="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">{{ __('portal.inactive') }}</span>
-                    @else
-                        <span class="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">{{ __('portal.active') }}</span>
+    {{-- Subscriber header --}}
+    <div class="kt-card">
+        <div class="kt-card-content">
+            <div class="flex items-start gap-3">
+                <span class="tile tile-primary size-12 text-base font-semibold">
+                    {{ $initials ?: '?' }}
+                </span>
+
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <h1 class="text-lg font-semibold leading-tight text-mono">{{ $sub->name }}</h1>
+                        <span class="kt-badge kt-badge-sm {{ $sub->type === 'metered' ? 'kt-badge-info' : 'kt-badge-secondary' }}">
+                            {{ $sub->type === 'metered' ? __('portal.metered') : __('portal.flat_rate') }}
+                        </span>
+                        @if ($sub->status === 'inactive')
+                            <span class="kt-badge kt-badge-sm kt-badge-outline">{{ __('portal.inactive') }}</span>
+                        @else
+                            <span class="kt-badge kt-badge-sm kt-badge-success">{{ __('portal.active') }}</span>
+                        @endif
+                    </div>
+
+                    <div class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-muted-foreground sm:grid-cols-3">
+                        @if ($sub->route)
+                            <span class="flex items-center gap-1">
+                                <i class="ki-filled ki-map"></i>{{ $sub->route->name }}
+                            </span>
+                        @endif
+                        @if ($sub->meter_no)
+                            <span class="flex items-center gap-1">
+                                <i class="ki-filled ki-bill"></i>
+                                <span dir="ltr">{{ $sub->meter_no }}</span>
+                            </span>
+                        @endif
+                        @if ($sub->amperage)
+                            <span class="flex items-center gap-1">
+                                <i class="ki-filled ki-flash-circle"></i>
+                                <span dir="ltr">{{ $sub->amperage }} A</span>
+                            </span>
+                        @endif
+                        @if ($sub->address)
+                            <span class="col-span-2 flex items-center gap-1 sm:col-span-3">
+                                <i class="ki-filled ki-geolocation"></i>{{ $sub->address }}
+                            </span>
+                        @endif
+                    </div>
+                </div>
+            </div>
+
+            @if ($sub->phone)
+                <div class="mt-4 grid grid-cols-2 gap-2">
+                    <a href="tel:{{ preg_replace('/\s+/', '', $sub->phone) }}" class="kt-btn kt-btn-outline justify-center">
+                        <i class="ki-filled ki-phone"></i>
+                        <span dir="ltr">{{ $sub->phone }}</span>
+                    </a>
+                    @if ($waPlain)
+                        <a href="{{ $waPlain }}" target="_blank" rel="noopener" class="kt-btn justify-center">
+                            @include('collector.partials.wa-icon')
+                            {{ __('portal.whatsapp') }}
+                        </a>
                     @endif
                 </div>
-                <div class="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-slate-500 sm:grid-cols-3">
-                    @if ($sub->route) <span>🗺️ {{ $sub->route->name }}</span> @endif
-                    @if ($sub->meter_no) <span>🔢 {{ __('portal.meter') }} {{ $sub->meter_no }}</span> @endif
-                    @if ($sub->amperage) <span>⚡ {{ $sub->amperage }} A</span> @endif
-                    @if ($sub->address) <span class="col-span-2 sm:col-span-3">📍 {{ $sub->address }}</span> @endif
-                </div>
-            </div>
+            @endif
         </div>
-
-        @if ($sub->phone)
-            <div class="mt-4 grid grid-cols-2 gap-2">
-                <a href="tel:{{ preg_replace('/\s+/', '', $sub->phone) }}"
-                   class="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-slate-300">
-                    📞 {{ __('portal.call') }}
-                </a>
-                @if ($waPlain)
-                    <a href="{{ $waPlain }}" target="_blank" rel="noopener"
-                       class="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600">
-                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.52.149-.174.198-.298.297-.497.1-.198.05-.371-.025-.52-.074-.149-.668-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                        {{ __('portal.whatsapp') }}
-                    </a>
-                @endif
-            </div>
-        @endif
-    </section>
+    </div>
 
     @if ($sub->status === 'inactive')
-        <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
-            {{ __('portal.inactive_blocked') }}
+        <div class="kt-alert kt-alert-light kt-alert-destructive" role="status">
+            <div class="kt-alert-icon"><i class="ki-filled ki-information text-base"></i></div>
+            <div class="kt-alert-content">
+                <div class="kt-alert-title">{{ __('portal.inactive_blocked') }}</div>
+            </div>
         </div>
     @endif
 
-    {{-- Balance hero --}}
-    <section class="rounded-2xl border p-5 shadow-sm {{ $outstanding > 0 ? 'border-rose-200 bg-gradient-to-br from-rose-50 to-white' : 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-white' }}">
-        <div class="flex items-center justify-between">
-            <p class="text-[11px] font-bold uppercase tracking-widest text-slate-500">{{ __('portal.outstanding') }}</p>
-            <span class="text-xs font-medium text-slate-400">{{ period_label($period) }} · kWh {{ money($price) }}</span>
+    {{-- Balance --}}
+    <div class="kt-card">
+        <div class="kt-card-content flex items-center justify-between gap-3">
+            <div class="flex flex-col gap-1">
+                <span class="text-2xs font-semibold uppercase tracking-widest text-muted-foreground">{{ __('portal.outstanding') }}</span>
+                <span class="amount-cell text-3xl font-semibold {{ $outstanding > 0 ? 'text-destructive' : 'text-green-600' }}">
+                    {{ money($outstanding) }}
+                </span>
+                <span class="text-xs text-muted-foreground">
+                    @if ($outstanding > 0)
+                        {{ __('portal.balance_due') }}
+                    @else
+                        {{ __('portal.balance_clear') }}
+                    @endif
+                </span>
+            </div>
+            <div class="flex shrink-0 flex-col items-end gap-1.5">
+                <span class="kt-badge kt-badge-lg {{ $outstanding > 0 ? 'kt-badge-destructive' : 'kt-badge-success' }}">
+                    <i class="ki-filled {{ $outstanding > 0 ? 'ki-dollar' : 'ki-check-circle' }}"></i>
+                    {{ $outstanding > 0 ? __('portal.due') : __('portal.settled') }}
+                </span>
+                <span class="text-2xs text-muted-foreground">{{ period_label($period) }} · kWh {{ money($price) }}</span>
+            </div>
         </div>
-        <p class="mt-1.5 text-4xl font-extrabold tabular-nums tracking-tight {{ $outstanding > 0 ? 'text-rose-600' : 'text-emerald-600' }}">
-            {{ money($outstanding) }}
-        </p>
-        <p class="mt-1 text-xs text-slate-500">
-            @if ($outstanding > 0)
-                {{ __('portal.balance_due') }}
-            @else
-                {{ __('portal.balance_clear') }}
-            @endif
-        </p>
-    </section>
+    </div>
 
-    {{-- Segmented tabs --}}
-    <nav class="grid grid-cols-3 gap-1 rounded-2xl bg-slate-200/70 p-1">
+    {{-- View switcher: the active view is the only solid button, so which panel is
+         on screen is never ambiguous. --}}
+    <div class="grid grid-cols-3 gap-1.5 rounded-lg bg-muted p-1.5">
         @foreach (['overview' => __('portal.overview'), 'reading' => __('portal.reading'), 'payment' => __('portal.collect')] as $key => $label)
             <button wire:click="switchView('{{ $key }}')"
-                    class="rounded-xl py-2.5 text-sm font-bold transition {{ $view === $key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900' }}">
-                {{ $label }}
+                    class="kt-btn kt-btn-sm justify-center {{ $view === $key ? '' : 'kt-btn-ghost' }}">
+                <i class="ki-filled {{ ['overview' => 'ki-chart-pie-3', 'reading' => 'ki-bill', 'payment' => 'ki-wallet'][$key] }}"></i>
+                <span>{{ $label }}</span>
                 @if ($key === 'reading' && $currentBill)
-                    <span class="align-middle text-emerald-500">●</span>
+                    <span class="size-1.5 rounded-full bg-green-500"></span>
                 @endif
                 @if ($key === 'payment' && $outstanding > 0)
-                    <span class="align-middle text-rose-500">●</span>
+                    <span class="size-1.5 rounded-full bg-destructive"></span>
                 @endif
             </button>
         @endforeach
-    </nav>
+    </div>
 
     {{-- ============ OVERVIEW ============ --}}
     @if ($view === 'overview')
         @if ($currentBill)
-            <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div class="flex items-center justify-between">
-                    <h3 class="font-bold text-slate-900">{{ period_label($currentBill->period) }} {{ __('mdl.bill') }}</h3>
+            <div class="kt-card">
+                <div class="kt-card-header">
+                    <div class="kt-card-heading">
+                        <h3 class="kt-card-title">{{ period_label($currentBill->period) }} {{ __('mdl.bill') }}</h3>
+                        <span class="kt-card-description" dir="ltr">{{ $currentBill->number }}</span>
+                    </div>
                     @php $st = $currentBill->paymentStatus(); @endphp
-                    <span class="rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide {{ $st === 'paid' ? 'bg-emerald-100 text-emerald-700' : ($st === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700') }}">
+                    <span class="kt-badge kt-badge-sm {{ $st === 'paid' ? 'kt-badge-success' : ($st === 'partial' ? 'kt-badge-outline kt-badge-warning' : 'kt-badge-destructive') }}">
                         {{ __('portal.'.$st) }}
                     </span>
                 </div>
-                <dl class="mt-3 space-y-1.5 text-sm">
+                <div class="kt-card-content grid gap-2.5 py-4 text-sm">
                     @if ($currentBill->type === 'metered')
-                        <div class="flex justify-between text-slate-600"><dt>{{ __('portal.consumption') }}</dt><dd class="font-semibold tabular-nums">{{ number_format((float) $currentBill->consumption, 1) }} kWh</dd></div>
-                    @if ($currentBill->reading?->is_estimated)
-                        <p class="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-800">{{ __('portal.reading_estimated_badge') }}</p>
-                    @endif
-                    @if ($currentBill->reading?->hasMeterSwap())
-                        <p class="rounded-lg bg-sky-50 px-2.5 py-1.5 text-[11px] font-bold text-sky-800">{{ __('t.meter_swap') }}: <span dir="ltr">{{ $currentBill->reading->meterSwapLabel() }}</span></p>
-                    @endif
+                        <div class="flex justify-between gap-3 text-secondary-foreground">
+                            <span>{{ __('portal.consumption') }}</span>
+                            <span class="amount-cell font-semibold text-mono">{{ number_format((float) $currentBill->consumption, 1) }} kWh</span>
+                        </div>
                         @if ((float) $currentBill->usage_amount > 0)
-                            <div class="flex justify-between text-slate-600"><dt>{{ __('portal.usage_kwh', ['price' => money($currentBill->kwh_price)]) }}</dt><dd class="font-semibold tabular-nums">{{ money($currentBill->usage_amount) }}</dd></div>
+                            <div class="flex justify-between gap-3 text-secondary-foreground">
+                                <span>{{ __('portal.usage_kwh', ['price' => money($currentBill->kwh_price)]) }}</span>
+                                <span class="amount-cell font-semibold text-mono">{{ money($currentBill->usage_amount) }}</span>
+                            </div>
                         @endif
                     @else
-                        <div class="flex justify-between text-slate-600"><dt>{{ __('portal.flat_fee') }}</dt><dd class="font-semibold tabular-nums">{{ money($currentBill->flat_amount) }}</dd></div>
+                        <div class="flex justify-between gap-3 text-secondary-foreground">
+                            <span>{{ __('portal.flat_fee') }}</span>
+                            <span class="amount-cell font-semibold text-mono">{{ money($currentBill->flat_amount) }}</span>
+                        </div>
                     @endif
+
                     @if ((float) $currentBill->maintenance_fee > 0)
-                        <div class="flex justify-between text-slate-600"><dt>{{ __('portal.maintenance', ['a' => $sub->amperage ?: '']) }}</dt><dd class="font-semibold tabular-nums">{{ money($currentBill->maintenance_fee) }}</dd></div>
+                        <div class="flex justify-between gap-3 text-secondary-foreground">
+                            <span>{{ __('portal.maintenance', ['a' => $sub->amperage ?: '']) }}</span>
+                            <span class="amount-cell font-semibold text-mono">{{ money($currentBill->maintenance_fee) }}</span>
+                        </div>
                     @endif
-                    <div class="border-t border-dashed border-slate-200 pt-2"></div>
-                    <div class="flex justify-between font-bold text-slate-900"><dt>{{ __('portal.total_bill') }}</dt><dd class="tabular-nums">{{ money($currentBill->total) }}</dd></div>
+
+                    @if ($currentBill->reading?->is_estimated)
+                        <span class="kt-badge kt-badge-sm kt-badge-outline kt-badge-warning">
+                            <i class="ki-filled ki-information"></i>
+                            {{ __('portal.reading_estimated_badge') }}
+                        </span>
+                    @endif
+                    @if ($currentBill->reading?->hasMeterSwap())
+                        <span class="kt-badge kt-badge-sm kt-badge-info">
+                            <i class="ki-filled ki-arrows-circle"></i>
+                            {{ __('t.meter_swap') }}: <span dir="ltr">{{ $currentBill->reading->meterSwapLabel() }}</span>
+                        </span>
+                    @endif
+
+                    <div class="mt-1 border-t border-border pt-2.5">
+                        <div class="flex justify-between gap-3 font-semibold text-mono">
+                            <span>{{ __('portal.total_bill') }}</span>
+                            <span class="amount-cell">{{ money($currentBill->total) }}</span>
+                        </div>
+                    </div>
+
                     @if ((float) $currentBill->prev_debt > 0)
-                        <div class="flex justify-between text-rose-600"><dt>{{ __('portal.prev_debt_roll') }}</dt><dd class="font-semibold tabular-nums">{{ money($currentBill->prev_debt) }}</dd></div>
+                        <div class="flex justify-between gap-3 text-destructive">
+                            <span>{{ __('portal.prev_debt_roll') }}</span>
+                            <span class="amount-cell font-semibold">{{ money($currentBill->prev_debt) }}</span>
+                        </div>
                     @endif
                     @if ((float) $currentBill->paid_amount > 0)
-                        <div class="flex justify-between text-emerald-600"><dt>{{ __('portal.paid_lbl') }}</dt><dd class="font-semibold tabular-nums">− {{ money($currentBill->paid_amount) }}</dd></div>
+                        <div class="flex justify-between gap-3 text-green-600">
+                            <span>{{ __('portal.paid_lbl') }}</span>
+                            <span class="amount-cell font-semibold">− {{ money($currentBill->paid_amount) }}</span>
+                        </div>
                     @endif
-                </dl>
-                @if ($outstanding > 0)
-                    <button wire:click="switchView('payment')" class="mt-4 w-full rounded-xl bg-emerald-600 py-3 font-bold text-white shadow-sm transition hover:bg-emerald-700">
+
+                    @if ($outstanding > 0)
+                        <button wire:click="switchView('payment')" class="kt-btn kt-btn-lg mt-2 w-full justify-center">
+                            <i class="ki-filled ki-wallet"></i>
+                            {{ __('portal.collect_btn') }}
+                        </button>
+                    @endif
+                </div>
+            </div>
+        @elseif ($sub->isMetered())
+            <div class="kt-card border-dashed">
+                <div class="kt-card-content flex flex-col items-center gap-2.5 text-center">
+                    <span class="tile tile-muted size-12 text-xl">
+                        <i class="ki-filled ki-bill"></i>
+                    </span>
+                    <span class="font-semibold text-mono">{{ __('portal.no_reading_yet', ['period' => period_label($period)]) }}</span>
+                    <span class="text-sm text-muted-foreground">{{ __('portal.no_reading_body') }}</span>
+                    <button wire:click="switchView('reading')" class="kt-btn kt-btn-lg mt-1 w-full justify-center">
+                        <i class="ki-filled ki-plus"></i>
+                        {{ __('portal.take_reading') }}
+                    </button>
+                </div>
+            </div>
+        @else
+            <div class="kt-card border-dashed">
+                <div class="kt-card-content flex flex-col items-center gap-2.5 text-center">
+                    <span class="tile tile-muted size-12 text-xl">
+                        <i class="ki-filled ki-dollar"></i>
+                    </span>
+                    <span class="font-semibold text-mono">{{ __('portal.flat_sub') }}</span>
+                    <span class="text-sm text-muted-foreground">{{ __('portal.flat_fee_msg', ['fee' => money_ltr($sub->flat_fee)]) }}</span>
+                    <button wire:click="switchView('payment')" class="kt-btn kt-btn-lg mt-1 w-full justify-center">
+                        <i class="ki-filled ki-wallet"></i>
                         {{ __('portal.collect_btn') }}
                     </button>
-                @endif
-            </section>
-        @elseif ($sub->isMetered())
-            <section class="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-sm">
-                <p class="text-3xl">🔢</p>
-                <p class="mt-2 font-bold text-slate-800">{{ __('portal.no_reading_yet', ['period' => period_label($period)]) }}</p>
-                <p class="mt-1 text-sm text-slate-500">{{ __('portal.no_reading_body') }}</p>
-                <button wire:click="switchView('reading')" class="mt-4 w-full rounded-xl bg-sky-600 py-3 font-bold text-white shadow-sm transition hover:bg-sky-700">
-                    {{ __('portal.take_reading') }}
-                </button>
-            </section>
-        @else
-            <section class="rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center shadow-sm">
-                <p class="text-3xl">🪙</p>
-                <p class="mt-2 font-bold text-slate-800">{{ __('portal.flat_sub') }}</p>
-                <p class="mt-1 text-sm text-slate-500">{{ __('portal.flat_fee_msg', ['fee' => money($sub->flat_fee)]) }}</p>
-                <button wire:click="switchView('payment')" class="mt-4 w-full rounded-xl bg-emerald-600 py-3 font-bold text-white shadow-sm transition hover:bg-emerald-700">
-                    {{ __('portal.collect_btn') }}
-                </button>
-            </section>
+                </div>
+            </div>
         @endif
 
         @if ($recentBills->isNotEmpty() || $recentPayments->isNotEmpty())
             <div class="grid gap-4 sm:grid-cols-2">
                 @if ($recentBills->isNotEmpty())
-                    <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">{{ __('portal.recent_bills') }}</h3>
-                        <ul class="space-y-2">
-                            @foreach ($recentBills as $b)
-                                @php $s = $b->paymentStatus(); @endphp
-                                <li class="flex items-center justify-between text-sm">
-                                    <span class="text-slate-600">{{ period_label($b->period) }}</span>
-                                    <span class="flex items-center gap-2">
-                                        <span class="font-semibold tabular-nums text-slate-900">{{ money($b->total) }}</span>
-                                        <span class="h-2 w-2 rounded-full {{ $s === 'paid' ? 'bg-emerald-500' : ($s === 'partial' ? 'bg-amber-400' : 'bg-rose-500') }}"></span>
-                                    </span>
-                                </li>
-                            @endforeach
-                        </ul>
-                    </section>
+                    <div class="kt-card">
+                        <div class="kt-card-header">
+                            <h3 class="kt-card-title">{{ __('portal.recent_bills') }}</h3>
+                        </div>
+                        <div class="kt-card-content py-1">
+                            <ul class="divide-y divide-border">
+                                @foreach ($recentBills as $b)
+                                    @php $s = $b->paymentStatus(); @endphp
+                                    <li class="flex items-center justify-between gap-3 py-2.5 text-sm">
+                                        <span class="text-secondary-foreground">{{ period_label($b->period) }}</span>
+                                        <span class="flex items-center gap-2">
+                                            <span class="amount-cell font-semibold text-mono">{{ money($b->total) }}</span>
+                                            <span class="size-2 rounded-full {{ $s === 'paid' ? 'bg-green-500' : ($s === 'partial' ? 'bg-yellow-400' : 'bg-destructive') }}"></span>
+                                        </span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    </div>
                 @endif
+
                 @if ($recentPayments->isNotEmpty())
-                    <section class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                        <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">{{ __('portal.recent_payments') }}</h3>
-                        <ul class="space-y-2">
-                            @foreach ($recentPayments as $p)
-                                <li class="flex items-center justify-between text-sm">
-                                    <span class="text-slate-600">{{ $p->created_at->format('M j, H:i') }}</span>
-                                    <span class="flex items-center gap-2">
-                                        <span class="font-semibold tabular-nums text-emerald-700">{{ money($p->amount) }}</span>
-                                        <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{{ $p->collector?->name }}</span>
-                                    </span>
-                                </li>
-                            @endforeach
-                        </ul>
-                    </section>
+                    <div class="kt-card">
+                        <div class="kt-card-header">
+                            <h3 class="kt-card-title">{{ __('portal.recent_payments') }}</h3>
+                        </div>
+                        <div class="kt-card-content py-1">
+                            <ul class="divide-y divide-border">
+                                @foreach ($recentPayments as $p)
+                                    <li class="flex items-center justify-between gap-3 py-2.5 text-sm">
+                                        <span class="text-muted-foreground">{{ $p->created_at->format('M j, H:i') }}</span>
+                                        <span class="flex items-center gap-2">
+                                            <span class="amount-cell font-semibold text-green-600">{{ money($p->amount) }}</span>
+                                            <span class="kt-badge kt-badge-xs kt-badge-outline">{{ $p->collector?->name }}</span>
+                                        </span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    </div>
                 @endif
             </div>
         @endif
@@ -205,279 +305,343 @@
     {{-- ============ READING ============ --}}
     @if ($view === 'reading')
         @if (! $sub->isMetered())
-            <section class="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-                <p class="text-3xl">🪙</p>
-                <p class="mt-2 font-bold text-slate-800">{{ __('portal.no_meter_needed') }}</p>
-                <p class="mt-1 text-sm text-slate-500">{{ __('portal.no_meter_body', ['fee' => money($sub->flat_fee)]) }}</p>
-                <button wire:click="switchView('payment')" class="mt-4 w-full rounded-xl bg-emerald-600 py-3 font-bold text-white shadow-sm transition hover:bg-emerald-700">
-                    {{ __('portal.go_collection') }}
-                </button>
-            </section>
-        @elseif ($currentBill)
-            <section class="rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm">
-                <div class="flex items-center justify-between">
-                    <h3 class="font-bold text-slate-900">{{ __('portal.reading_recorded', ['period' => period_label($currentBill->period)]) }}</h3>
-                    <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold uppercase text-emerald-700">{{ __('portal.done') }}</span>
+            <div class="kt-card">
+                <div class="kt-card-content flex flex-col items-center gap-2.5 text-center">
+                    <span class="tile tile-muted size-12 text-xl">
+                        <i class="ki-filled ki-dollar"></i>
+                    </span>
+                    <span class="font-semibold text-mono">{{ __('portal.no_meter_needed') }}</span>
+                    <span class="text-sm text-muted-foreground">{{ __('portal.no_meter_body', ['fee' => money_ltr($sub->flat_fee)]) }}</span>
+                    <button wire:click="switchView('payment')" class="kt-btn kt-btn-lg mt-1 w-full justify-center">
+                        <i class="ki-filled ki-wallet"></i>
+                        {{ __('portal.go_collection') }}
+                    </button>
                 </div>
-                <dl class="mt-3 space-y-1.5 text-sm">
-                    <div class="flex justify-between text-slate-600"><dt>{{ __('portal.prev_reading') }}</dt><dd class="font-semibold tabular-nums">{{ number_format((float) $currentBill->reading?->previous_reading, 0) }}</dd></div>
-                    <div class="flex justify-between text-slate-600"><dt>{{ __('portal.cur_reading') }}</dt><dd class="font-semibold tabular-nums">{{ number_format((float) $currentBill->reading?->current_reading, 0) }}</dd></div>
-                    <div class="flex justify-between text-slate-600"><dt>{{ __('portal.consumption') }}</dt><dd class="font-semibold tabular-nums">{{ number_format((float) $currentBill->consumption, 1) }} kWh</dd></div>
+            </div>
+        @elseif ($currentBill)
+            <div class="kt-card">
+                <div class="kt-card-header">
+                    <h3 class="kt-card-title">{{ __('portal.reading_recorded', ['period' => period_label($currentBill->period)]) }}</h3>
+                    <span class="kt-badge kt-badge-sm kt-badge-success">
+                        <i class="ki-filled ki-check"></i>
+                        {{ __('portal.done') }}
+                    </span>
+                </div>
+                <div class="kt-card-content grid gap-2.5 py-4 text-sm">
+                    <div class="flex justify-between gap-3 text-secondary-foreground">
+                        <span>{{ __('portal.prev_reading') }}</span>
+                        <span class="amount-cell font-semibold text-mono">{{ number_format((float) $currentBill->reading?->previous_reading, 0) }}</span>
+                    </div>
+                    <div class="flex justify-between gap-3 text-secondary-foreground">
+                        <span>{{ __('portal.cur_reading') }}</span>
+                        <span class="amount-cell font-semibold text-mono">{{ number_format((float) $currentBill->reading?->current_reading, 0) }}</span>
+                    </div>
+                    <div class="flex justify-between gap-3 text-secondary-foreground">
+                        <span>{{ __('portal.consumption') }}</span>
+                        <span class="amount-cell font-semibold text-mono">{{ number_format((float) $currentBill->consumption, 1) }} kWh</span>
+                    </div>
+
                     @if ($currentBill->reading?->is_estimated)
-                        <p class="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-800">{{ __('portal.reading_estimated_badge') }}</p>
+                        <span class="kt-badge kt-badge-sm kt-badge-outline kt-badge-warning">
+                            <i class="ki-filled ki-information"></i>
+                            {{ __('portal.reading_estimated_badge') }}
+                        </span>
                     @endif
                     @if ($currentBill->reading?->hasMeterSwap())
-                        <p class="rounded-lg bg-sky-50 px-2.5 py-1.5 text-[11px] font-bold text-sky-800">{{ __('t.meter_swap') }}: <span dir="ltr">{{ $currentBill->reading->meterSwapLabel() }}</span></p>
+                        <span class="kt-badge kt-badge-sm kt-badge-info">
+                            <i class="ki-filled ki-arrows-circle"></i>
+                            {{ __('t.meter_swap') }}: <span dir="ltr">{{ $currentBill->reading->meterSwapLabel() }}</span>
+                        </span>
                     @endif
-                    <div class="border-t border-dashed border-slate-200 pt-2"></div>
-                    <div class="flex justify-between font-bold text-slate-900"><dt>{{ __('portal.bill_total_incl') }}</dt><dd class="tabular-nums">{{ money($currentBill->total + $currentBill->prev_debt) }}</dd></div>
-                </dl>
-                <div class="mt-4 grid gap-2">
-                    @if ($outstanding > 0)
-                        <button wire:click="switchView('payment')" class="w-full rounded-xl bg-emerald-600 py-3 font-bold text-white shadow-sm transition hover:bg-emerald-700">
-                            {{ __('portal.collect_btn') }}
-                        </button>
-                    @endif
-                    @if ($waBill)
-                        <a href="{{ $waBill }}" target="_blank" rel="noopener"
-                           class="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 py-3 font-bold text-emerald-700 transition hover:bg-emerald-100">
-                            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.52.149-.174.198-.298.297-.497.1-.198.05-.371-.025-.52-.074-.149-.668-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                            {{ __('portal.send_bill_wa') }}
-                        </a>
-                    @endif
+
+                    <div class="mt-1 flex justify-between gap-3 border-t border-border pt-2.5 font-semibold text-mono">
+                        <span>{{ __('portal.bill_total_incl') }}</span>
+                        <span class="amount-cell">{{ money($currentBill->total + $currentBill->prev_debt) }}</span>
+                    </div>
+
+                    <div class="mt-2 grid gap-2">
+                        @if ($outstanding > 0)
+                            <button wire:click="switchView('payment')" class="kt-btn kt-btn-lg w-full justify-center">
+                                <i class="ki-filled ki-wallet"></i>
+                                {{ __('portal.collect_btn') }}
+                            </button>
+                        @endif
+                        @if ($waBill)
+                            <a href="{{ $waBill }}" target="_blank" rel="noopener" class="kt-btn kt-btn-lg kt-btn-outline w-full justify-center">
+                                @include('collector.partials.wa-icon')
+                                {{ __('portal.send_bill_wa') }}
+                            </a>
+                        @endif
+                    </div>
                 </div>
-            </section>
+            </div>
         @else
             @if ($sub->hasBrokenMeterReport())
-                <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
-                    <div class="flex items-start justify-between gap-3">
-                        <div>
-                            <p class="text-sm font-bold text-amber-900">{{ __('portal.broken_banner_title') }}</p>
-                            <p class="mt-0.5 text-xs text-amber-800">
-                                {{ __('portal.broken_banner_body', ['since' => $sub->meter_broken_reported_at?->diffForHumans()]) }}
-                            </p>
-                            @if ($sub->meter_broken_note)
-                                <p class="mt-1 text-xs text-amber-900">«{{ $sub->meter_broken_note }}»</p>
-                            @endif
+                <div class="kt-alert kt-alert-light kt-alert-warning">
+                    <div class="kt-alert-icon"><i class="ki-filled ki-information text-base"></i></div>
+                    <div class="kt-alert-content">
+                        <div class="kt-alert-title">{{ __('portal.broken_banner_title') }}</div>
+                        <div class="kt-alert-description">
+                            {{ __('portal.broken_banner_body', ['since' => $sub->meter_broken_reported_at?->diffForHumans()]) }}
                         </div>
-                        <button wire:click="cancelBrokenReport"
-                                class="shrink-0 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-800 transition hover:bg-amber-100">
+                        @if ($sub->meter_broken_note)
+                            <div class="kt-alert-description">«{{ $sub->meter_broken_note }}»</div>
+                        @endif
+                    </div>
+                    <div class="kt-alert-actions">
+                        <button wire:click="cancelBrokenReport" class="kt-btn kt-btn-sm kt-btn-outline shrink-0">
                             {{ __('portal.broken_cancel') }}
                         </button>
                     </div>
                 </div>
             @endif
 
-            <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <h3 class="font-bold text-slate-900">{{ __('portal.enter_reading') }}</h3>
-                <p class="mt-0.5 text-sm text-slate-500">
-                    {{ __('portal.period_prev', ['period' => period_label($period)]) }}
-                    <span class="font-bold tabular-nums text-slate-800">{{ number_format($prevReading, 0) }}</span>
-                </p>
+            <div class="kt-card">
+                <div class="kt-card-content">
+                    <h3 class="kt-card-title">{{ __('portal.enter_reading') }}</h3>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        {{ __('portal.period_prev', ['period' => period_label($period)]) }}
+                        <span class="amount-cell font-semibold text-mono">{{ number_format($prevReading, 0) }}</span>
+                    </p>
 
-                <div class="mt-4">
-                    <input type="text" inputmode="decimal" wire:model.live.debounce.350ms="readingInput"
-                           placeholder="{{ __('portal.reading_ph') }}"
-                           class="w-full rounded-2xl border-0 bg-slate-100 px-4 py-4 text-center text-3xl font-extrabold tabular-nums ring-1 ring-transparent transition placeholder:text-base placeholder:font-normal placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-amber-400 focus:outline-none">
-                    @error('readingInput') <p class="mt-1.5 text-sm font-medium text-rose-600">{{ $message }}</p> @enderror
-                    @error('reading') <p class="mt-1.5 text-sm font-medium text-rose-600">{{ $message }}</p> @enderror
+                    <div class="mt-4">
+                        <input type="text" inputmode="decimal" wire:model.live.debounce.350ms="readingInput"
+                               placeholder="{{ __('portal.reading_ph') }}"
+                               class="kt-input h-auto py-3 text-center text-2xl font-semibold tabular-nums">
+                        @error('readingInput') <p class="mt-1.5 text-sm font-medium text-destructive">{{ $message }}</p> @enderror
+                        @error('reading') <p class="mt-1.5 text-sm font-medium text-destructive">{{ $message }}</p> @enderror
+                    </div>
+
+                    @if ($preview)
+                        @if ($preview['error'])
+                            <div class="kt-alert kt-alert-light kt-alert-destructive mt-4">
+                                <div class="kt-alert-icon"><i class="ki-filled ki-information text-base"></i></div>
+                                <div class="kt-alert-content">
+                                    <div class="kt-alert-title">{{ $preview['error'] }}</div>
+                                </div>
+                            </div>
+                        @else
+                            <div class="mt-4 grid gap-2 rounded-lg bg-muted p-4 text-sm">
+                                <div class="flex justify-between gap-3">
+                                    <span class="text-muted-foreground">{{ __('portal.consumption') }}</span>
+                                    <span class="amount-cell font-semibold text-mono">{{ number_format($preview['consumption'], 1) }} kWh</span>
+                                </div>
+                                <div class="flex justify-between gap-3">
+                                    <span class="text-muted-foreground">{{ __('portal.reading_preview_usage') }}</span>
+                                    <span class="amount-cell text-secondary-foreground">{{ money($preview['usage']) }}</span>
+                                </div>
+                                @if ($preview['maintenance'] > 0)
+                                    <div class="flex justify-between gap-3">
+                                        <span class="text-muted-foreground">{{ __('portal.maintenance', ['a' => $sub->amperage ?: '']) }}</span>
+                                        <span class="amount-cell text-secondary-foreground">{{ money($preview['maintenance']) }}</span>
+                                    </div>
+                                @endif
+                                @if ($preview['debt'] > 0)
+                                    <div class="flex justify-between gap-3">
+                                        <span class="text-muted-foreground">{{ __('portal.prev_debt_lbl') }}</span>
+                                        <span class="amount-cell text-destructive">{{ money($preview['debt']) }}</span>
+                                    </div>
+                                @endif
+                                <div class="mt-1 flex items-center justify-between gap-3 border-t border-border pt-2.5">
+                                    <span class="font-semibold text-mono">{{ __('portal.due_now') }}</span>
+                                    <span class="amount-cell text-lg font-semibold text-primary">{{ money($preview['due_now']) }}</span>
+                                </div>
+                            </div>
+                            <button wire:click="saveReading" wire:loading.attr="disabled" class="kt-btn kt-btn-lg mt-4 w-full justify-center">
+                                <i class="ki-filled ki-check"></i>
+                                {{ __('portal.save_reading') }}
+                            </button>
+                        @endif
+                    @endif
+
+                    @error('broken') <p class="mt-3 text-sm font-medium text-destructive">{{ $message }}</p> @enderror
+
+                    @unless ($sub->hasBrokenMeterReport())
+                        @if ($showBrokenReport)
+                            <div class="mt-4 grid gap-2.5 rounded-lg border border-yellow-400/40 bg-yellow-400/10 p-3.5">
+                                <span class="text-xs font-semibold text-yellow-700 dark:text-yellow-600">{{ __('portal.broken_form_title') }}</span>
+                                <input type="text" wire:model="brokenNote" maxlength="200"
+                                       placeholder="{{ __('portal.broken_note_ph') }}"
+                                       class="kt-input kt-input-sm bg-background">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <button wire:click="reportBrokenMeter" class="kt-btn kt-btn-sm justify-center">
+                                        {{ __('portal.broken_send') }}
+                                    </button>
+                                    <button wire:click="toggleBrokenReport" class="kt-btn kt-btn-sm kt-btn-outline justify-center">
+                                        {{ __('portal.broken_dismiss') }}
+                                    </button>
+                                </div>
+                            </div>
+                        @else
+                            <button wire:click="toggleBrokenReport"
+                                    class="kt-btn kt-btn-sm kt-btn-outline kt-btn-destructive mt-3 w-full justify-center">
+                                <i class="ki-filled ki-information"></i>
+                                {{ __('portal.broken_btn') }}
+                            </button>
+                        @endif
+                    @endunless
                 </div>
-
-                @if ($preview)
-                    @if ($preview['error'])
-                        <div class="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{{ $preview['error'] }}</div>
-                    @else
-                        <div class="mt-4 rounded-2xl bg-slate-900 p-4 text-sm text-slate-200">
-                            <div class="flex justify-between"><span class="text-slate-400">{{ __('portal.consumption') }}</span><span class="font-bold tabular-nums">{{ number_format($preview['consumption'], 1) }} kWh</span></div>
-                            <div class="mt-1.5 flex justify-between"><span class="text-slate-400">{{ __('portal.reading_preview_usage') }}</span><span class="tabular-nums">{{ money($preview['usage']) }}</span></div>
-                            @if ($preview['maintenance'] > 0)
-                                <div class="mt-1.5 flex justify-between"><span class="text-slate-400">{{ __('portal.maintenance', ['a' => $sub->amperage ?: '']) }}</span><span class="tabular-nums">{{ money($preview['maintenance']) }}</span></div>
-                            @endif
-                            @if ($preview['debt'] > 0)
-                                <div class="mt-1.5 flex justify-between"><span class="text-slate-400">{{ __('portal.prev_debt_lbl') }}</span><span class="tabular-nums text-rose-300">{{ money($preview['debt']) }}</span></div>
-                            @endif
-                            <div class="mt-2.5 flex justify-between border-t border-slate-700 pt-2.5 text-base font-extrabold text-amber-300">
-                                <span>{{ __('portal.due_now') }}</span><span class="tabular-nums">{{ money($preview['due_now']) }}</span>
-                            </div>
-                        </div>
-                        <button wire:click="saveReading" wire:loading.attr="disabled"
-                                class="mt-4 w-full rounded-xl bg-sky-600 py-3.5 font-bold text-white shadow-sm transition hover:bg-sky-700 active:scale-[0.99]">
-                            {{ __('portal.save_reading') }}
-                        </button>
-                    @endif
-                @endif
-
-                @error('broken') <p class="mt-3 text-sm font-medium text-rose-600">{{ $message }}</p> @enderror
-
-                @unless ($sub->hasBrokenMeterReport())
-                    @if ($showBrokenReport)
-                        <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3">
-                            <p class="text-xs font-bold text-amber-900">{{ __('portal.broken_form_title') }}</p>
-                            <input type="text" wire:model="brokenNote" maxlength="200"
-                                   placeholder="{{ __('portal.broken_note_ph') }}"
-                                   class="mt-2 w-full rounded-xl border-0 bg-white px-3 py-2.5 text-sm ring-1 ring-amber-200 focus:ring-2 focus:ring-amber-400 focus:outline-none">
-                            <div class="mt-2 grid grid-cols-2 gap-2">
-                                <button wire:click="reportBrokenMeter"
-                                        class="rounded-xl bg-amber-600 py-2.5 text-sm font-bold text-white transition hover:bg-amber-700">
-                                    {{ __('portal.broken_send') }}
-                                </button>
-                                <button wire:click="toggleBrokenReport"
-                                        class="rounded-xl border border-slate-300 bg-white py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50">
-                                    {{ __('portal.broken_dismiss') }}
-                                </button>
-                            </div>
-                        </div>
-                    @else
-                        <button wire:click="toggleBrokenReport"
-                                class="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-amber-300 bg-white py-2.5 text-xs font-bold text-amber-700 transition hover:bg-amber-50">
-                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"/></svg>
-                            {{ __('portal.broken_btn') }}
-                        </button>
-                    @endif
-                @endunless
-            </section>
+            </div>
         @endif
     @endif
 
     {{-- ============ PAYMENT ============ --}}
     @if ($view === 'payment')
-        @error('payment') <div class="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">{{ $message }}</div> @enderror
+        @error('payment')
+            <div class="kt-alert kt-alert-light kt-alert-destructive">
+                <div class="kt-alert-icon"><i class="ki-filled ki-information text-base"></i></div>
+                <div class="kt-alert-content">
+                    <div class="kt-alert-title">{{ $message }}</div>
+                </div>
+            </div>
+        @enderror
 
         @if ($outstanding <= 0 && ! $receipt)
-            <section class="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center shadow-sm">
-                <p class="text-3xl">🎉</p>
-                <p class="mt-2 font-bold text-emerald-800">{{ __('portal.no_balance_title') }}</p>
-                <p class="mt-1 text-sm text-emerald-700">{{ __('portal.no_balance_body') }}</p>
-            </section>
+            <div class="kt-card">
+                <div class="kt-card-content flex flex-col items-center gap-2.5 text-center">
+                    <span class="tile tile-success size-12 text-xl">
+                        <i class="ki-filled ki-check-circle"></i>
+                    </span>
+                    <span class="font-semibold text-mono">{{ __('portal.no_balance_title') }}</span>
+                    <span class="text-sm text-muted-foreground">{{ __('portal.no_balance_body') }}</span>
+                </div>
+            </div>
         @elseif ($receipt)
-            <section class="overflow-hidden rounded-2xl border border-emerald-300 bg-white shadow-md">
-                <div class="bg-gradient-to-r from-emerald-600 to-emerald-500 px-5 py-4 text-white {{ $isRtl ? 'bg-gradient-to-l' : '' }}">
-                    <div class="flex items-center justify-between">
-                        <p class="text-[11px] font-bold uppercase tracking-widest text-emerald-100">{{ __('portal.payment_received') }}</p>
-                        <span class="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase">{{ $receipt['method_label'] }}</span>
+            <div class="kt-card overflow-hidden">
+                <div class="bg-green-600 px-5 py-4 text-white">
+                    <div class="flex items-center justify-between gap-2.5">
+                        <span class="text-2xs font-semibold uppercase tracking-widest text-green-50">{{ __('portal.payment_received') }}</span>
+                        <span class="kt-badge kt-badge-sm bg-white/20 text-white">{{ $receipt['method_label'] }}</span>
                     </div>
-                    <p class="mt-1 text-3xl font-extrabold tabular-nums">{{ money($receipt['applied']) }}</p>
+                    <p class="amount-cell mt-1.5 text-3xl font-semibold">{{ money($receipt['applied']) }}</p>
                     @if ($receipt['excess'] > 0)
-                        <p class="text-xs text-emerald-100">{{ __('portal.excess_msg', ['amount' => money($receipt['excess'])]) }}</p>
+                        <p class="text-xs text-green-50">{{ __('portal.excess_msg', ['amount' => money_ltr($receipt['excess'])]) }}</p>
                     @endif
                 </div>
-                <div class="space-y-2 px-5 py-4 text-sm">
-                    <div class="flex justify-between text-slate-600">
-                        <span>{{ __('portal.balance_remaining') }}</span>
-                        <span class="font-bold tabular-nums {{ $receipt['remaining'] > 0 ? 'text-rose-600' : 'text-emerald-600' }}">
+
+                <div class="kt-card-content grid gap-2.5 text-sm">
+                    <div class="flex justify-between gap-3">
+                        <span class="text-secondary-foreground">{{ __('portal.balance_remaining') }}</span>
+                        <span class="amount-cell font-semibold {{ $receipt['remaining'] > 0 ? 'text-destructive' : 'text-green-600' }}">
                             {{ $receipt['remaining'] > 0 ? money($receipt['remaining']) : __('portal.fully_settled') }}
                         </span>
                     </div>
-                    <p class="text-xs text-slate-400">
+                    <p class="text-xs text-muted-foreground">
                         {{ $receipt['number'] ?: __('portal.payment_no', ['id' => $lastPaymentId, 'period' => '']) }}
                         @if ($receipt['bill_period']) · {{ period_label($receipt['bill_period']) }} @endif
                     </p>
 
                     @if (! empty($receipt['remaining_note']))
-                        <p class="rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 ring-1 ring-amber-100">
+                        <p class="rounded-lg bg-yellow-400/10 p-3 text-xs leading-relaxed text-yellow-700 ring-1 ring-yellow-400/20 dark:text-yellow-600">
                             {{ $receipt['remaining_note'] }}
                         </p>
                     @endif
 
                     @if (! empty($receipt['settled']))
-                        <div class="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-100">
-                            <p class="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">{{ __('portal.applied_to') }}</p>
-                            <ul class="space-y-1">
+                        <div class="rounded-lg bg-muted p-3">
+                            <p class="mb-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground">{{ __('portal.applied_to') }}</p>
+                            <ul class="divide-y divide-border">
                                 @foreach ($receipt['settled'] as $settledRow)
-                                    <li class="flex items-center justify-between text-xs">
-                                        <span class="text-slate-500"><span dir="ltr">{{ $settledRow['number'] }}</span> · {{ period_label($settledRow['period']) }}</span>
-                                        <span class="font-bold tabular-nums text-slate-700">{{ money($settledRow['amount']) }}</span>
+                                    <li class="flex items-center justify-between gap-3 py-1.5 text-xs">
+                                        <span class="text-muted-foreground">
+                                            <span dir="ltr">{{ $settledRow['number'] }}</span> · {{ period_label($settledRow['period']) }}
+                                        </span>
+                                        <span class="amount-cell font-semibold text-mono">{{ money($settledRow['amount']) }}</span>
                                     </li>
                                 @endforeach
                             </ul>
                         </div>
                     @endif
 
-                    <div class="border-t border-dashed border-slate-200 pt-3">
-                        <p class="mb-2 text-center text-xs font-bold uppercase tracking-wide text-slate-500">{{ __('portal.send_receipt') }}</p>
+                    <div class="mt-1 border-t border-border pt-3">
+                        <p class="mb-2 text-center text-2xs font-semibold uppercase tracking-wide text-muted-foreground">{{ __('portal.send_receipt') }}</p>
                         <div class="grid gap-2">
                             @if ($lastPaymentId)
                                 <a href="{{ route('print.receipt', ['payment' => $lastPaymentId, 'size' => '80mm']) }}" target="_blank" rel="noopener"
-                                   class="flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white py-3 font-bold text-slate-700 transition hover:border-slate-400">
-                                    🧾 {{ __('prt.print_receipt') }}
+                                   class="kt-btn kt-btn-lg kt-btn-outline w-full justify-center">
+                                    <i class="ki-filled ki-printer"></i>
+                                    {{ __('prt.print_receipt') }}
                                 </a>
                             @endif
                             @if ($receipt['wa_ar'])
-                                <a href="{{ $receipt['wa_ar'] }}" target="_blank" rel="noopener"
-                                   class="flex items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 font-bold text-white shadow-sm transition hover:bg-emerald-600">
-                                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.52.149-.174.198-.298.297-.497.1-.198.05-.371-.025-.52-.074-.149-.668-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                                <a href="{{ $receipt['wa_ar'] }}" target="_blank" rel="noopener" class="kt-btn kt-btn-lg w-full justify-center">
+                                    @include('collector.partials.wa-icon')
                                     {{ __('portal.arabic_receipt') }}
                                 </a>
                             @endif
                             @if ($receipt['wa_en'])
-                                <a href="{{ $receipt['wa_en'] }}" target="_blank" rel="noopener"
-                                   class="flex items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 py-2.5 text-sm font-bold text-emerald-700 transition hover:bg-emerald-100">
+                                <a href="{{ $receipt['wa_en'] }}" target="_blank" rel="noopener" class="kt-btn kt-btn-lg kt-btn-outline w-full justify-center">
+                                    @include('collector.partials.wa-icon')
                                     {{ __('portal.english_receipt') }}
                                 </a>
                             @endif
-                            <button wire:click="clearReceipt" class="rounded-xl py-2 text-sm font-semibold text-slate-500 transition hover:text-slate-800">
+                            <button wire:click="clearReceipt" class="kt-btn kt-btn-dim w-full justify-center">
                                 {{ __('portal.record_another') }}
                             </button>
                         </div>
                     </div>
                 </div>
-            </section>
+            </div>
         @else
-            <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                @if ($currentBill)
-                    <p class="mb-3 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-600 ring-1 ring-slate-100">
-                        {{ __('portal.current_bill_line', ['type' => $currentBill->type === 'metered' ? __('portal.metered') : __('portal.flat_fee'), 'period' => period_label($currentBill->period)]) }}
-                        <span class="font-bold text-slate-900">{{ money($currentBill->total) }}</span>
-                        @if ((float) $currentBill->prev_debt > 0)
-                            + <span class="font-semibold text-rose-600">{{ money($currentBill->prev_debt) }}</span> {{ __('portal.prev_debt_lbl') }}
-                        @endif
-                    </p>
-                @endif
+            <div class="kt-card">
+                <div class="kt-card-content grid gap-4">
+                    @if ($currentBill)
+                        <p class="rounded-lg bg-muted px-3.5 py-2.5 text-sm text-secondary-foreground">
+                            {{ __('portal.current_bill_line', ['type' => $currentBill->type === 'metered' ? __('portal.metered') : __('portal.flat_fee'), 'period' => period_label($currentBill->period)]) }}
+                            <span class="font-semibold text-mono">{{ money($currentBill->total) }}</span>
+                            @if ((float) $currentBill->prev_debt > 0)
+                                + <span class="font-semibold text-destructive">{{ money($currentBill->prev_debt) }}</span> {{ __('portal.prev_debt_lbl') }}
+                            @endif
+                        </p>
+                    @endif
 
-                <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('portal.amount_received') }}</label>
-                <div class="flex items-center overflow-hidden rounded-2xl bg-slate-100 ring-1 ring-transparent transition focus-within:bg-white focus-within:ring-2 focus-within:ring-amber-400">
-                    <span class="px-4 text-lg font-bold text-slate-400">$</span>
-                    <input type="text" inputmode="decimal" wire:model="paymentAmount"
-                           placeholder="0.00"
-                           class="w-full flex-1 bg-transparent px-2 py-4 text-2xl font-extrabold tabular-nums focus:outline-none placeholder:text-slate-300">
-                </div>
-                @error('paymentAmount') <p class="mt-1.5 text-sm font-medium text-rose-600">{{ $message }}</p> @enderror
+                    <div class="flex flex-col gap-1.5">
+                        <label class="kt-form-label font-normal text-mono">{{ __('portal.amount_received') }}</label>
+                        <div class="kt-input kt-input-lg amount-cell font-semibold">
+                            <span class="text-lg text-muted-foreground">$</span>
+                            <input type="text" inputmode="decimal" wire:model="paymentAmount" placeholder="0.00"
+                                   class="text-xl font-semibold">
+                        </div>
+                        @error('paymentAmount') <p class="text-sm font-medium text-destructive">{{ $message }}</p> @enderror
+                    </div>
 
-                <div class="mt-3 flex flex-wrap gap-2">
-                    <button wire:click="setFullAmount"
-                            class="rounded-full bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700">
-                        {{ __('portal.full_balance', ['amount' => money($outstanding)]) }}
+                    <div class="flex flex-wrap gap-2">
+                        <button wire:click="setFullAmount" class="kt-btn kt-btn-sm kt-btn-mono">
+                            <i class="ki-filled ki-dollar"></i>
+                            {{ __('portal.full_balance', ['amount' => money_ltr($outstanding)]) }}
+                        </button>
+                    </div>
+
+                    <div class="flex flex-col gap-1.5">
+                        <label class="kt-form-label font-normal text-mono">{{ __('portal.method') }}</label>
+                        <div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                            @foreach (\App\Models\Payment::$methods as $key => $label)
+                                <button type="button" wire:click="$set('paymentMethod', '{{ $key }}')"
+                                        class="kt-btn kt-btn-sm w-full justify-center {{ $paymentMethod === $key ? '' : 'kt-btn-outline' }}">
+                                    {{ __("pay.{$key}") }}
+                                </button>
+                            @endforeach
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col gap-1.5">
+                        <label class="kt-form-label font-normal text-mono">{{ __('t.note') }}</label>
+                        <input type="text" wire:model="paymentNote" placeholder="{{ __('portal.note_ph') }}" class="kt-input">
+                    </div>
+
+                    <button wire:click="savePayment" wire:loading.attr="disabled" class="kt-btn kt-btn-lg w-full justify-center">
+                        <i class="ki-filled ki-wallet"></i>
+                        {{ __('portal.record_collection') }}
                     </button>
                 </div>
-
-                <div class="mt-4">
-                    <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('portal.method') }}</label>
-                    <div class="grid grid-cols-2 gap-2">
-                        @foreach (\App\Models\Payment::$methods as $key => $label)
-                            <button type="button" wire:click="$set('paymentMethod', '{{ $key }}')"
-                                    class="rounded-xl border px-3 py-2.5 text-xs font-bold transition {{ $paymentMethod === $key ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300' }}">
-                                {{ __("pay.{$key}") }}
-                            </button>
-                        @endforeach
-                    </div>
-                </div>
-
-                <div class="mt-4">
-                    <input type="text" wire:model="paymentNote" placeholder="{{ __('portal.note_ph') }}"
-                           class="w-full rounded-xl border-0 bg-slate-100 px-4 py-3 text-sm ring-1 ring-transparent transition focus:bg-white focus:ring-2 focus:ring-amber-400 focus:outline-none">
-                </div>
-
-                <button wire:click="savePayment" wire:loading.attr="disabled"
-                        class="mt-4 w-full rounded-xl bg-emerald-600 py-4 text-base font-extrabold text-white shadow-md shadow-emerald-600/20 transition hover:bg-emerald-700 active:scale-[0.99]">
-                    {{ __('portal.record_collection') }}
-                </button>
-            </section>
+            </div>
         @endif
     @endif
 
-    {{-- Bottom nav: quick back --}}
+    {{-- Back --}}
     <a href="{{ url()->previous() !== url()->current() ? url()->previous() : route('collector.dashboard') }}"
-       class="block rounded-xl py-2 text-center text-sm font-semibold text-slate-500 hover:text-slate-800">
+       class="kt-btn kt-btn-dim w-full justify-center">
+        <i class="ki-filled ki-arrow-left rtl:rotate-180"></i>
         {{ __('portal.back') }}
     </a>
 </div>

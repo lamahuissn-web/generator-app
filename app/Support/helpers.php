@@ -10,6 +10,40 @@ if (! function_exists('money')) {
     }
 }
 
+if (! function_exists('ltr_isolate')) {
+    /**
+     * Wrap a value in a Unicode LTR isolate (U+2066 … U+2069).
+     *
+     * Meter numbers, invoice numbers and $ amounts are Latin/numeric runs dropped
+     * into Arabic sentences. Without isolation the bidi algorithm re-orders them
+     * against the surrounding right-to-left text, which can strand a value away
+     * from the label it belongs to ("العداد 2202 - 10A" reading as two tokens).
+     * The isolate is invisible and survives HTML escaping, so it also works for
+     * strings assembled in PHP and echoed with {{ }}.
+     */
+    function ltr_isolate(string|int|float|null $value): string
+    {
+        return "\u{2066}".$value."\u{2069}";
+    }
+}
+
+if (! function_exists('money_ltr')) {
+    /**
+     * money() wrapped in an LTR isolate.
+     *
+     * Dropped into an Arabic sentence, a bare "$100.00" renders as "100.00$": the
+     * currency sign is a neutral character in the Unicode bidi algorithm, so it
+     * follows the surrounding right-to-left run instead of staying with its digits.
+     *
+     * Use this only where an amount is interpolated INTO translated prose; plain
+     * amounts rendered straight into markup ({{ money($x) }}) need no isolation.
+     */
+    function money_ltr(float|int|string|null $value): string
+    {
+        return ltr_isolate(money($value));
+    }
+}
+
 if (! function_exists('period_label')) {
     /** '2026-09' => 'Sep 2026' */
     function period_label(string $ym): string

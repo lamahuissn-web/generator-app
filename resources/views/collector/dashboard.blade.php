@@ -8,90 +8,123 @@
         $greeting = $hour < 12 ? __('portal.gm') : ($hour < 18 ? __('portal.ga') : __('portal.ge'));
     @endphp
 
-    {{-- Greeting + shift summary --}}
-    <section class="mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950 p-5 text-white shadow-sm">
-        <div class="flex items-start justify-between gap-3">
-            <div>
-                <p class="text-xs font-medium uppercase tracking-widest text-slate-400">{{ now()->format('l, M j') }}</p>
-                <h1 class="mt-1 text-xl font-bold">{{ $greeting }}, {{ auth()->user()->name }}</h1>
-            </div>
-            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-amber-400/15 text-xl text-amber-300">📋</span>
+    {{-- Page heading --}}
+    <div class="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div class="flex flex-col gap-1">
+            <h1 class="text-xl font-medium leading-none text-mono">{{ $greeting }}, {{ auth()->user()->name }}</h1>
+            <span class="text-sm text-muted-foreground">{{ now()->translatedFormat('l, j F') }}</span>
         </div>
-        <div class="mt-4 grid grid-cols-2 gap-3">
-            <div class="rounded-xl bg-white/5 p-3 ring-1 ring-white/10">
-                <p class="text-[11px] font-medium uppercase tracking-wide text-slate-400">{{ __('portal.today_cash') }}</p>
-                <p class="mt-1 text-lg font-bold tabular-nums text-emerald-400">{{ money($stats['today_total']) }}</p>
-                <p class="text-[11px] text-slate-500">{{ __('portal.today_payments', ['n' => $stats['today_count']]) }}</p>
-            </div>
-            <div class="rounded-xl bg-white/5 p-3 ring-1 ring-white/10">
-                <p class="text-[11px] font-medium uppercase tracking-wide text-slate-400">{{ __('portal.month_cash') }}</p>
-                <p class="mt-1 text-lg font-bold tabular-nums text-amber-300">{{ money($stats['month_total']) }}</p>
-                <p class="text-[11px] text-slate-500">{{ __('portal.today_payments', ['n' => $stats['month_count']]) }}</p>
-            </div>
-        </div>
-    </section>
+        <span class="kt-badge kt-badge-outline kt-badge-primary">
+            <i class="ki-filled ki-calendar"></i>
+            {{ now()->format('Y-m-d') }}
+        </span>
+    </div>
 
-    {{-- Cash reconciliation for this collector --}}
-    <section class="mb-5 rounded-2xl border p-5 shadow-sm {{ $stats['in_hand'] > 0 ? 'border-amber-200 bg-gradient-to-br from-amber-50 to-white' : 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-white' }}">
-        <div class="flex items-start justify-between gap-3">
-            <div>
-                <p class="text-[11px] font-bold uppercase tracking-widest text-slate-500">{{ __('portal.in_hand') }}</p>
-                <p class="mt-1 text-3xl font-extrabold tabular-nums {{ $stats['in_hand'] > 0 ? 'text-amber-600' : 'text-emerald-600' }}">
-                    {{ money($stats['in_hand']) }}
-                </p>
-                <p class="mt-1 text-xs text-slate-500">
-                    {{ __('portal.in_hand_body', ['handed' => money($stats['handed_total'])]) }}
-                </p>
+    {{-- Shift totals --}}
+    <div class="mb-5 grid grid-cols-2 gap-4">
+        <div class="kt-card">
+            <div class="kt-card-content flex items-center justify-between gap-2.5">
+                <div class="flex flex-col gap-1">
+                    <span class="text-sm font-medium text-muted-foreground">{{ __('portal.today_cash') }}</span>
+                    <span class="text-xl font-semibold tabular-nums text-mono">{{ money($stats['today_total']) }}</span>
+                    <span class="text-2xs text-muted-foreground">{{ __('portal.today_payments', ['n' => $stats['today_count']]) }}</span>
+                </div>
+                <span class="tile tile-success size-10 text-lg">
+                    <i class="ki-filled ki-wallet"></i>
+                </span>
             </div>
-            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white text-xl shadow-sm">{{ $stats['in_hand'] > 0 ? '💰' : '✅' }}</span>
+        </div>
+
+        <div class="kt-card">
+            <div class="kt-card-content flex items-center justify-between gap-2.5">
+                <div class="flex flex-col gap-1">
+                    <span class="text-sm font-medium text-muted-foreground">{{ __('portal.month_cash') }}</span>
+                    <span class="text-xl font-semibold tabular-nums text-mono">{{ money($stats['month_total']) }}</span>
+                    <span class="text-2xs text-muted-foreground">{{ __('portal.today_payments', ['n' => $stats['month_count']]) }}</span>
+                </div>
+                <span class="tile tile-primary size-10 text-lg">
+                    <i class="ki-filled ki-chart-pie-3"></i>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    {{-- Cash still in this collector's pocket --}}
+    <div class="kt-card mb-5">
+        <div class="kt-card-content flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-col gap-1">
+                <span class="text-2xs font-semibold uppercase tracking-widest text-muted-foreground">{{ __('portal.in_hand') }}</span>
+                <span class="text-3xl font-semibold tabular-nums {{ $stats['in_hand'] > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-green-700 dark:text-green-500' }}">
+                    {{ money($stats['in_hand']) }}
+                </span>
+                <span class="text-xs text-muted-foreground">{{ __('portal.in_hand_body', ['handed' => money_ltr($stats['handed_total'])]) }}</span>
+            </div>
+            <span class="kt-badge kt-badge-lg kt-badge-outline {{ $stats['in_hand'] > 0 ? 'kt-badge-warning' : 'kt-badge-success' }}">
+                <i class="ki-filled {{ $stats['in_hand'] > 0 ? 'ki-dollar' : 'ki-check-circle' }}"></i>
+                {{ $stats['in_hand'] > 0 ? __('portal.due') : __('portal.settled') }}
+            </span>
         </div>
 
         @if ($handovers->isNotEmpty())
-            <ul class="mt-4 space-y-1.5 border-t border-dashed border-slate-200 pt-3">
-                @foreach ($handovers as $handover)
-                    <li class="flex items-center justify-between text-xs">
-                        <span class="text-slate-500">{{ $handover->handover_date->format('Y-m-d') }}{{ $handover->note ? ' · '.$handover->note : '' }}</span>
-                        <span class="font-bold tabular-nums text-slate-700">{{ money($handover->amount) }}</span>
-                    </li>
-                @endforeach
-            </ul>
-        @endif
-    </section>
-
-    {{-- Global search --}}
-    <livewire:collector.global-search />
-
-    {{-- Routes --}}
-    <section>
-        <div class="mb-2.5 flex items-baseline justify-between px-1">
-            <h2 class="text-sm font-bold uppercase tracking-wide text-slate-500">{{ __('portal.routes') }}</h2>
-            <span class="text-xs text-slate-400">{{ __('portal.areas_count', ['n' => $routes->count()]) }}</span>
-        </div>
-
-        @if ($routes->isEmpty())
-            <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-400">
-                {{ __('portal.no_routes') }}
+            <div class="kt-card-content border-t border-border pt-0">
+                <ul class="divide-y divide-border">
+                    @foreach ($handovers as $handover)
+                        <li class="flex items-center justify-between py-2 text-xs">
+                            <span class="text-muted-foreground">
+                                {{ $handover->handover_date->format('Y-m-d') }}{{ $handover->note ? ' · '.$handover->note : '' }}
+                            </span>
+                            <span class="font-semibold tabular-nums text-mono">{{ money($handover->amount) }}</span>
+                        </li>
+                    @endforeach
+                </ul>
             </div>
         @endif
+    </div>
 
-        <div class="space-y-2.5">
-            @foreach ($routes as $route)
-                @php $owed = (float) ($owedByRoute[$route->id] ?? 0); @endphp
-                <a href="{{ route('collector.route.show', $route) }}"
-                   class="group flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-amber-300 hover:shadow-md">
-                    <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-slate-100 text-lg text-slate-500 transition group-hover:bg-amber-100 group-hover:text-amber-600">🗺️</span>
+    {{-- Global search --}}
+    <div class="mb-5">
+        <livewire:collector.global-search />
+    </div>
+
+    {{-- Routes --}}
+    <div class="mb-3 flex items-baseline justify-between px-1">
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{{ __('portal.routes') }}</h2>
+        <span class="text-xs text-muted-foreground">{{ __('portal.areas_count', ['n' => $routes->count()]) }}</span>
+    </div>
+
+    @if ($routes->isEmpty())
+        <div class="kt-card">
+            <div class="kt-card-content text-center text-sm text-muted-foreground">{{ __('portal.no_routes') }}</div>
+        </div>
+    @endif
+
+    <div class="grid gap-2.5">
+        @foreach ($routes as $route)
+            @php $owed = (float) ($owedByRoute[$route->id] ?? 0); @endphp
+            <a href="{{ route('collector.route.show', $route) }}"
+               class="kt-card group transition hover:border-primary/40">
+                <div class="kt-card-content flex items-center gap-3">
+                    {{-- A map glyph in a brand-neutral grey tile reads as an unloaded
+                         image placeholder, especially at this size, so the route tile
+                         carries the location accent instead. --}}
+                    <span class="tile tile-info size-10 text-lg">
+                        <i class="ki-filled ki-map"></i>
+                    </span>
                     <span class="min-w-0 flex-1">
-                        <span class="block truncate font-bold text-slate-900">{{ $route->name }}</span>
-                        <span class="block text-xs text-slate-500">
+                        <span class="block truncate font-semibold text-mono">{{ $route->name }}</span>
+                        <span class="block text-xs text-muted-foreground">
                             {{ __('portal.route_stats', ['active' => $route->active_count, 'total' => $route->subscribers_count]) }}
-                            @if ($owed > 0)
-                                <span class="font-semibold text-rose-500">· {{ __('portal.due') }} {{ money($owed) }}</span>
-                            @endif
                         </span>
                     </span>
-                    <svg class="h-5 w-5 shrink-0 text-slate-300 transition group-hover:text-amber-500 rtl:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-                </a>
-            @endforeach
-        </div>
-    </section>
+                    @if ($owed > 0)
+                        <span class="shrink-0 text-right">
+                            <span class="block font-semibold tabular-nums text-destructive">{{ money($owed) }}</span>
+                            <span class="block text-2xs font-medium uppercase tracking-wide text-muted-foreground">{{ __('portal.due') }}</span>
+                        </span>
+                    @endif
+                    <i class="ki-filled ki-arrow-right shrink-0 text-muted-foreground rtl:rotate-180"></i>
+                </div>
+            </a>
+        @endforeach
+    </div>
 @endsection

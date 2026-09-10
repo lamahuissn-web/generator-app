@@ -1,0 +1,339 @@
+
+/* ============================================
+   Dropzone Theme Customization
+   ============================================
+*/
+
+:root {
+	/* ============================================
+	   Dropzone Container
+	   ============================================ */
+	--dz-border-color: var(--ring);
+	--dz-border-color-hover: var(--primary);
+	--dz-border-width: 1px;
+	--dz-border-style: dashed;
+	--dz-bg: var(--background);
+	--dz-radius: 6px;
+	--dz-padding: 20px;
+	--dz-min-height: 0;
+	--dz-transition-duration: 300ms;
+
+	/* ============================================
+	   Dropzone Message
+	   ============================================ */
+	--dz-message-gap: 14px;
+	--dz-message-icon-size: 2rem;
+	--dz-message-icon-bg: var(--background);
+	--dz-message-icon-border: var(--input);
+	--dz-message-icon-color: var(--primary);
+	--dz-message-icon-i-color: var(--primary);
+	--dz-message-text-gap: 6px;
+	--dz-message-title-color: var(--mono);
+	--dz-message-title-size: 13px;
+	--dz-message-title-line-height: 14px;
+	--dz-message-desc-color: var(--foreground);
+	--dz-message-desc-size: 12px;
+	--dz-message-desc-line-height: 13px;
+
+	/* ============================================
+	   File Item
+	   ============================================ */
+	--dz-file-item-bg: var(--background);
+	--dz-file-item-border: var(--input);
+	--dz-file-item-radius: 6px;
+	--dz-file-item-padding: 12px;
+	--dz-file-item-gap: 10px;
+	--dz-file-item-icon-size: 2rem;
+	--dz-file-item-icon-border: var(--input);
+	--dz-file-item-icon-color: var(--foreground);
+	--dz-file-item-name-color: var(--mono);
+	--dz-file-item-size-color: var(--foreground);
+	--dz-file-item-action-color: var(--muted-foreground);
+	--dz-file-item-action-size: 18px;
+	--dz-file-item-complete-color: var(--primary);
+	--dz-file-item-error-color: var(--destructive);
+
+	/* ============================================
+	   Progress Bar
+	   ============================================ */
+	--dz-progress-bg: var(--ring);
+	--dz-progress-bar-bg: var(--mono);
+	--dz-progress-bar-success: var(--primary);
+	--dz-progress-bar-error: var(--destructive);
+	--dz-progress-height: 4px;
+}
+
+/* ============================================
+   File Upload Container
+   ============================================ */
+
+.file-upload {
+	/* Dropzone base styles - override default Dropzone.js styles */
+	.dropzone {
+		@apply flex flex-col items-center justify-center;
+		border-radius: var(--dz-radius);
+		border: var(--dz-border-width) var(--dz-border-style) var(--dz-border-color) !important;
+		background: var(--dz-bg);
+		padding: var(--dz-padding);
+		min-height: var(--dz-min-height) !important;
+		transition: all 0.3s ease;
+	}
+
+	.dropzone.dz-drag-hover {
+		border-color: var(--dz-border-color-hover) !important;
+	}
+
+	.dropzone.dz-processing .dropzone-message {
+		@apply opacity-60 pointer-events-none;
+	}
+
+	/* Dropzone message */
+	.dropzone .dropzone-message {
+		@apply flex flex-col items-center justify-center text-center;
+		gap: var(--dz-message-gap);
+	}
+
+	.dropzone .dropzone-message-icon {
+		@apply flex-shrink-0 flex items-center justify-center rounded-full;
+		width: var(--dz-message-icon-size);
+		height: var(--dz-message-icon-size);
+		color: var(--dz-message-icon-color);
+		background-color: var(--dz-message-icon-bg);
+		border: 1px solid var(--dz-message-icon-border);
+	}
+
+	.dropzone .dropzone-message-icon i {
+		@apply text-base;
+		color: var(--dz-message-icon-i-color);
+	}
+
+	.dropzone .dropzone-message-text {
+		@apply flex flex-col items-center;
+		gap: var(--dz-message-text-gap);
+	}
+
+	.dropzone .dropzone-message-title {
+		font-size: var(--dz-message-title-size);
+		line-height: var(--dz-message-title-line-height);
+		@apply font-semibold;
+		color: var(--dz-message-title-color);
+	}
+
+	.dropzone .dropzone-message-desc {
+		font-size: var(--dz-message-desc-size);
+		line-height: var(--dz-message-desc-line-height);
+		@apply font-normal;
+		color: var(--dz-message-desc-color);
+	}
+
+	/* Dropzone previews container */
+	.dropzone .dropzone-previews {
+		@apply flex flex-col;
+		gap: 1rem;
+	}
+
+	/* Hide default dropzone preview styling, use our custom template */
+	.dropzone .dz-preview.dz-file-preview {
+		@apply block;
+	}
+
+	/* Hide default Dropzone cancel and remove links */
+	.dropzone .dz-remove,
+	.dropzone .dz-cancel {
+		@apply hidden!;
+	}
+
+	.dropzone .dz-message {
+		@apply m-0 p-0 leading-none h-0 overflow-hidden;
+	}
+
+	.dropzone .dz-message .dz-button {
+		@apply m-0 p-0 leading-none h-0 overflow-hidden;
+	}
+
+	/* File list */
+	.file-upload-list:not(:empty) {
+		margin-top: 20px;
+	}
+
+	.file-upload-list .dropzone-previews {
+		@apply flex flex-col;
+		gap: 20px;
+	}
+}
+
+/* ============================================
+   File Item
+   ============================================ */
+
+.file-upload .dropzone-file-item {
+	@apply flex;
+	border-radius: var(--dz-file-item-radius);
+	border: 1px solid var(--dz-file-item-border);
+	background: var(--dz-file-item-bg);
+	padding: var(--dz-file-item-padding);
+	gap: var(--dz-file-item-gap);
+	transition: all 0.3s ease;
+}
+
+.file-upload .dropzone-file-item-icon {
+	@apply flex-shrink-0 flex items-center justify-center;
+	border-radius: var(--dz-file-item-radius);
+	width: var(--dz-file-item-icon-size);
+	height: var(--dz-file-item-icon-size);
+	border: 1px solid var(--dz-file-item-icon-border);
+}
+
+.file-upload .dropzone-file-item-icon i {
+	@apply text-base;
+	color: var(--dz-file-item-icon-color);
+}
+
+.file-upload .dropzone-file-item-icon .dropzone-file-type-icon {
+	@apply w-auto h-[22px];
+}
+
+.file-upload .dropzone-file-item-content {
+	@apply flex flex-col justify-between flex-grow;
+	gap: 4px;
+}
+
+.file-upload .dropzone-file-item-header {
+	@apply flex items-center justify-between;
+	gap: var(--dz-file-item-gap);
+}
+
+.file-upload .dropzone-file-item-info {
+	@apply flex items-center flex-1 min-w-0;
+	gap: var(--dz-file-item-gap);
+}
+
+.file-upload .dropzone-file-item-name {
+	@apply grid items-center w-full;
+}
+
+.file-upload .dropzone-file-item-wrapper {
+	font-size: 12px;
+	line-height: 12px;
+	font-weight: 500;
+	color: var(--dz-file-item-name-color);
+	@apply flex-1 overflow-hidden text-ellipsis whitespace-nowrap;
+}
+
+.file-upload .dropzone-file-item-size {
+	@apply text-[13px] leading-[13px] font-normal flex-shrink-0 whitespace-nowrap;
+	color: var(--dz-file-item-size-color);
+}
+
+.file-upload .dropzone-file-item-size > strong {
+	@apply font-normal;
+}
+
+.file-upload .dropzone-file-item-actions {
+	@apply flex items-center flex-shrink-0;
+}
+
+.file-upload .dropzone-file-item-actions .kt-btn {
+	@apply flex-shrink-0;
+	height: var(--dz-file-item-action-size);
+	width: var(--dz-file-item-action-size);
+}
+
+.file-upload .dropzone-file-item-actions .kt-btn i {
+	@apply text-sm;
+	color: var(--dz-file-item-action-color);
+}
+
+.file-upload .dropzone-file-item-complete {
+	@apply flex-shrink-0 hidden items-center justify-center p-0;
+	height: var(--dz-file-item-action-size);
+	width: var(--dz-file-item-action-size);
+}
+
+.file-upload .dropzone-file-item-complete i {
+	@apply text-sm;
+	color: var(--dz-file-item-complete-color);
+}
+
+.file-upload .dropzone-file-item-error {
+	@apply flex-shrink-0 hidden items-center justify-center p-0;
+	height: var(--dz-file-item-action-size);
+	width: var(--dz-file-item-action-size);
+}
+
+.file-upload .dropzone-file-item-error {
+	cursor: help;
+}
+
+.file-upload .dropzone-file-item-error i {
+	@apply text-sm;
+	color: var(--dz-file-item-error-color);
+}
+
+.file-upload .dropzone-file-item.dz-error .dropzone-file-item-error {
+	@apply flex;
+}
+
+/* ============================================
+   Progress Bar
+   ============================================ */
+
+.file-upload .dropzone-file-item-progress {
+	margin-bottom: 4px;
+}
+
+.file-upload .dropzone-file-item-progress .progress {
+	border-radius: 4px;
+	overflow: hidden;
+	height: var(--dz-progress-height);
+	background-color: var(--dz-progress-bg);
+}
+
+.file-upload .dropzone-file-item-progress .progress-bar {
+	height: 100%;
+	transition: width 0.3s ease;
+	background-color: var(--dz-progress-bar-bg);
+}
+
+.file-upload .dropzone-file-item-progress .progress-bar[data-dz-uploadprogress] {
+	width: 0%;
+}
+
+/* ============================================
+   File Item States
+   ============================================ */
+
+/* Processing state */
+.file-upload .dropzone-file-item.dz-processing .dropzone-file-item-content .dropzone-file-item-progress {
+	@apply block;
+}
+
+/* Complete state */
+.file-upload .dropzone-file-item.dz-complete .dropzone-file-item-content .dropzone-file-item-header .dropzone-file-item-actions .dropzone-file-item-remove {
+	@apply hidden;
+}
+
+.file-upload .dropzone-file-item.dz-complete .dropzone-file-item-content .dropzone-file-item-header .dropzone-file-item-actions .dropzone-file-item-complete {
+	@apply flex;
+}
+
+.file-upload .dropzone-file-item.dz-complete .dropzone-file-item-content .dropzone-file-item-header .dropzone-file-item-actions .dropzone-file-item-error {
+	@apply hidden;
+}
+
+.file-upload .dropzone-file-item.dz-complete .dropzone-file-item-content .dropzone-file-item-progress .progress-bar {
+	background-color: var(--dz-progress-bar-success);
+}
+
+/* Error state */
+.file-upload .dropzone-file-item.dz-error .dropzone-file-item-content .dropzone-file-item-header .dropzone-file-item-actions .dropzone-file-item-complete {
+	@apply hidden;
+}
+
+.file-upload .dropzone-file-item.dz-error .dropzone-file-item-content .dropzone-file-item-header .dropzone-file-item-actions .dropzone-file-item-error {
+	@apply flex;
+}
+
+.file-upload .dropzone-file-item.dz-error .dropzone-file-item-content .dropzone-file-item-progress .progress-bar {
+	background-color: var(--dz-progress-bar-error);
+}

@@ -1,0 +1,347 @@
+@layer components {
+  /* FullCalendar container */
+  .fc {
+    font-family: inherit !important;
+    font-size: var(--text-sm, 0.875rem) !important;
+    line-height: var(--text-sm--line-height, 1.5) !important;
+    --fc-list-event-hover-bg-color: var(--accent);
+  }
+
+  /* Universal text elements – ensure consistent Metronic typography */
+  .fc * {
+    font-family: inherit;
+  }
+
+  /* Calendar header */
+  .fc-header-toolbar {
+    @apply mb-4;
+  }
+
+  .fc-toolbar-title {
+    @apply text-base font-semibold text-foreground;
+    font-family: inherit;
+  }
+
+  /* Toolbar button groups – match kt-toggle-group */
+  .fc-toolbar-chunk {
+    @apply inline-flex items-center leading-none bg-background;
+  }
+
+  .fc-button-group {
+    @apply inline-flex items-center;
+  }
+
+  /* Calendar buttons – match Metronic kt-btn size and kt-toggle-group appearance */
+  .fc-button {
+    @apply cursor-pointer whitespace-nowrap inline-flex items-center justify-center font-medium;
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background;
+    @apply transition-[color,box-shadow] disabled:pointer-events-none disabled:opacity-50;
+    @apply shrink-0 shadow-xs shadow-[rgba(0,0,0,0.05)];
+    @apply h-8.5 px-3 gap-1.5 border border-border text-accent-foreground bg-transparent;
+    font-family: inherit;
+    font-size: var(--text-2sm, 0.8125rem) !important;
+    line-height: var(--text-2sm--line-height, 1.25) !important;
+  }
+
+  /* Toggle group: no right border except on last button */
+  .fc-button-group .fc-button:not(:last-child),
+  .fc-toolbar-chunk > .fc-button:not(:last-child) {
+    border-inline-end: none !important;
+  }
+
+  /* Radius: first button left corners, last button right corners, middle none (like kt-toggle-group) */
+  .fc-button-group .fc-button:first-child,
+  .fc-toolbar-chunk > .fc-button:first-child {
+    border-start-start-radius: var(--radius-md) !important;
+    border-end-start-radius: var(--radius-md) !important;
+  }
+
+  .fc-button-group .fc-button:not(:first-child) {
+    border-start-start-radius: 0 !important;
+    border-end-start-radius: 0 !important;
+  }
+
+  .fc-button-group .fc-button:last-child,
+  .fc-toolbar-chunk > .fc-button:last-child {
+    border-start-end-radius: var(--radius-md) !important;
+    border-end-end-radius: var(--radius-md) !important;
+  }
+
+  .fc-button-group .fc-button:not(:last-child) {
+    border-start-end-radius: 0 !important;
+    border-end-end-radius: 0 !important;
+  }
+
+  /* Icon – match kt-btn icon size and color */
+  .fc-button .fc-icon,
+  .fc-button .fc-icon::before,
+  .fc-button .fc-icon::after {
+    font-size: 1rem !important;
+    color: var(--muted-foreground) !important;
+    fill: var(--muted-foreground) !important;
+    position: relative !important;
+  }
+
+  /* Today button – standalone, full radius */
+  .fc-today-button {
+    border-radius: var(--radius-md) !important;
+    border-inline-end: 1px solid var(--border) !important;
+  }
+
+  /* Consistent min-width for view buttons */
+  .fc-dayGridMonth-button,
+  .fc-timeGridWeek-button,
+  .fc-timeGridDay-button,
+  .fc-listWeek-button,
+  .fc-listDay-button,
+  .fc-listMonth-button,
+  .fc-listYear-button {
+    min-width: 4rem !important;
+  }
+
+  /* Hover / focus – match kt-toggle-group active state */
+  .fc-button:hover:not(:disabled),
+  .fc-button:focus:not(:disabled) {
+    @media (hover: hover) {
+      background-color: var(--accent) !important;
+      color: var(--accent-foreground) !important;
+    }
+  }
+
+  .fc-button:hover:not(:disabled) .fc-icon,
+  .fc-button:hover:not(:disabled) .fc-icon::before,
+  .fc-button:hover:not(:disabled) .fc-icon::after,
+  .fc-button:focus:not(:disabled) .fc-icon,
+  .fc-button:focus:not(:disabled) .fc-icon::before,
+  .fc-button:focus:not(:disabled) .fc-icon::after {
+    color: var(--accent-foreground) !important;
+    fill: var(--accent-foreground) !important;
+  }
+
+  /* fc-button-primary = default state for view/prev/next (same as above; FullCalendar adds this class to all) */
+  .fc-button-primary {
+    background-color: transparent !important;
+    color: var(--accent-foreground) !important;
+    border-color: var(--border) !important;
+  }
+
+  .fc-button-primary .fc-icon,
+  .fc-button-primary .fc-icon::before,
+  .fc-button-primary .fc-icon::after {
+    color: var(--muted-foreground) !important;
+    fill: var(--muted-foreground) !important;
+  }
+
+  .fc-button:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  /* Active button (selected view) – match kt-toggle-group .active */
+  .fc-button-active {
+    background-color: var(--accent) !important;
+    color: var(--accent-foreground) !important;
+    border-color: var(--border) !important;
+  }
+
+  .fc-button-active:hover:not(:disabled) {
+    @media (hover: hover) {
+      background-color: var(--accent) !important;
+      color: var(--accent-foreground) !important;
+    }
+  }
+
+  .fc-button-active .fc-icon,
+  .fc-button-active .fc-icon::before,
+  .fc-button-active .fc-icon::after {
+    color: var(--accent-foreground) !important;
+    fill: var(--accent-foreground) !important;
+  }
+
+  /* Calendar table */
+  .fc-theme-standard td,
+  .fc-theme-standard th {
+    border-color: var(--border) !important;
+  }
+
+  .fc-col-header-cell {
+    @apply bg-muted/50;
+    padding: 0.5rem !important;
+  }
+
+  .fc-col-header-cell-cushion {
+    @apply text-sm font-medium text-muted-foreground;
+    font-family: inherit;
+  }
+
+  /* Calendar day cells */
+  .fc-daygrid-day {
+    @apply bg-background;
+  }
+
+  .fc-daygrid-day-top {
+    @apply text-2xs font-medium text-foreground;
+    font-family: inherit;
+    padding: 0.5rem !important;
+  }
+
+  .fc-daygrid-day-number {
+    @apply text-2xs font-medium text-foreground;
+    font-family: inherit;
+  }
+
+  .fc-day-today {
+    @apply bg-accent/50;
+  }
+
+  .fc-day-today .fc-daygrid-day-number {
+    @apply text-primary font-semibold;
+  }
+
+  /* Events (exclude list view – list has its own rules below) */
+  .fc-event:not(.fc-list-event) {
+    @apply border-0 rounded-md;
+    padding: 0.25rem 0.5rem !important;
+    margin: 0.125rem !important;
+    cursor: pointer;
+  }
+
+  .fc-event:not(.fc-list-event):hover {
+    opacity: 0.9;
+  }
+
+  .fc-event-title {
+    @apply text-xs font-medium text-inherit;
+    padding: 0 !important;
+  }
+
+  .fc-event-time {
+    @apply text-xs text-inherit;
+    padding: 0 !important;
+  }
+
+  /* Event popover */
+  .fc-popover {
+    border: 1px solid var(--border) !important;
+    box-shadow: var(--box-shadow-sm) !important;
+    background-color: var(--background) !important;
+    border-radius: var(--radius-md) !important;
+  }
+
+  .fc-popover-header {
+    @apply bg-muted/50 text-sm font-medium text-foreground;
+    font-family: inherit;
+    padding: 0.5rem !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+
+  .fc-popover-body {
+    @apply text-sm text-foreground;
+    font-family: inherit;
+    padding: 0.5rem !important;
+  }
+
+  /* More link */
+  .fc-more-link {
+    @apply text-xs font-medium text-primary hover:text-primary/90;
+    font-family: inherit;
+  }
+
+  /* Day grid */
+  .fc-daygrid-event {
+    @apply rounded-md;
+  }
+
+  /* Time grid */
+  .fc-timegrid-slot {
+    border-color: var(--border) !important;
+  }
+
+  .fc-timegrid-slot-label {
+    @apply text-2xs text-muted-foreground;
+    font-family: inherit;
+  }
+
+  .fc-timegrid-slot-label-cushion {
+    @apply text-2xs text-muted-foreground;
+    font-family: inherit;
+  }
+
+  .fc-timegrid-axis-cushion {
+    @apply text-2xs text-muted-foreground;
+    font-family: inherit;
+  }
+
+  .fc-timegrid-col {
+    border-color: var(--border) !important;
+  }
+
+  /* All day section */
+  .fc-timegrid-axis-frame {
+    @apply text-2xs text-muted-foreground;
+    font-family: inherit;
+  }
+
+  /* List view – universal override: ALL list rows and cells use neutral/hover (no blue) */
+  .fc-list tbody tr {
+    background-color: var(--background) !important;
+  }
+
+  .fc-list tbody tr:hover {
+    background-color: var(--accent) !important;
+  }
+
+  .fc-list tbody tr td {
+    background-color: var(--background) !important;
+    color: var(--foreground) !important;
+  }
+
+  .fc-list tbody tr:hover td {
+    background-color: var(--accent) !important;
+    color: var(--accent-foreground) !important;
+  }
+
+  .fc-list tbody tr .fc-list-event-time {
+    color: var(--muted-foreground) !important;
+  }
+
+  .fc-list tbody tr:hover .fc-list-event-time {
+    color: var(--accent-foreground) !important;
+  }
+
+  .fc-list-event-title {
+    @apply text-sm font-medium;
+    font-family: inherit;
+    color: var(--foreground) !important;
+  }
+
+  .fc-list tbody tr:hover .fc-list-event-title {
+    color: var(--accent-foreground) !important;
+  }
+
+  .fc-list-event-time {
+    @apply text-xs;
+    font-family: inherit;
+  }
+
+  /* List view dot: neutral by default, no project colors */
+  .fc-list .fc-list-event-dot {
+    background-color: var(--muted-foreground) !important;
+  }
+
+  /* Center the dot horizontally in the graphic column */
+  .fc-list-event-graphic {
+    text-align: center !important;
+  }
+
+  .fc-list-event-dot {
+    margin: 0 auto !important;
+  }
+
+  /* Project task modal – date+time input width (DD MMM YYYY HH:mm) */
+  #modal_project_task .project-task-date-wrap {
+    width: 14rem;
+    min-width: 14rem;
+    max-width: 14rem;
+    flex-shrink: 0;
+  }
+}

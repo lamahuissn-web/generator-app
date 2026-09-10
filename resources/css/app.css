@@ -1,1 +1,168 @@
-@import "tailwindcss";
+/* ============================================================================
+ | Generator Manager — application stylesheet
+ |
+ | Built on Metronic 9.5 (Tailwind 4). The theme sources under ./metronic are
+ | vendored from metronic_v9.5.0/metronic-tailwind-html-demos/src/css, so the app
+ | compiles Tailwind itself and generates every utility its own views use.
+ |
+ | Why not the precompiled dist/assets/css/styles.css: that file only contains
+ | the utilities Metronic's own demo pages happen to use. Anything else renders
+ | silently unstyled (no error, no warning). Compiling from source here means the
+ | Blade/Livewire scanner decides what exists.
+ | ========================================================================= */
+@import 'tailwindcss';
+
+/* Metronic colour tokens, radii and custom text sizes (--background, --primary,
+   --border, kt radius scale, text-2sm/2xs …) */
+@import './metronic/config.ktui.css';
+
+/* KTUI component library — kt-btn, kt-card, kt-input, kt-badge, kt-modal … */
+@import '@keenthemes/ktui/styles.css';
+
+/* Metronic component tweaks (menus, container, charts, scrollable …) */
+@import './metronic/components/index.css';
+
+/* Demo1 app-shell geometry (--sidebar-width, --header-height, fixed header/sidebar) */
+@import './metronic/demos/demo1.css';
+
+/* ---------------------------------------------------------------------------
+ | Scan sources
+ |
+ | Tailwind only emits utilities whose class names it can see. The Blade scanner
+ | covers our own markup; the KTUI bundle is scanned on top of that because it
+ | injects class names at runtime (modal backdrops, select dropdowns, dropdown
+ | menus) that appear nowhere in the views.
+ | ------------------------------------------------------------------------- */
+@source '../../resources/views';
+@source '../../app';
+@source '../../public/metronic/vendors/ktui/ktui.min.js';
+
+/* ===========================================================================
+ | Brand
+ |
+ | The operator's colour is amber — the ⚡ mark on the sign-in screen and the
+ | product's whole mental model (a generator running at night). Metronic ships
+ | --primary as blue, so it is re-pointed here rather than in the vendored
+ | config, keeping the theme file diffable against upstream.
+ |
+ | --primary-foreground must stay dark: amber is a light hue, so white-on-amber
+ | fails contrast while zinc-950-on-amber reads at ~10:1.
+ | ========================================================================= */
+:root {
+    --primary: var(--color-amber-500);
+    --primary-foreground: var(--color-zinc-950);
+    --ring: var(--color-amber-400);
+}
+
+.dark {
+    --primary: var(--color-amber-400);
+    --primary-foreground: var(--color-zinc-950);
+
+    /* Metronic's dark tokens make --card the same zinc-950 as --background, so a
+       card is told apart from the page by its hairline border alone. Lifting the
+       card one step keeps the surface readable on a phone held in a dim street. */
+    --card: var(--color-zinc-900);
+    --card-foreground: var(--color-zinc-50);
+
+    /* Metronic darkens muted-foreground to zinc-500, which is thin for the
+       micro-labels this app leans on (due/settled, route stats, period lines).
+       One step brighter keeps them legible against --card. */
+    --muted-foreground: var(--color-zinc-400);
+}
+
+/* The outline badge variant is the one place KTUI hardcodes blue instead of
+   reading --primary, so the brand colour has to be restated for it. The dark
+   rule mirrors KTUI's own selector (`:is(.dark *)`, which out-specifies a plain
+   `.dark …` descendant) so it actually wins the cascade rather than sitting
+   behind the blue one. */
+.kt-badge-outline.kt-badge-primary {
+    border-color: var(--color-amber-200);
+    background-color: var(--color-amber-50);
+    color: var(--color-amber-700);
+}
+
+.kt-badge-outline.kt-badge-primary:is(.dark *) {
+    border-color: var(--color-amber-950);
+    background-color: color-mix(in oklab, var(--color-amber-950) 50%, transparent);
+    color: var(--color-amber-600);
+}
+
+/* ---------------------------------------------------------------------------
+ | App-level helpers
+ | -------------------------------------------------------------------------- */
+
+/* Tinted icon tile: a soft brand-tinted square holding one KeenIcon.
+   The tint alone is too pale to carry a glyph in either theme, so each variant
+   pairs the tint with a deeper shade for light mode and a brighter one for dark
+   — the pattern Metronic's own demos use, made explicit so four screens stay
+   identical instead of drifting shade by shade. */
+.tile {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    border-radius: var(--radius-lg);
+}
+
+.tile-primary {
+    background-color: color-mix(in oklab, var(--primary) 12%, transparent);
+    color: var(--color-amber-700);
+}
+
+.dark .tile-primary {
+    color: var(--color-amber-400);
+}
+
+.tile-success {
+    background-color: color-mix(in oklab, var(--color-green-500) 12%, transparent);
+    color: var(--color-green-700);
+}
+
+.dark .tile-success {
+    color: var(--color-green-500);
+}
+
+.tile-info {
+    background-color: color-mix(in oklab, var(--color-blue-500) 12%, transparent);
+    color: var(--color-blue-700);
+}
+
+.dark .tile-info {
+    color: var(--color-blue-400);
+}
+
+.tile-violet {
+    background-color: color-mix(in oklab, var(--color-violet-500) 12%, transparent);
+    color: var(--color-violet-700);
+}
+
+.dark .tile-violet {
+    color: var(--color-violet-400);
+}
+
+.tile-danger {
+    background-color: color-mix(in oklab, var(--destructive) 12%, transparent);
+    color: var(--color-red-700);
+}
+
+.dark .tile-danger {
+    color: var(--color-red-500);
+}
+
+.tile-muted {
+    background-color: var(--muted);
+    color: var(--secondary-foreground);
+}
+
+/* Keenicons render from a webfont; the glyph box has to be sized explicitly
+   when an icon sits inside a small badge or a dense meta row. */
+.ki-xs {
+    font-size: 0.875rem;
+    line-height: 1;
+}
+
+/* Keeps a figure and its label on one optical baseline inside the amount
+   columns that the collector scans row after row. */
+.amount-cell {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+}

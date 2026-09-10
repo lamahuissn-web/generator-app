@@ -43,6 +43,7 @@
     "portal.month_cash": "This month",
     "portal.search_ph": "Search any subscriber — name, meter #, phone…",
     "portal.search_empty": "No subscriber matches “:q”",
+    "portal.search_clear": "Clear search",
     "portal.no_route": "No route",
     "portal.routes": "Routes",
     "portal.areas_count": ":n areas",

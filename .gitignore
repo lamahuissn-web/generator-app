@@ -25,3 +25,6 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Static dumps of rendered screens used for local design review
+/public/_preview

@@ -43,6 +43,7 @@
     "portal.month_cash": "هذا الشهر",
     "portal.search_ph": "ابحث عن أي مشترك — بالاسم أو رقم العداد أو الهاتف…",
     "portal.search_empty": "لا يوجد مشترك يطابق “:q”",
+    "portal.search_clear": "مسح البحث",
     "portal.no_route": "بدون منطقة",
     "portal.routes": "المناطق",
     "portal.areas_count": ":n منطقة",
