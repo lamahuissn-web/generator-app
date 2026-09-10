@@ -16,7 +16,7 @@ class EnsureCollector
             if ($user?->isAdmin()) {
                 return redirect('/admin');
             }
-            abort(403, 'Collector access only.');
+            abort(403, 'This account is not allowed in this portal.');
         }
 
         return $next($request);

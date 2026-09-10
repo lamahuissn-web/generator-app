@@ -64,6 +64,26 @@ if (! function_exists('plural')) {
     }
 }
 
+if (! function_exists('tone_text')) {
+    /**
+     * Semantic tone -> Tailwind text colour.
+     *
+     * The class names are written out here rather than assembled at the call site
+     * ("text-".$key) so they appear as literals in a file Tailwind scans: a class built by
+     * string concatenation is invisible to the scanner and silently has no CSS.
+     */
+    function tone_text(string $tone): string
+    {
+        return match ($tone) {
+            'danger' => 'text-destructive',
+            'success' => 'text-green-700 dark:text-green-500',
+            'warning' => 'text-amber-700 dark:text-amber-400',
+            'info' => 'text-blue-700 dark:text-blue-400',
+            default => 'text-mono',
+        };
+    }
+}
+
 if (! function_exists('period_label')) {
     /** '2026-09' => 'Sep 2026' */
     function period_label(string $ym): string

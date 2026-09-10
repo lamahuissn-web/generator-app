@@ -153,6 +153,39 @@
     color: var(--secondary-foreground);
 }
 
+/* ---------------------------------------------------------------------------
+ | Admin shell
+ |
+ | The sidebar's off-canvas behaviour is written in plain CSS rather than with
+ | Tailwind variants: it has to flip for RTL (off-screen to the RIGHT in Arabic),
+ | and a `translate-x` utility plus an `rtl:` override is easy to get subtly wrong.
+ | From lg up it is simply static, and demo1's --sidebar-width takes over.
+ | -------------------------------------------------------------------------- */
+.admin-sidebar {
+    width: var(--sidebar-width, 280px);
+    transform: translateX(-100%);
+    transition: transform var(--sidebar-transition-duration, 0.3s) var(--sidebar-transition-timing, ease);
+}
+
+/* An attribute selector + a class is (0,2,0), which OUT-SPECIFIES the plain
+   `.admin-sidebar` in the desktop media query below. Left unrepeated there, the
+   off-canvas transform wins at every width and the sidebar sits off-screen on desktop
+   while the wrapper still reserves its gutter — an empty column. */
+[dir='rtl'] .admin-sidebar {
+    transform: translateX(100%);
+}
+
+.admin-sidebar.is-open {
+    transform: translateX(0);
+}
+
+@media (min-width: 64rem) {
+    .admin-sidebar,
+    [dir='rtl'] .admin-sidebar {
+        transform: none;
+    }
+}
+
 /* Keenicons render from a webfont; the glyph box has to be sized explicitly
    when an icon sits inside a small badge or a dense meta row. */
 .ki-xs {
