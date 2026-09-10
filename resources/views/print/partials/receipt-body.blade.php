@@ -44,7 +44,7 @@
 <div class="hero">
     <div class="lbl">{{ __('prt.amount_received') }}</div>
     <div class="val">{{ money($payment->amount) }}</div>
-    <div class="lbl">{{ __('prt.method_cash') }}</div>
+    <div class="lbl">{{ $payment->methodLabel() }}</div>
 </div>
 
 @if ($payment->allocations->isNotEmpty())
@@ -52,13 +52,15 @@
     <table class="charges">
         <thead>
             <tr>
-                <th style="width:60%">{{ __('prt.period') }}</th>
-                <th class="num" style="width:40%">{{ __('prt.amount') }}</th>
+                <th style="width:34%">{{ __('prt.invoice_no') }}</th>
+                <th style="width:32%">{{ __('prt.period') }}</th>
+                <th class="num" style="width:34%">{{ __('prt.amount') }}</th>
             </tr>
         </thead>
         <tbody>
             @foreach ($payment->allocations as $allocation)
                 <tr>
+                    <td><span class="ltr">{{ $allocation->bill?->number ?: '—' }}</span></td>
                     <td>{{ $allocation->bill ? ($isRtl ? period_label_ar($allocation->bill->period) : period_label($allocation->bill->period)) : '—' }}</td>
                     <td class="num">{{ money($allocation->amount) }}</td>
                 </tr>
@@ -76,6 +78,17 @@
         </tr>
     </tfoot>
 </table>
+
+@php $remainingNote = $payment->remainingNote(); @endphp
+@if ($remainingNote)
+    @php
+        [$noteKey, $noteParams] = \App\Models\Payment::remainingNoteText(
+            $remainingNote,
+            fn (string $period): string => $isRtl ? period_label_ar($period) : period_label($period),
+        );
+    @endphp
+    <div class="note">{{ __($noteKey, $noteParams) }}</div>
+@endif
 
 @if ($payment->note)
     <div class="note">{{ $payment->note }}</div>

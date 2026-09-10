@@ -43,6 +43,20 @@ class PaymentResource extends Resource
                     ->money('USD')
                     ->sortable()
                     ->weight('bold'),
+                Tables\Columns\TextColumn::make('method')->label(__('t.payment_method'))
+                    ->formatStateUsing(fn (string $state): string => Payment::label($state))
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        Payment::METHOD_CASH_USD => 'success',
+                        Payment::METHOD_CASH_LBP => 'info',
+                        Payment::METHOD_WHISH => 'violet',
+                        Payment::METHOD_OMT => 'warning',
+                        default => 'gray',
+                    }),
+                Tables\Columns\TextColumn::make('settled_bills')->label(__('t.settled_invoices'))
+                    ->state(fn (Payment $record): string => $record->settledBillsLabel())
+                    ->wrap()
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('collector.name')->label(__('t.collected_by'))
                     ->label(__('t.collected_by'))
                     ->searchable()
@@ -56,6 +70,9 @@ class PaymentResource extends Resource
                     ->sortable(),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('method')
+                    ->label(__('t.payment_method'))
+                    ->options(Payment::methodOptions()),
                 Tables\Filters\SelectFilter::make('collector_id')
                     ->label(__('f.collector'))
                     ->options(fn (): array => User::query()->where('role', 'collector')->pluck('name', 'id')->all()),

@@ -7,6 +7,7 @@ use App\Models\Payment;
 use App\Models\Subscriber;
 use App\Services\BillingService;
 use App\Services\WhatsAppService;
+use Illuminate\Support\Collection;
 use Livewire\Component;
 
 class SubscriberShow extends Component
@@ -24,7 +25,10 @@ class SubscriberShow extends Component
 
     public string $paymentNote = '';
 
-    /** @var array{applied: float, excess: float, remaining: float, bill_id: ?int, bill_period: ?string}|null */
+    /** How the money arrived: cash USD/LBP, Whish, OMT… */
+    public string $paymentMethod = Payment::METHOD_CASH_USD;
+
+    /** @var array{applied: float, excess: float, remaining: float, method: string, method_label: string, number: ?string, settled: array<int,array<string,mixed>>, bill_id: ?int, bill_period: ?string}|null */
     public ?array $receipt = null;
 
     public ?int $lastPaymentId = null;
@@ -68,7 +72,7 @@ class SubscriberShow extends Component
         return $this->subscriber->readingFor($this->period) !== null;
     }
 
-    public function recentBills(): \Illuminate\Support\Collection
+    public function recentBills(): Collection
     {
         return $this->subscriber->bills()
             ->with('reading:id,current_reading,previous_reading,consumption')
@@ -78,7 +82,7 @@ class SubscriberShow extends Component
             ->get();
     }
 
-    public function recentPayments(): \Illuminate\Support\Collection
+    public function recentPayments(): Collection
     {
         return $this->subscriber->payments()
             ->with('collector:id,name')
@@ -206,6 +210,7 @@ class SubscriberShow extends Component
                 auth()->id(),
                 $this->paymentNote !== '' ? $this->paymentNote : null,
                 $this->period,
+                $this->paymentMethod,
             );
 
             $this->subscriber->refresh();
@@ -221,10 +226,34 @@ class SubscriberShow extends Component
                 $this->subscriber, $bill, $result['applied'], $result['remaining'], 'en',
             );
 
+            $payment = $result['payment']->fresh();
+
+            // Which invoices this money settled (the receipt must say so).
+            $settled = $payment->settledBills()
+                ->map(fn (Bill $b) => [
+                    'number' => $b->number ?: 'INV-'.$b->period,
+                    'period' => $b->period,
+                    'amount' => (float) $payment->allocations->firstWhere('bill_id', $b->id)?->amount,
+                ])
+                ->values()
+                ->all();
+
+            // Why a balance is still owed after a full payment (the next cycle's bill).
+            $remainingNote = null;
+            if ($note = $payment->remainingNote()) {
+                [$noteKey, $noteParams] = Payment::remainingNoteText($note, fn (string $period): string => period_label($period));
+                $remainingNote = __($noteKey, $noteParams);
+            }
+
             $this->receipt = [
                 'applied' => $result['applied'],
                 'excess' => $result['excess'],
                 'remaining' => $result['remaining'],
+                'remaining_note' => $remainingNote,
+                'method' => $payment->method,
+                'method_label' => $payment->methodLabel(),
+                'number' => $payment->number,
+                'settled' => $settled,
                 'bill_id' => $bill?->id,
                 'bill_period' => $bill?->period,
                 'wa_ar' => WhatsAppService::waLink($phone, $messageAr),

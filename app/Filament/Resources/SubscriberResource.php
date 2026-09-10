@@ -6,6 +6,7 @@ use App\Filament\Resources\SubscriberResource\Pages;
 use App\Filament\Resources\SubscriberResource\RelationManagers\BillsRelationManager;
 use App\Filament\Resources\SubscriberResource\RelationManagers\PaymentsRelationManager;
 use App\Filament\Resources\SubscriberResource\RelationManagers\ReadingsRelationManager;
+use App\Models\Payment;
 use App\Models\Subscriber;
 use App\Services\BillingService;
 use Filament\Actions\Action;
@@ -25,6 +26,9 @@ use Illuminate\Database\Eloquent\Builder;
 class SubscriberResource extends Resource
 {
     protected static ?string $model = Subscriber::class;
+
+    /** The profile page header and links read the subscriber's name, not "View subscriber". */
+    protected static ?string $recordTitleAttribute = 'name';
 
     protected static \BackedEnum|string|null $navigationIcon = 'heroicon-o-users';
 
@@ -170,14 +174,26 @@ class SubscriberResource extends Resource
                             ->minValue(0.01)
                             ->required()
                             ->helperText(fn (Subscriber $record): string => 'Outstanding: '.money($record->outstanding())),
+                        Forms\Components\Select::make('method')
+                            ->label(__('t.payment_method'))
+                            ->options(Payment::methodOptions())
+                            ->default(Payment::METHOD_CASH_USD)
+                            ->required(),
                         Forms\Components\TextInput::make('note')->label(__('t.note'))->maxLength(200),
                     ])
                     ->action(function (array $data, Subscriber $record): void {
                         try {
-                            $result = BillingService::collect($record, (float) $data['amount'], auth()->id(), $data['note'] ?? null);
+                            $result = BillingService::collect(
+                                $record,
+                                (float) $data['amount'],
+                                auth()->id(),
+                                $data['note'] ?? null,
+                                null,
+                                $data['method'] ?? Payment::METHOD_CASH_USD,
+                            );
                             Notification::make()
                                 ->title('Collected '.money($result['applied']).' from '.$record->name)
-                                ->body('Remaining: '.money($result['remaining']))
+                                ->body('Remaining: '.money($result['remaining']).' · '.$result['payment']->methodLabel())
                                 ->success()
                                 ->send();
                         } catch (\RuntimeException $e) {

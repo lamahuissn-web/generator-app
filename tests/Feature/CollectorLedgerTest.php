@@ -94,8 +94,8 @@ class CollectorLedgerTest extends TestCase
         $this->assertSame('payment', $rows[0]['kind']);
         $this->assertStringContainsString('Ali Hassan', $rows[0]['description']);
         $this->assertStringContainsString('Corniche', $rows[0]['description']);
-        $this->assertStringContainsString('Jul 2026', $rows[0]['description']);   // bills it settled
-        $this->assertStringContainsString('Aug 2026', $rows[0]['description']);
+        $this->assertStringContainsString('INV-2026-07-', $rows[0]['description']);   // bills it settled
+        $this->assertStringContainsString('INV-2026-08-', $rows[0]['description']);
         $this->assertSame('first instalment', $rows[0]['detail']);
         $this->assertSame(30.0, $rows[0]['due']);
         $this->assertSame(30.0, $rows[0]['balance']);
@@ -151,7 +151,7 @@ class CollectorLedgerTest extends TestCase
             ->assertOk()
             ->assertSee('Jad Haddad')
             ->assertSee('Ali Hassan')          // the customer they collected from
-            ->assertSee('Aug 2026')            // the bill that payment settled
+            ->assertSee('INV-2026-08-')        // the bill that payment settled
             ->assertSee('$25.00');
 
         // All-time view of the same ledger.

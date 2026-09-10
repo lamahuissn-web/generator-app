@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\SubscriberResource\Pages;
 
 use App\Filament\Resources\SubscriberResource;
+use App\Models\Payment;
 use App\Models\Subscriber;
 use App\Services\BillingService;
 use App\Services\WhatsAppService;
@@ -65,6 +66,11 @@ class ViewSubscriber extends ViewRecord
                         ->label(__('t.amount_received'))
                         ->numeric()->minValue(0.01)->required()
                         ->helperText(fn (): string => 'Outstanding balance: '.money($record->outstanding())),
+                    Forms\Components\Select::make('method')
+                        ->label(__('t.payment_method'))
+                        ->options(Payment::methodOptions())
+                        ->default(Payment::METHOD_CASH_USD)
+                        ->required(),
                     Forms\Components\TextInput::make('note')->label(__('t.note'))->maxLength(200),
                 ])
                 ->action(function (array $data): void {
@@ -75,6 +81,8 @@ class ViewSubscriber extends ViewRecord
                             (float) $data['amount'],
                             auth()->id(),
                             $data['note'] ?? null,
+                            null,
+                            $data['method'] ?? Payment::METHOD_CASH_USD,
                         );
 
                         $bill = $record->bills()->orderByDesc('period')->first();

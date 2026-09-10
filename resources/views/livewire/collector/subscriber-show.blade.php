@@ -293,7 +293,7 @@
                 <div class="bg-gradient-to-r from-emerald-600 to-emerald-500 px-5 py-4 text-white {{ $isRtl ? 'bg-gradient-to-l' : '' }}">
                     <div class="flex items-center justify-between">
                         <p class="text-[11px] font-bold uppercase tracking-widest text-emerald-100">{{ __('portal.payment_received') }}</p>
-                        <span class="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase">{{ __('portal.cash') }}</span>
+                        <span class="rounded-full bg-white/20 px-2 py-0.5 text-[10px] font-bold uppercase">{{ $receipt['method_label'] }}</span>
                     </div>
                     <p class="mt-1 text-3xl font-extrabold tabular-nums">{{ money($receipt['applied']) }}</p>
                     @if ($receipt['excess'] > 0)
@@ -307,7 +307,30 @@
                             {{ $receipt['remaining'] > 0 ? money($receipt['remaining']) : __('portal.fully_settled') }}
                         </span>
                     </div>
-                    <p class="text-xs text-slate-400">{{ __('portal.payment_no', ['id' => $lastPaymentId, 'period' => $receipt['bill_period'] ? period_label($receipt['bill_period']) : '']) }}</p>
+                    <p class="text-xs text-slate-400">
+                        {{ $receipt['number'] ?: __('portal.payment_no', ['id' => $lastPaymentId, 'period' => '']) }}
+                        @if ($receipt['bill_period']) · {{ period_label($receipt['bill_period']) }} @endif
+                    </p>
+
+                    @if (! empty($receipt['remaining_note']))
+                        <p class="rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 ring-1 ring-amber-100">
+                            {{ $receipt['remaining_note'] }}
+                        </p>
+                    @endif
+
+                    @if (! empty($receipt['settled']))
+                        <div class="rounded-xl bg-slate-50 p-3 ring-1 ring-slate-100">
+                            <p class="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">{{ __('portal.applied_to') }}</p>
+                            <ul class="space-y-1">
+                                @foreach ($receipt['settled'] as $settledRow)
+                                    <li class="flex items-center justify-between text-xs">
+                                        <span class="text-slate-500"><span dir="ltr">{{ $settledRow['number'] }}</span> · {{ period_label($settledRow['period']) }}</span>
+                                        <span class="font-bold tabular-nums text-slate-700">{{ money($settledRow['amount']) }}</span>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
 
                     <div class="border-t border-dashed border-slate-200 pt-3">
                         <p class="mb-2 text-center text-xs font-bold uppercase tracking-wide text-slate-500">{{ __('portal.send_receipt') }}</p>
@@ -364,6 +387,18 @@
                             class="rounded-full bg-slate-900 px-4 py-2 text-sm font-bold text-white transition hover:bg-slate-700">
                         {{ __('portal.full_balance', ['amount' => money($outstanding)]) }}
                     </button>
+                </div>
+
+                <div class="mt-4">
+                    <label class="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-500">{{ __('portal.method') }}</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        @foreach (\App\Models\Payment::$methods as $key => $label)
+                            <button type="button" wire:click="$set('paymentMethod', '{{ $key }}')"
+                                    class="rounded-xl border px-3 py-2.5 text-xs font-bold transition {{ $paymentMethod === $key ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300' }}">
+                                {{ __("pay.{$key}") }}
+                            </button>
+                        @endforeach
+                    </div>
                 </div>
 
                 <div class="mt-4">

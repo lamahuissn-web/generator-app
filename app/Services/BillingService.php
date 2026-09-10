@@ -429,9 +429,10 @@ class BillingService
     }
 
     /**
-     * Record a cash collection. Flat-rate subscribers get their current-period
-     * bill created on the spot. The amount is capped at the outstanding balance
-     * and allocated oldest-bill-first (FIFO).
+     * Record a collection. Flat-rate subscribers get their current-period bill
+     * created on the spot. The amount is capped at the outstanding balance and
+     * allocated oldest-bill-first (FIFO). $method records how the money arrived
+     * (cash USD/LBP, Whish, OMT) — each method is its own cash box.
      *
      * @return array{payment: Payment, applied: float, excess: float, remaining: float, bill: ?Bill}
      *
@@ -443,6 +444,7 @@ class BillingService
         ?int $collectorId = null,
         ?string $note = null,
         ?string $period = null,
+        string $method = Payment::METHOD_CASH_USD,
     ): array {
         $period ??= self::currentPeriod();
         $amount = round(max(0, (float) $amount), 2);
@@ -460,12 +462,12 @@ class BillingService
             throw new \RuntimeException('This subscriber has no outstanding balance to collect.');
         }
 
-        return DB::transaction(function () use ($subscriber, $collectorId, $applied, $note, $excess, $outstanding) {
+        return DB::transaction(function () use ($subscriber, $collectorId, $applied, $note, $excess, $outstanding, $method) {
             $payment = Payment::create([
                 'subscriber_id' => $subscriber->id,
                 'collector_id' => $collectorId,
                 'amount' => $applied,
-                'method' => 'cash',
+                'method' => $method,
                 'note' => $note,
             ]);
 
@@ -497,6 +499,7 @@ class BillingService
                 'applied' => $applied,
                 'excess' => $excess,
                 'remaining' => round($outstanding - $applied, 2),
+                'method' => $method,
                 'note' => $note,
             ]);
 

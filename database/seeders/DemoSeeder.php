@@ -183,7 +183,13 @@ class DemoSeeder extends Seeder
                     ? (isset($row['flat']) ? (float) $sub->flat_fee : $sub->outstanding())
                     : (float) $row['sep_pay'];
                 $payDate = Carbon::create(2026, 9, 2 + ($i % 7), 11, 5)->min(Carbon::create(2026, 9, 9, 18));
-                $result = $this->collectRaw($sub, $amount, $collectorId, 'September collection', null, $payDate);
+                // Two rails besides the cash box, so the tables/receipts show methods.
+                $method = match ($i) {
+                    0 => 'whish',
+                    2 => 'cash_lbp',
+                    default => 'cash_usd',
+                };
+                $result = $this->collectRaw($sub, $amount, $collectorId, 'September collection', null, $payDate, $method);
                 $this->touchDates([$result['payment']], $payDate);
             }
         }
@@ -255,10 +261,10 @@ class DemoSeeder extends Seeder
         return [$result['reading'], $result['bill']];
     }
 
-    private function collectRaw(Subscriber $sub, float $amount, int $collectorId, string $note, ?string $period, Carbon $date): array
+    private function collectRaw(Subscriber $sub, float $amount, int $collectorId, string $note, ?string $period, Carbon $date, string $method = 'cash_usd'): array
     {
         try {
-            return BillingService::collect($sub, $amount, $collectorId, $note, $period);
+            return BillingService::collect($sub, $amount, $collectorId, $note, $period, $method);
         } catch (\RuntimeException $e) {
             throw new \RuntimeException("Seed collect failed for {$sub->name}: {$e->getMessage()}");
         }

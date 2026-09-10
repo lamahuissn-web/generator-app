@@ -181,7 +181,9 @@ class CollectionService
     public static function statement(Subscriber $subscriber, ?Carbon $from = null): array
     {
         $bills = $subscriber->bills()->get();
-        $payments = $subscriber->payments()->with('collector:id,name')->get();
+        $payments = $subscriber->payments()
+            ->with(['collector:id,name', 'allocations.bill:id,number,period'])
+            ->get();
 
         $entries = $bills->map(fn (Bill $bill) => [
             'date' => $bill->created_at,
@@ -196,9 +198,7 @@ class CollectionService
             'date' => $payment->created_at,
             'kind' => 'payment',
             'label' => $payment->created_at?->format('Y-m-d'),
-            'description' => __('col.st_payment_desc', [
-                'collector' => $payment->collector?->name ?? __('col.unknown_collector'),
-            ]),
+            'description' => self::paymentDescription($payment),
             'due' => 0.0,
             'settled' => (float) $payment->amount,
             'ref' => 'P'.$payment->id,
@@ -230,7 +230,7 @@ class CollectionService
             ->with([
                 'subscriber:id,name,route_id',
                 'subscriber.route:id,name',
-                'allocations.bill:id,period,subscriber_id',
+                'allocations.bill:id,number,period,subscriber_id',
             ])
             ->get();
 
@@ -239,19 +239,18 @@ class CollectionService
             ->get();
 
         $entries = $payments->map(function (Payment $payment) {
-            $periods = $payment->allocations
-                ->map(fn ($allocation) => $allocation->bill?->period)
+            $invoices = $payment->allocations
+                ->map(fn ($allocation) => $allocation->bill?->number ?: $allocation->bill?->period)
                 ->filter()
                 ->unique()
-                ->map(fn (string $period) => self::periodText($period))
                 ->values();
 
             $description = __('col.led_payment', [
                 'subscriber' => $payment->subscriber?->name ?? '—',
                 'route' => $payment->subscriber?->route?->name ?? __('col.no_route'),
             ]);
-            if ($periods->isNotEmpty()) {
-                $description .= ' — '.__('col.led_periods', ['periods' => $periods->implode('، ')]);
+            if ($invoices->isNotEmpty()) {
+                $description .= ' — '.__('col.led_periods', ['periods' => $invoices->implode('، ')]);
             }
 
             return [
@@ -325,6 +324,28 @@ class CollectionService
             'rows_shown' => count($rows),
             'rows_total' => $rowsTotal,
         ];
+    }
+
+    /**
+     * 'Payment (Cash USD) — collector: Jad — invoices: INV-...' — the method and the
+     * settled invoices belong on every line where money is listed.
+     */
+    public static function paymentDescription(Payment $payment): string
+    {
+        $description = __('col.st_payment_desc', [
+            'method' => $payment->methodLabel(),
+            'collector' => $payment->collector?->name ?? __('col.unknown_collector'),
+        ]);
+
+        $invoices = $payment->settledBills()
+            ->map(fn (Bill $bill) => $bill->number ?: 'INV-'.$bill->period)
+            ->all();
+
+        if ($invoices !== []) {
+            $description .= ' — '.__('col.st_payment_for', ['invoices' => implode('، ', $invoices)]);
+        }
+
+        return $description;
     }
 
     private static function billDescription(Bill $bill): string
