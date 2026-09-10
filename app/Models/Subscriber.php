@@ -121,12 +121,19 @@ class Subscriber extends Model
             ->value('o');
     }
 
-    /** Unpaid bills, oldest period first (FIFO payment order). */
+    /**
+     * Unpaid bills, oldest period first (FIFO payment order).
+     *
+     * Within one period the SUBSCRIPTION bill comes before special invoices: a collector
+     * who takes exactly the monthly fee must clear the month, not a part that happens to
+     * carry a lower id.
+     */
     public function unpaidBills()
     {
         return $this->bills()
             ->whereRaw('paid_amount < total')
             ->orderBy('period')
+            ->orderByRaw("type = '".Bill::TYPE_SPECIAL."'")
             ->orderBy('id')
             ->get();
     }

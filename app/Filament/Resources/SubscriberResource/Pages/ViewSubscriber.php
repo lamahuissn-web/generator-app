@@ -142,6 +142,7 @@ class ViewSubscriber extends ViewRecord
                 ->color('gray')
                 ->url(fn (): string => route('print.statement', ['subscriber' => $record->id, 'size' => 'a4']))
                 ->openUrlInNewTab(),
+            SubscriberResource::specialInvoiceAction('specialInvoiceHeader'),
             ...SubscriberResource::meterActions(),
             EditAction::make(),
             DeleteAction::make(),

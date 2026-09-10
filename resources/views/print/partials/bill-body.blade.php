@@ -19,7 +19,7 @@
             @endif
         </td>
         <td style="width:42%">
-            <div class="doc-title">{{ __('prt.bill_title') }}</div>
+            <div class="doc-title">{{ $bill->isSpecial() ? __('prt.special_title') : __('prt.bill_title') }}</div>
             <div class="doc-meta">{{ $periodLabel }}</div>
             <div class="doc-meta">{{ __('prt.bill_no') }} <span class="ltr">{{ $bill->number ?: '#'.$bill->id }}</span></div>
         </td>
@@ -41,12 +41,25 @@
         <td class="k">{{ __('prt.meter') }}</td>
         <td class="v"><span class="ltr">{{ $subscriber->meter_no ?: '—' }}</span></td>
     </tr>
-    <tr>
-        <td class="k">{{ __('prt.amperage') }}</td>
-        <td class="v"><span class="ltr">{{ $subscriber->amperage ? $subscriber->amperage.' A' : '—' }}</span></td>
-        <td class="k">{{ __('prt.issue_date') }}</td>
-        <td class="v"><span class="ltr">{{ now()->format('Y-m-d') }}</span></td>
-    </tr>
+    @unless ($bill->isSpecial())
+        <tr>
+            <td class="k">{{ __('prt.amperage') }}</td>
+            <td class="v"><span class="ltr">{{ $subscriber->amperage ? $subscriber->amperage.' A' : '—' }}</span></td>
+            <td class="k">{{ __('prt.issue_date') }}</td>
+            <td class="v"><span class="ltr">{{ $bill->created_at?->format('Y-m-d') ?? now()->format('Y-m-d') }}</span></td>
+        </tr>
+    @else
+        <tr>
+            <td class="k">{{ __('prt.subject') }}</td>
+            <td class="v" colspan="3">{{ $bill->title ?: __('spc.default_title') }}</td>
+        </tr>
+        <tr>
+            <td class="k">{{ __('prt.issue_date') }}</td>
+            <td class="v"><span class="ltr">{{ $bill->created_at?->format('Y-m-d') ?? now()->format('Y-m-d') }}</span></td>
+            <td class="k">{{ __('prt.issue_serial') }}</td>
+            <td class="v"><span class="ltr">{{ $bill->number ?: '#'.$bill->id }}</span></td>
+        </tr>
+    @endunless
     @if ($bill->type === \App\Models\Subscriber::TYPE_METERED && $bill->reading)
         @php $reading = $bill->reading; @endphp
         @if ($reading->hasMeterSwap())
@@ -100,7 +113,15 @@
         </tr>
     </thead>
     <tbody>
-        @if ($bill->type === \App\Models\Subscriber::TYPE_METERED)
+        @if ($bill->isSpecial())
+            @foreach ($bill->items as $line)
+                <tr>
+                    <td>{{ $line->description }}</td>
+                    <td class="num">{{ number_format((float) $line->quantity, 2) }} × {{ money($line->unit_price) }}</td>
+                    <td class="num">{{ money($line->amount) }}</td>
+                </tr>
+            @endforeach
+        @elseif ($bill->type === \App\Models\Subscriber::TYPE_METERED)
             <tr>
                 <td>
                     {{ __('prt.usage_short') }}
@@ -178,7 +199,14 @@
         <tbody>
             @foreach ($unpaidBills as $unpaid)
                 <tr>
-                    <td>{{ $isRtl ? period_label_ar($unpaid->period) : period_label($unpaid->period) }}</td>
+                    <td>
+                        @if ($unpaid->isSpecial())
+                            {{ $unpaid->title ?: __('spc.default_title') }}
+                            <span class="muted ltr">({{ $unpaid->number }})</span>
+                        @else
+                            {{ $isRtl ? period_label_ar($unpaid->period) : period_label($unpaid->period) }}
+                        @endif
+                    </td>
                     <td class="num">{{ money($unpaid->total) }}</td>
                     <td class="num">{{ money($unpaid->unpaidAmount()) }}</td>
                 </tr>
@@ -193,8 +221,18 @@
     </table>
 @endif
 
+@if ($bill->isSpecial() && $bill->note)
+    <div class="note">{{ $bill->note }}</div>
+@endif
+
 <div class="note">
-    {{ $co['footer'] ?: __('prt.footer_note') }}
+    {{-- The configured footer is subscription wording ("pay the subscription at the
+         collector's visit"), which is wrong on a part invoice: specials get their own. --}}
+    @if ($bill->isSpecial())
+        {{ __('prt.footer_note_special') }}
+    @else
+        {{ $co['footer'] ?: __('prt.footer_note') }}
+    @endif
 </div>
 
 <div class="thanks">

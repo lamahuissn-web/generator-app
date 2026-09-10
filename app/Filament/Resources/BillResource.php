@@ -4,10 +4,14 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\BillResource\Pages;
 use App\Models\Bill;
+use App\Models\BillItem;
 use App\Models\Subscriber;
+use App\Services\BillingService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
+use Filament\Forms;
 use Filament\Resources\Resource;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -42,12 +46,23 @@ class BillResource extends Resource
                     ->sortable(),
                 Tables\Columns\TextColumn::make('period')->label(__('t.period'))
                     ->sortable()
-                    ->searchable(),
+                    ->searchable()
+                    ->placeholder('—'),
                 Tables\Columns\TextColumn::make('type')->label(__('t.type'))
-                    ->label(__('t.type'))
-                    ->formatStateUsing(fn (string $state): string => $state === Subscriber::TYPE_METERED ? 'Metered' : 'Flat')
+                    ->formatStateUsing(fn (string $state): string => match ($state) {
+                        Bill::TYPE_SPECIAL => __('t.type_special'),
+                        Subscriber::TYPE_FLAT => __('t.type_flat'),
+                        default => __('t.type_metered'),
+                    })
                     ->badge()
-                    ->color(fn (string $state): string => $state === 'Metered' ? 'info' : 'violet'),
+                    ->color(fn (string $state): string => match ($state) {
+                        Bill::TYPE_SPECIAL => 'warning',
+                        Subscriber::TYPE_FLAT => 'violet',
+                        default => 'info',
+                    }),
+                Tables\Columns\TextColumn::make('title')->label(__('t.invoice_subject'))
+                    ->placeholder('—')
+                    ->toggleable(),
                 Tables\Columns\TextColumn::make('consumption')->label(__('t.kwh'))
                     ->label(__('t.kwh'))
                     ->numeric()
@@ -98,14 +113,90 @@ class BillResource extends Resource
                     ->options(fn (): array => Bill::query()->distinct()->orderByDesc('period')->pluck('period', 'period')->all()),
                 Tables\Filters\SelectFilter::make('type')
                     ->options([
-                        Subscriber::TYPE_METERED => 'Metered',
-                        Subscriber::TYPE_FLAT => 'Flat rate',
+                        Subscriber::TYPE_METERED => __('t.type_metered'),
+                        Subscriber::TYPE_FLAT => __('t.type_flat'),
+                        Bill::TYPE_SPECIAL => __('t.type_special'),
                     ]),
                 Tables\Filters\Filter::make('has_outstanding')
                     ->label(__('f.unpaid_only'))
                     ->query(fn (Builder $query): Builder => $query->whereColumn('paid_amount', '<', 'total')),
             ])
             ->headerActions([
+                Action::make('specialInvoice')
+                    ->label(__('a.special_invoice'))
+                    ->icon(Heroicon::DocumentPlus)
+                    ->color('primary')
+                    ->modalHeading(__('a.special_invoice'))
+                    ->modalDescription(__('a.special_invoice_desc'))
+                    ->modalSubmitActionLabel(__('a.special_invoice_create'))
+                    ->modalWidth('3xl')
+                    ->schema([
+                        Forms\Components\Select::make('subscriber_id')
+                            ->label(__('t.subscriber'))
+                            ->relationship('subscriber', 'name', fn (Builder $query) => $query->active())
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->optionsLimit(100),
+                        Forms\Components\TextInput::make('title')
+                            ->label(__('t.invoice_subject'))
+                            ->default(fn (): string => __('spc.default_title'))
+                            ->maxLength(120)
+                            ->required(),
+                        Forms\Components\Repeater::make('items')
+                            ->label(__('t.invoice_items'))
+                            ->addActionLabel(__('a.add_line'))
+                            ->minItems(1)
+                            ->defaultItems(1)
+                            ->columns(12)
+                            ->schema([
+                                Forms\Components\TextInput::make('description')
+                                    ->label(__('t.item_desc'))
+                                    ->datalist(BillItem::$presets)
+                                    ->required()->maxLength(160)->columnSpan(6),
+                                Forms\Components\TextInput::make('quantity')
+                                    ->label(__('t.qty'))
+                                    ->numeric()->minValue(0.01)->default(1)->required()
+                                    ->live(onBlur: true)->columnSpan(2),
+                                Forms\Components\TextInput::make('unit_price')
+                                    ->label(__('t.unit_price'))
+                                    ->numeric()->minValue(0)->default(0)->required()
+                                    ->live(onBlur: true)->columnSpan(2),
+                                Forms\Components\Placeholder::make('line_total')
+                                    ->label(__('t.line_total'))
+                                    ->content(fn (Utilities\Get $get): string => money(
+                                        round((float) ($get('quantity') ?? 0) * (float) ($get('unit_price') ?? 0), 2)
+                                    ))
+                                    ->columnSpan(2),
+                            ]),
+                        Forms\Components\Textarea::make('note')->label(__('t.note'))->rows(2)->maxLength(255),
+                    ])
+                    ->action(function (array $data): void {
+                        try {
+                            $subscriber = Subscriber::findOrFail($data['subscriber_id']);
+                            $result = BillingService::createSpecialInvoice(
+                                $subscriber,
+                                $data['items'] ?? [],
+                                $data['title'] ?? null,
+                                $data['note'] ?? null,
+                                null,
+                                auth()->id(),
+                            );
+                            Notification::make()
+                                ->title(__('a.special_invoice_ok', [
+                                    'number' => $result['bill']->number,
+                                    'total' => money($result['bill']->total),
+                                ]))
+                                ->body(__('a.special_invoice_body', [
+                                    'lines' => $result['items']->count(),
+                                    'balance' => money($subscriber->fresh()->outstanding()),
+                                ]))
+                                ->success()
+                                ->send();
+                        } catch (\RuntimeException $e) {
+                            Notification::make()->title(__('a.special_invoice_failed'))->body($e->getMessage())->danger()->send();
+                        }
+                    }),
                 Action::make('print_filtered')
                     ->label(__('prt.print_filtered'))
                     ->icon('heroicon-o-printer')
@@ -138,6 +229,22 @@ class BillResource extends Resource
                     ->icon('heroicon-o-arrow-down-tray')
                     ->url(fn (Bill $record): string => route('print.bill.pdf', ['bill' => $record->id, 'size' => config('pdf.default_bill_size')]))
                     ->openUrlInNewTab(),
+                Action::make('deleteSpecial')
+                    ->label(__('a.del_special'))
+                    ->icon('heroicon-o-trash')
+                    ->color('danger')
+                    ->visible(fn (Bill $record): bool => $record->isSpecial())
+                    ->requiresConfirmation()
+                    ->modalHeading(__('a.del_special_q'))
+                    ->modalDescription(__('a.del_special_desc'))
+                    ->action(function (Bill $record): void {
+                        try {
+                            BillingService::deleteSpecialInvoice($record);
+                            Notification::make()->title(__('a.del_special_ok'))->success()->send();
+                        } catch (\RuntimeException $e) {
+                            Notification::make()->title(__('a.del_special_failed'))->body($e->getMessage())->danger()->send();
+                        }
+                    }),
             ])
             ->bulkActions([
                 BulkAction::make('print_selected')

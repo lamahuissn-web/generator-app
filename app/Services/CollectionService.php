@@ -352,6 +352,13 @@ class CollectionService
     {
         $period = self::periodText($bill->period);
 
+        if ($bill->isSpecial()) {
+            return __('col.st_special_bill', [
+                'title' => $bill->title ?: __('spc.default_title'),
+                'number' => $bill->number ?: '#'.$bill->id,
+            ]);
+        }
+
         if ($bill->type === Subscriber::TYPE_FLAT) {
             return __('col.st_flat_bill', ['period' => $period]);
         }

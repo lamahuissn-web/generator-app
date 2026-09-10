@@ -3,13 +3,13 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ __('prt.bill_title') }} — {{ $subscriber->name }} — {{ $bill->period }}</title>
+    <title>{{ $bill->isSpecial() ? __('prt.special_title') : __('prt.bill_title') }} — {{ $subscriber->name }} — {{ $bill->period }}</title>
     @include('print.partials.styles', ['size' => $size])
 </head>
 <body>
     @unless ($forPdf ?? false)
         <div class="toolbar">
-            <strong>{{ __('prt.bill_title') }}</strong>
+            <strong>{{ $bill->isSpecial() ? __('prt.special_title') : __('prt.bill_title') }}</strong>
             <span>{{ $subscriber->name }} · {{ app()->isLocale('ar') ? period_label_ar($bill->period) : period_label($bill->period) }}</span>
             <span class="spacer"></span>
             @foreach (\App\Services\PdfService::BILL_SIZES as $s)

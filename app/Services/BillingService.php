@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Bill;
+use App\Models\BillItem;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
 use App\Models\Reading;
@@ -10,6 +11,7 @@ use App\Models\Setting;
 use App\Models\Subscriber;
 use App\Models\Tariff;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class BillingService
@@ -433,7 +435,12 @@ class BillingService
     /** What the run would do for one subscriber — never writes anything. */
     private static function previewRunRow(Subscriber $subscriber, string $period): array
     {
-        $existing = $subscriber->bills()->where('period', $period)->first();
+        // Special invoices are not the subscription bill: ignore them here, or one
+        // October part would stop October's subscription bill from ever being raised.
+        $existing = $subscriber->bills()
+            ->where('period', $period)
+            ->where('type', '!=', Bill::TYPE_SPECIAL)
+            ->first();
         $prevDebt = self::outstandingBefore($subscriber, $period);
         $reading = $subscriber->readings->first();
 
@@ -542,7 +549,12 @@ class BillingService
             throw new \RuntimeException('Flat bills only apply to flat-rate subscribers.');
         }
 
-        $existing = $subscriber->bills()->where('period', $period)->first();
+        // Special invoices are not the subscription bill: ignore them here, or one
+        // October part would stop October's subscription bill from ever being raised.
+        $existing = $subscriber->bills()
+            ->where('period', $period)
+            ->where('type', '!=', Bill::TYPE_SPECIAL)
+            ->first();
         if ($existing) {
             return $existing;
         }
@@ -746,6 +758,153 @@ class BillingService
         DB::transaction(function () use ($bill, $snapshot) {
             Audit::log('bill.deleted', $bill, $snapshot);
             $bill->delete();
+        });
+    }
+
+    /**
+     * A special invoice: itemized charges outside the subscription (a part, a new meter,
+     * a technician's fee). It lands on the subscriber's balance like any other bill, so
+     * FIFO collection clears it with no special-case payment logic.
+     *
+     * prev_debt stays informational (it is NOT added to the total), exactly like the
+     * subscription bills, and the statement's closing balance still equals outstanding().
+     *
+     * @param  array<int, array{description: string, quantity?: float|int|string|null, unit_price: float|int|string|null}>  $items
+     * @return array{bill: Bill, items: Collection<int, BillItem>}
+     *
+     * @throws \RuntimeException when no usable line is given
+     */
+    public static function createSpecialInvoice(
+        Subscriber $subscriber,
+        array $items,
+        ?string $title = null,
+        ?string $note = null,
+        ?string $period = null,
+        ?int $userId = null,
+    ): array {
+        $period ??= self::currentPeriod();
+        if (! preg_match(self::PERIOD_REGEX, $period)) {
+            throw new \RuntimeException("Invalid period format: {$period}");
+        }
+
+        $clean = [];
+        foreach ($items as $item) {
+            $description = trim((string) ($item['description'] ?? ''));
+            $quantity = round((float) ($item['quantity'] ?? 1), 2);
+            $unitPrice = round((float) ($item['unit_price'] ?? 0), 2);
+
+            if ($description === '') {
+                continue;
+            }
+            if ($quantity <= 0) {
+                throw new \RuntimeException('An invoice line needs a quantity above zero.');
+            }
+            if ($unitPrice < 0) {
+                throw new \RuntimeException('An invoice line cannot have a negative price.');
+            }
+
+            $clean[] = [
+                'description' => $description,
+                'quantity' => $quantity,
+                'unit_price' => $unitPrice,
+                'amount' => round($quantity * $unitPrice, 2),
+            ];
+        }
+
+        if ($clean === []) {
+            throw new \RuntimeException('Add at least one line with a description and a price.');
+        }
+
+        $total = round(array_sum(array_column($clean, 'amount')), 2);
+        if ($total <= 0) {
+            throw new \RuntimeException('The invoice total must be above zero.');
+        }
+
+        $prevDebt = self::outstandingBefore($subscriber, $period);
+
+        return DB::transaction(function () use ($subscriber, $clean, $title, $note, $period, $userId, $total, $prevDebt) {
+            $bill = Bill::create([
+                'subscriber_id' => $subscriber->id,
+                'period' => $period,
+                'type' => Bill::TYPE_SPECIAL,
+                'title' => $title ?: __('spc.default_title'),
+                'note' => $note,
+                'reading_id' => null,
+                'consumption' => null,
+                'kwh_price' => null,
+                'usage_amount' => 0,
+                'maintenance_fee' => 0,
+                'flat_amount' => 0,
+                'items_amount' => $total,
+                'prev_debt' => $prevDebt,
+                'total' => $total,
+                'paid_amount' => 0,
+            ]);
+
+            // Number needs the id, so it is set right after create (same transaction).
+            // Keyed on the PERIOD (not the issue date) so documents group by month like the
+            // subscription invoices and the statement's period column stays meaningful.
+            $bill->forceFill([
+                'number' => 'INV-SP-'.$period.'-'.str_pad((string) $bill->id, 4, '0', STR_PAD_LEFT),
+            ])->save();
+
+            $created = collect();
+            foreach ($clean as $index => $line) {
+                $created->push(BillItem::create([
+                    'bill_id' => $bill->id,
+                    'description' => $line['description'],
+                    'quantity' => $line['quantity'],
+                    'unit_price' => $line['unit_price'],
+                    'amount' => $line['amount'],
+                    'sort' => $index,
+                ]));
+            }
+
+            Audit::log('bill.special_created', $bill, [
+                'subscriber_id' => $subscriber->id,
+                'period' => $period,
+                'title' => $bill->title,
+                'items' => $clean,
+                'total' => $total,
+                'prev_debt' => $prevDebt,
+                'by' => $userId,
+            ]);
+
+            return ['bill' => $bill, 'items' => $created];
+        });
+    }
+
+    /**
+     * Correction: delete a special invoice. Guarded like the others — only while unpaid.
+     *
+     * @throws \RuntimeException when the bill is not special or has been paid
+     */
+    public static function deleteSpecialInvoice(Bill $bill): void
+    {
+        if (! $bill->isSpecial()) {
+            throw new \RuntimeException('Only special invoices are deleted this way.');
+        }
+        if ((float) $bill->paid_amount > 0) {
+            throw new \RuntimeException(
+                'This invoice has been paid ('.money($bill->paid_amount).'). Reverse the related payments before deleting it.'
+            );
+        }
+
+        DB::transaction(function () use ($bill) {
+            Audit::log('bill.special_deleted', $bill, [
+                'subscriber_id' => $bill->subscriber_id,
+                'number' => $bill->number,
+                'title' => $bill->title,
+                'total' => $bill->total,
+                'items' => $bill->items->map(fn (BillItem $item) => [
+                    'description' => $item->description,
+                    'quantity' => $item->quantity,
+                    'unit_price' => $item->unit_price,
+                    'amount' => $item->amount,
+                ])->all(),
+            ]);
+
+            $bill->delete();   // bill_items cascade
         });
     }
 }

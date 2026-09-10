@@ -6,6 +6,7 @@ use App\Filament\Resources\SubscriberResource\Pages;
 use App\Filament\Resources\SubscriberResource\RelationManagers\BillsRelationManager;
 use App\Filament\Resources\SubscriberResource\RelationManagers\PaymentsRelationManager;
 use App\Filament\Resources\SubscriberResource\RelationManagers\ReadingsRelationManager;
+use App\Models\BillItem;
 use App\Models\Payment;
 use App\Models\Subscriber;
 use App\Services\BillingService;
@@ -210,6 +211,7 @@ class SubscriberResource extends Resource
                         }
                     }),
                 EditAction::make(),
+                self::specialInvoiceAction(),
                 ...self::meterActions(),
                 Action::make('statement')
                     ->label(__('col.statement'))
@@ -321,6 +323,91 @@ class SubscriberResource extends Resource
                     }
                 }),
         ];
+    }
+
+    /**
+     * A special invoice: itemized charges outside the subscription (a part, a new meter,
+     * a technician's fee). Lands on the subscriber's balance and is collected like any
+     * other bill. Shared by the list rows and the profile page.
+     */
+    public static function specialInvoiceAction(string $name = 'specialInvoice'): Action
+    {
+        return Action::make($name)
+            ->label(__('a.special_invoice'))
+            ->icon(Heroicon::DocumentPlus)
+            ->color('primary')
+            ->modalHeading(fn (Subscriber $record): string => __('a.special_invoice_for', ['name' => $record->name]))
+            ->modalDescription(__('a.special_invoice_desc'))
+            ->modalSubmitActionLabel(__('a.special_invoice_create'))
+            ->modalWidth('3xl')
+            ->visible(fn (Subscriber $record): bool => $record->status === Subscriber::STATUS_ACTIVE)
+            ->schema([
+                Forms\Components\TextInput::make('title')
+                    ->label(__('t.invoice_subject'))
+                    ->default(fn (): string => __('spc.default_title'))
+                    ->maxLength(120)
+                    ->required(),
+                Forms\Components\Repeater::make('items')
+                    ->label(__('t.invoice_items'))
+                    ->addActionLabel(__('a.add_line'))
+                    ->minItems(1)
+                    ->defaultItems(1)
+                    ->columns(12)
+                    ->schema([
+                        Forms\Components\TextInput::make('description')
+                            ->label(__('t.item_desc'))
+                            ->datalist(BillItem::$presets)
+                            ->required()
+                            ->maxLength(160)
+                            ->columnSpan(6),
+                        Forms\Components\TextInput::make('quantity')
+                            ->label(__('t.qty'))
+                            ->numeric()->minValue(0.01)->default(1)->required()
+                            ->live(onBlur: true)
+                            ->columnSpan(2),
+                        Forms\Components\TextInput::make('unit_price')
+                            ->label(__('t.unit_price'))
+                            ->numeric()->minValue(0)->default(0)->required()
+                            ->live(onBlur: true)
+                            ->columnSpan(2),
+                        Forms\Components\Placeholder::make('line_total')
+                            ->label(__('t.line_total'))
+                            ->content(fn (Forms\Components\Utilities\Get $get): string => money(
+                                round((float) ($get('quantity') ?? 0) * (float) ($get('unit_price') ?? 0), 2)
+                            ))
+                            ->columnSpan(2),
+                    ]),
+                Forms\Components\Textarea::make('note')
+                    ->label(__('t.note'))
+                    ->rows(2)
+                    ->maxLength(255),
+            ])
+            ->action(function (array $data, Subscriber $record, Action $action): void {
+                try {
+                    $result = BillingService::createSpecialInvoice(
+                        $record,
+                        $data['items'] ?? [],
+                        $data['title'] ?? null,
+                        $data['note'] ?? null,
+                        null,
+                        auth()->id(),
+                    );
+
+                    Notification::make()
+                        ->title(__('a.special_invoice_ok', [
+                            'number' => $result['bill']->number,
+                            'total' => money($result['bill']->total),
+                        ]))
+                        ->body(__('a.special_invoice_body', [
+                            'lines' => $result['items']->count(),
+                            'balance' => money($record->fresh()->outstanding()),
+                        ]))
+                        ->success()
+                        ->send();
+                } catch (\RuntimeException $e) {
+                    Notification::make()->title(__('a.special_invoice_failed'))->body($e->getMessage())->danger()->send();
+                }
+            });
     }
 
     public static function getRelations(): array

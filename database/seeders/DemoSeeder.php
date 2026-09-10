@@ -252,6 +252,74 @@ class DemoSeeder extends Seeder
         $flat->convertToFlat(70, 'العدّاد معطّل ولم يُستبدل', $this->admin->id);
         $flatBill = BillingService::ensureFlatBill($flat->fresh(), '2026-10');
         $this->touchDates([$flatBill], Carbon::create(2026, 10, 1, 8, 30));
+
+        $this->seedSpecialInvoices();
+    }
+
+    /**
+     * Special invoices (charges outside the subscription): two open and one settled, so
+     * the Bills list shows every state and the statement names them.
+     */
+    private function seedSpecialInvoices(): void
+    {
+        $collectors = User::where('role', User::ROLE_COLLECTOR)->orderBy('id')->pluck('id')->all();
+
+        // A part + labour on a flat subscriber, and a shorter cable job on another.
+        $jobs = [
+            ['زياد قانصو', 'تركيب عدّاد جديد', 'الضمان 6 أشهر على العدّاد', [
+                ['عدّاد جديد 10 أمبير', 1, 45],
+                ['أجور فنّي — تركيبة', 2, 12.5],
+            ], Carbon::create(2026, 10, 4, 12, 0)],
+            ['ريم أبو جودة', 'تمديد كابل', null, [
+                ['كابل 3×2.5 (متر)', 12, 1.5],
+            ], Carbon::create(2026, 10, 7, 16, 30)],
+        ];
+
+        foreach ($jobs as [$name, $title, $note, $lines, $date]) {
+            $subscriber = Subscriber::where('name', $name)->firstOrFail();
+            $result = BillingService::createSpecialInvoice(
+                $subscriber,
+                array_map(fn (array $line) => [
+                    'description' => $line[0],
+                    'quantity' => $line[1],
+                    'unit_price' => $line[2],
+                ], $lines),
+                $title,
+                $note,
+                '2026-10',
+                $this->admin->id,
+            );
+            $this->touchDates([$result['bill'], ...$result['items']], $date);
+        }
+
+        // One that was raised and settled the same week, so a paid special invoice exists.
+        // Done on a subscriber with nothing else owing, so FIFO lands the money on it.
+        $paidSubscriber = Subscriber::where('name', 'ناديا خليل')->firstOrFail();
+        $paid = BillingService::createSpecialInvoice($paidSubscriber, [
+            ['description' => 'قطع غيار — فلتر وشمعة', 'quantity' => 2, 'unit_price' => 15],
+        ], 'صيانة عدّاد', null, '2026-10', $this->admin->id);
+        $raisedAt = Carbon::create(2026, 10, 8, 9, 45);
+        $this->touchDates([$paid['bill'], ...$paid['items']], $raisedAt);
+
+        $paidAt = Carbon::create(2026, 10, 9, 10, 30);
+        // A flat subscriber's collect() raises the current cycle's subscription bill on the
+        // spot, so the payment has to cover that too or the money lands there and the
+        // special invoice stays open.
+        $currentPeriod = BillingService::currentPeriod();
+        $raisesSubscription = $paidSubscriber->isFlat()
+            && ! $paidSubscriber->bills()->where('period', $currentPeriod)->where('type', '!=', Bill::TYPE_SPECIAL)->exists();
+        $amount = round($paidSubscriber->fresh()->outstanding() + ($raisesSubscription ? (float) $paidSubscriber->flat_fee : 0), 2);
+
+        $settled = $this->collectRaw(
+            $paidSubscriber->fresh(),
+            $amount,
+            $collectors[0],
+            'تسديد الفاتورة الخاصة',
+            null,
+            $paidAt,
+            'cash_usd',
+        );
+        $this->touchDates([$settled['payment']], $paidAt);
     }
 
     /** Cash the collectors handed to the operator (so the report shows in-hand balances). */

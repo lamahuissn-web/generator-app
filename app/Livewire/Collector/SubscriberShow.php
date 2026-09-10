@@ -50,6 +50,15 @@ class SubscriberShow extends Component
 
     // ---- read helpers --------------------------------------------------------
 
+    /** This period's SUBSCRIPTION bill — a special invoice for the month is a different document. */
+    private function subscriptionBillForPeriod(string $period): ?Bill
+    {
+        return $this->subscriber->bills()
+            ->where('period', $period)
+            ->where('type', '!=', Bill::TYPE_SPECIAL)
+            ->first();
+    }
+
     public function outstanding(): float
     {
         return $this->subscriber->outstanding();
@@ -69,7 +78,7 @@ class SubscriberShow extends Component
 
     public function currentBill(): ?Bill
     {
-        return $this->subscriber->bills()->where('period', $this->period)->first();
+        return $this->subscriptionBillForPeriod($this->period);
     }
 
     public function currentReadingDone(): bool
@@ -265,7 +274,7 @@ class SubscriberShow extends Component
             $this->subscriber->refresh();
 
             $bill = $result['bill']
-                ?? $this->subscriber->bills()->where('period', $this->period)->first();
+                ?? $this->subscriptionBillForPeriod($this->period);
 
             $phone = $this->subscriber->phone;
             $messageAr = WhatsAppService::receiptText(
