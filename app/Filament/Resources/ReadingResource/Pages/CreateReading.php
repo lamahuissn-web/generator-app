@@ -4,9 +4,9 @@ namespace App\Filament\Resources\ReadingResource\Pages;
 
 use App\Filament\Resources\ReadingResource;
 use App\Models\Subscriber;
-use App\Services\BillingService;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Validation\ValidationException;
 
 class CreateReading extends CreateRecord
@@ -17,38 +17,44 @@ class CreateReading extends CreateRecord
     {
         $subscriber = Subscriber::find($data['subscriber_id']);
         if (! $subscriber) {
-            throw ValidationException::withMessages(['subscriber_id' => 'Subscriber not found.']);
+            throw ValidationException::withMessages(['subscriber_id' => __('t.err_subscriber_missing')]);
         }
         if (! $subscriber->isMetered()) {
-            throw ValidationException::withMessages(['subscriber_id' => 'Flat-rate subscribers have no meter readings — collect their flat fee instead.']);
+            throw ValidationException::withMessages(['subscriber_id' => __('t.err_reading_flat')]);
+        }
+        if ($subscriber->readingFor($data['period'])) {
+            throw ValidationException::withMessages(['period' => __('t.text_err_reading_exists')]);
+        }
+        if (($data['reading_mode'] ?? ReadingResource::MODE_NORMAL) === ReadingResource::MODE_ESTIMATED
+            && blank($data['estimate_reason'] ?? null)) {
+            throw ValidationException::withMessages(['estimate_reason' => __('t.estimate_reason_required')]);
         }
 
         return $data;
     }
 
-    protected function handleRecordCreation(array $data): \Illuminate\Database\Eloquent\Model
+    protected function handleRecordCreation(array $data): Model
     {
+        $subscriber = Subscriber::findOrFail($data['subscriber_id']);
+
         try {
-            $result = BillingService::enterMeteredReading(
-                Subscriber::findOrFail($data['subscriber_id']),
-                $data['period'],
-                (float) $data['current_reading'],
-                auth()->id(),
-                $data['note'] ?? null,
-            );
+            $result = ReadingResource::record($subscriber, $data, auth()->id());
         } catch (\RuntimeException $e) {
-            Notification::make()->title('Could not record reading')->body($e->getMessage())->danger()->send();
+            Notification::make()->title(__('t.err_reading_failed'))->body($e->getMessage())->danger()->send();
             throw ValidationException::withMessages(['period' => $e->getMessage()]);
         }
 
-        $reading = $result['reading'];
-        $bill = $result['bill'];
         Notification::make()
-            ->title('Reading recorded')
-            ->body('Bill generated: '.money($bill->total).' ('.money($bill->prev_debt).' previous debt rolled over).')
+            ->title(__('t.reading_ok'))
+            ->body(ReadingResource::recordSummary($result['reading'], (float) $result['bill']->total, (float) $result['bill']->prev_debt))
             ->success()
             ->send();
 
-        return $reading;
+        return $result['reading'];
+    }
+
+    protected function getRedirectUrl(): string
+    {
+        return static::getResource()::getUrl('index');
     }
 }

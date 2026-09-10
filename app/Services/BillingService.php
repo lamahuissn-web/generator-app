@@ -140,13 +140,49 @@ class BillingService
             ->first();
     }
 
+    /** The meter value this cycle starts from (the previous reading, or 0 for the very first). */
+    public static function previousValue(Subscriber $subscriber, string $period): float
+    {
+        return (float) (self::latestReadingBefore($subscriber, $period)?->current_reading ?? 0);
+    }
+
+    /**
+     * Average consumption of the last few REAL readings — what to bill when the meter is
+     * dead and nobody can supply a number. Baseline rows (0 kWh, nothing charged) and
+     * earlier estimates are skipped so they cannot drag the average down.
+     *
+     * @return array{kwh: float, count: int, periods: array<int,string>}|null null without usable history
+     */
+    public static function suggestedConsumption(Subscriber $subscriber, string $period, int $sample = 3): ?array
+    {
+        $rows = $subscriber->readings()
+            ->where('period', '<', $period)
+            ->where('is_estimated', false)
+            ->where('consumption', '>', 0)
+            ->orderByDesc('period')
+            ->orderByDesc('id')
+            ->limit($sample)
+            ->get(['period', 'consumption']);
+
+        if ($rows->isEmpty()) {
+            return null;
+        }
+
+        return [
+            'kwh' => round((float) $rows->avg('consumption'), 1),
+            'count' => $rows->count(),
+            'periods' => $rows->pluck('period')->all(),
+        ];
+    }
+
     /**
      * Record a meter reading for the period and create the matching bill.
      *
+     * @param  array{estimated?: bool, estimate_reason?: ?string, swap?: array{old_meter_no?: ?string, old_reading: float, new_meter_no: string, new_start?: float}}  $options
      * @return array{reading: Reading, bill: Bill}
      *
      * @throws \RuntimeException when a reading/bill already exists for that period
-     *                           or the new reading is lower than the previous one
+     *                           or a value is lower than the one it continues from
      */
     public static function enterMeteredReading(
         Subscriber $subscriber,
@@ -154,6 +190,7 @@ class BillingService
         float $currentReading,
         ?int $userId = null,
         ?string $note = null,
+        array $options = [],
     ): array {
         if (! preg_match(self::PERIOD_REGEX, $period)) {
             throw new \RuntimeException("Invalid period format: {$period}");
@@ -165,13 +202,32 @@ class BillingService
             throw new \RuntimeException('A reading for this period already exists.');
         }
 
+        $estimated = (bool) ($options['estimated'] ?? false);
+        $estimateReason = $options['estimate_reason'] ?? null;
+        $swap = $options['swap'] ?? null;
+
         $previous = self::latestReadingBefore($subscriber, $period);
         $prevValue = (float) ($previous?->current_reading ?? 0);
-        if ($currentReading < $prevValue) {
-            throw new \RuntimeException('The new reading cannot be lower than the previous one.');
+
+        if ($swap) {
+            // A replacement splits the cycle over two devices: the old meter's final
+            // stretch plus whatever the new meter has already run up.
+            $oldReading = (float) $swap['old_reading'];
+            $newStart = (float) ($swap['new_start'] ?? 0);
+            if ($oldReading < $prevValue) {
+                throw new \RuntimeException("The old meter's final reading cannot be lower than the previous reading.");
+            }
+            if ($currentReading < $newStart) {
+                throw new \RuntimeException('The new meter reading cannot be lower than its starting value.');
+            }
+            $consumption = round(($oldReading - $prevValue) + ($currentReading - $newStart), 2);
+        } else {
+            if ($currentReading < $prevValue) {
+                throw new \RuntimeException('The new reading cannot be lower than the previous one.');
+            }
+            $consumption = round($currentReading - $prevValue, 2);
         }
 
-        $consumption = round($currentReading - $prevValue, 2);
         $price = self::kwhPrice($period);
         $usage = round($consumption * $price, 2);
         $maintenance = $subscriber->effectiveMaintenanceFee();
@@ -181,6 +237,7 @@ class BillingService
         return DB::transaction(function () use (
             $subscriber, $period, $currentReading, $prevValue, $consumption,
             $userId, $note, $price, $usage, $maintenance, $prevDebt, $total,
+            $estimated, $estimateReason, $swap,
         ) {
             $reading = Reading::create([
                 'subscriber_id' => $subscriber->id,
@@ -190,7 +247,23 @@ class BillingService
                 'consumption' => $consumption,
                 'entered_by' => $userId,
                 'note' => $note,
+                'is_estimated' => $estimated,
+                'estimate_reason' => $estimated ? $estimateReason : null,
+                'old_meter_no' => $swap['old_meter_no'] ?? null,
+                'old_meter_reading' => $swap['old_reading'] ?? null,
+                'new_meter_no' => $swap['new_meter_no'] ?? null,
+                'new_meter_start' => $swap['new_start'] ?? null,
             ]);
+
+            if ($swap) {
+                // The device physically changed: later cycles continue on the new one.
+                $subscriber->forceFill(['meter_no' => $swap['new_meter_no']])->save();
+            }
+
+            // A recorded cycle answers the field report, estimated or not.
+            if ($subscriber->meter_broken_reported_at) {
+                $subscriber->clearMeterReport();
+            }
 
             $bill = Bill::create([
                 'number' => self::billNumber($period, $subscriber->id),
@@ -215,10 +288,78 @@ class BillingService
                 'bill_id' => $bill->id,
                 'total' => $total,
                 'prev_debt' => $prevDebt,
+                'estimated' => $estimated,
+                'estimate_reason' => $estimated ? $estimateReason : null,
+                'meter_swap' => $swap ? [
+                    'old_meter_no' => $swap['old_meter_no'] ?? null,
+                    'old_reading' => (float) $swap['old_reading'],
+                    'new_meter_no' => $swap['new_meter_no'],
+                    'new_start' => (float) ($swap['new_start'] ?? 0),
+                ] : null,
             ]);
 
             return ['reading' => $reading, 'bill' => $bill];
         });
+    }
+
+    /**
+     * Bill a cycle off an estimate because the meter is dead. The operator supplies the
+     * kWh (0 = maintenance only); the stored meter value becomes previous + kWh, and
+     * there is NO catch-up later — the estimate becomes the new baseline.
+     *
+     * @return array{reading: Reading, bill: Bill}
+     */
+    public static function enterEstimatedReading(
+        Subscriber $subscriber,
+        string $period,
+        float $kwh,
+        ?string $reason = null,
+        ?int $userId = null,
+    ): array {
+        $kwh = round(max(0, $kwh), 2);
+
+        return self::enterMeteredReading(
+            $subscriber,
+            $period,
+            round(self::previousValue($subscriber, $period) + $kwh, 2),
+            $userId,
+            $reason,
+            ['estimated' => true, 'estimate_reason' => $reason],
+        );
+    }
+
+    /**
+     * A starting point that charges nothing — used when a subscriber gets a meter (or
+     * gets one back after a broken stretch) so the next cycle measures from there
+     * instead of billing the whole meter value as consumption.
+     */
+    public static function recordBaselineReading(
+        Subscriber $subscriber,
+        string $period,
+        float $value,
+        ?int $userId = null,
+        ?string $note = null,
+    ): Reading {
+        if ($subscriber->readingFor($period)) {
+            throw new \RuntimeException('A reading for this period already exists.');
+        }
+
+        $reading = Reading::create([
+            'subscriber_id' => $subscriber->id,
+            'period' => $period,
+            'current_reading' => round($value, 2),
+            'previous_reading' => 0,
+            'consumption' => 0,
+            'entered_by' => $userId,
+            'note' => $note ?? __('rdg.baseline_note'),
+        ]);
+
+        Audit::log('reading.baseline', $reading, [
+            'period' => $period,
+            'value' => round($value, 2),
+        ]);
+
+        return $reading;
     }
 
     /**

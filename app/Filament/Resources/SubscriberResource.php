@@ -123,8 +123,13 @@ class SubscriberResource extends Resource
                         $r->meter_no ? 'Meter '.$r->meter_no : null,
                         $r->amperage ? $r->amperage.'A' : null,
                     ])->filter()->implode(' · ')),
+                Tables\Columns\TextColumn::make('meter_broken_reported_at')->label(__('t.meter_report'))
+                    ->badge()
+                    ->color('danger')
+                    ->formatStateUsing(fn (): string => __('t.meter_broken_badge'))
+                    ->tooltip(fn (Subscriber $r): ?string => $r->meter_broken_note)
+                    ->placeholder('—'),
                 Tables\Columns\TextColumn::make('route.name')->label(__('t.route'))
-                    ->label(__('t.route'))
                     ->searchable()
                     ->placeholder('—'),
                 Tables\Columns\TextColumn::make('type')->label(__('t.type'))
@@ -160,6 +165,10 @@ class SubscriberResource extends Resource
                     ->label(__('t.status'))
                     ->trueLabel('Active only')
                     ->falseLabel('Inactive only'),
+                Tables\Filters\TernaryFilter::make('meter_broken_reported_at')
+                    ->label(__('t.meter_report'))
+                    ->trueLabel(__('t.meter_report_yes'))
+                    ->falseLabel(__('t.meter_report_no')),
             ])
             ->actions([
                 Action::make('collect')
@@ -201,6 +210,7 @@ class SubscriberResource extends Resource
                         }
                     }),
                 EditAction::make(),
+                ...self::meterActions(),
                 Action::make('statement')
                     ->label(__('col.statement'))
                     ->icon(Heroicon::DocumentText)
@@ -214,6 +224,103 @@ class SubscriberResource extends Resource
                         : 'Delete this subscriber permanently.'),
             ])
             ->bulkActions([]);
+    }
+
+    /**
+     * Meter lifecycle: the meter is gone for good (bill a flat rate), or a meter is put
+     * back on the subscriber (which records a starting reading, otherwise the first
+     * cycle would bill the new meter's whole value as consumption). Shared by the list
+     * rows and the profile page, and every change lands in the audit trail.
+     *
+     * @return array<int, Action>
+     */
+    public static function meterActions(): array
+    {
+        return [
+            Action::make('convertToFlat')
+                ->label(__('a.convert_flat'))
+                ->icon(Heroicon::ArrowTrendingDown)
+                ->color('warning')
+                ->visible(fn (Subscriber $record): bool => $record->isMetered())
+                ->modalHeading(fn (Subscriber $record): string => __('a.convert_flat_heading', ['name' => $record->name]))
+                ->modalDescription(__('a.convert_flat_desc'))
+                ->modalSubmitActionLabel(__('a.convert_flat'))
+                ->schema([
+                    Forms\Components\TextInput::make('flat_fee')
+                        ->label(__('t.flat_fee'))
+                        ->numeric()->minValue(0.01)->required()
+                        ->default(fn (Subscriber $record): ?float => $record->flat_fee ? (float) $record->flat_fee : null)
+                        ->helperText(__('t.flat_fee_hint')),
+                    Forms\Components\TextInput::make('reason')
+                        ->label(__('t.reason'))
+                        ->required()->maxLength(160)
+                        ->default(fn (): string => __('t.reason_broken_meter')),
+                ])
+                ->action(function (array $data, Subscriber $record): void {
+                    try {
+                        $record->convertToFlat((float) $data['flat_fee'], (string) $data['reason'], auth()->id());
+                        Notification::make()
+                            ->title(__('a.convert_flat_ok', ['name' => $record->name, 'fee' => money((float) $data['flat_fee'])]))
+                            ->success()
+                            ->send();
+                    } catch (\RuntimeException $e) {
+                        Notification::make()->title(__('a.convert_failed'))->body($e->getMessage())->danger()->send();
+                    }
+                }),
+            Action::make('convertToMetered')
+                ->label(__('a.convert_metered'))
+                ->icon(Heroicon::Bolt)
+                ->color('info')
+                ->visible(fn (Subscriber $record): bool => $record->isFlat())
+                ->modalHeading(fn (Subscriber $record): string => __('a.convert_metered_heading', ['name' => $record->name]))
+                ->modalDescription(__('a.convert_metered_desc'))
+                ->modalSubmitActionLabel(__('a.convert_metered'))
+                ->schema([
+                    Forms\Components\TextInput::make('meter_no')
+                        ->label(__('t.meter'))
+                        ->required()->maxLength(40)
+                        ->helperText(__('a.meter_no_hint')),
+                    Forms\Components\TextInput::make('initial_reading')
+                        ->label(__('t.initial_reading'))
+                        ->numeric()->minValue(0)->required()->default(0)
+                        ->helperText(__('t.initial_reading_hint')),
+                    Forms\Components\TextInput::make('amperage')
+                        ->label(__('t.amperage'))
+                        ->numeric()->minValue(1),
+                    Forms\Components\TextInput::make('maintenance_fee')
+                        ->label(__('t.maintenance_fee'))
+                        ->numeric()->minValue(0)
+                        ->default(fn (): float => BillingService::defaultMaintenanceFee())
+                        ->helperText(__('a.maintenance_hint')),
+                    Forms\Components\TextInput::make('reason')
+                        ->label(__('t.reason'))
+                        ->required()->maxLength(160)
+                        ->default(fn (): string => __('t.reason_new_meter')),
+                ])
+                ->action(function (array $data, Subscriber $record): void {
+                    try {
+                        $reading = $record->convertToMetered(
+                            (string) $data['meter_no'],
+                            (float) $data['initial_reading'],
+                            isset($data['amperage']) && $data['amperage'] !== null ? (int) $data['amperage'] : null,
+                            isset($data['maintenance_fee']) && $data['maintenance_fee'] !== null ? (float) $data['maintenance_fee'] : null,
+                            (string) $data['reason'],
+                            null,
+                            auth()->id(),
+                        );
+                        Notification::make()
+                            ->title(__('a.convert_metered_ok', ['name' => $record->name]))
+                            ->body(__('a.convert_metered_body', [
+                                'period' => $reading->period,
+                                'value' => number_format((float) $reading->current_reading, 0),
+                            ]))
+                            ->success()
+                            ->send();
+                    } catch (\RuntimeException $e) {
+                        Notification::make()->title(__('a.convert_failed'))->body($e->getMessage())->danger()->send();
+                    }
+                }),
+        ];
     }
 
     public static function getRelations(): array

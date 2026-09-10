@@ -33,6 +33,11 @@ class SubscriberShow extends Component
 
     public ?int $lastPaymentId = null;
 
+    /** Inline "the meter is dead" report the office picks up from the field. */
+    public bool $showBrokenReport = false;
+
+    public ?string $brokenNote = null;
+
     public ?string $flash = null;
 
     public string $flashType = 'success';
@@ -182,6 +187,50 @@ class SubscriberShow extends Component
         } catch (\RuntimeException $e) {
             $this->addError('reading', $e->getMessage());
         }
+    }
+
+    /** Field report: the meter is dead. The office decides (estimate, replace, or flat rate). */
+    public function reportBrokenMeter(): void
+    {
+        $this->resetErrorBag();
+        $this->flash = null;
+
+        if (! $this->subscriber->isMetered()) {
+            $this->addError('broken', __('portal.err_reading_flat'));
+
+            return;
+        }
+        if ($this->subscriber->status !== Subscriber::STATUS_ACTIVE) {
+            $this->addError('broken', __('portal.err_reading_inactive'));
+
+            return;
+        }
+        if ($this->currentReadingDone()) {
+            $this->addError('broken', __('portal.err_broken_after_reading'));
+
+            return;
+        }
+
+        $this->subscriber->reportMeterBroken($this->brokenNote ?: null, auth()->id());
+        $this->subscriber->refresh();
+        $this->showBrokenReport = false;
+        $this->brokenNote = null;
+        $this->flashMessage(__('portal.broken_reported'), 'warning');
+    }
+
+    /** The office took care of it / the meter works again. */
+    public function cancelBrokenReport(): void
+    {
+        $this->resetErrorBag();
+        $this->subscriber->clearMeterReport();
+        $this->subscriber->refresh();
+        $this->flashMessage(__('portal.broken_cleared'));
+    }
+
+    public function toggleBrokenReport(): void
+    {
+        $this->showBrokenReport = ! $this->showBrokenReport;
+        $this->resetErrorBag();
     }
 
     public function savePayment(): void

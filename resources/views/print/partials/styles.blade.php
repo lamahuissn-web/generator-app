@@ -89,6 +89,9 @@
        ("131 → 150" printed as "150 ← 131"). A BLOCK element with direction:ltr plus
        LRM marks around the run renders it in true left-to-right order. */
     .ltr-line { direction: ltr; unicode-bidi: embed; text-align: right; }
+    /* XB Riyaz has NO arrow glyphs (U+2192/U+2190), so a bare "→" prints as a tofu
+       box. Symbols must come from a font that carries them: DejaVu ships with mPDF. */
+    .sym { font-family: dejavusans, sans-serif; }
     .page-break { page-break-after: always; }
 
     /* ---- screen-only toolbar ---- */

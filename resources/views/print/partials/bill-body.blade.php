@@ -48,14 +48,48 @@
         <td class="v"><span class="ltr">{{ now()->format('Y-m-d') }}</span></td>
     </tr>
     @if ($bill->type === \App\Models\Subscriber::TYPE_METERED && $bill->reading)
-        <tr>
-            <td class="k">{{ __('prt.prev_reading') }}</td>
-            <td class="v"><span class="ltr">{{ number_format((float) $bill->reading->previous_reading, 0) }}</span></td>
-            <td class="k">{{ __('prt.cur_reading') }}</td>
-            <td class="v"><span class="ltr">{{ number_format((float) $bill->reading->current_reading, 0) }}</span></td>
-        </tr>
+        @php $reading = $bill->reading; @endphp
+        @if ($reading->hasMeterSwap())
+            {{-- The device changed mid-cycle: the split is what explains the bill. --}}
+            <tr>
+                <td class="k">{{ __('prt.meter_old_final') }}</td>
+                <td class="v"><span class="ltr">{{ number_format((float) $reading->old_meter_reading, 0) }}</span></td>
+                <td class="k">{{ __('prt.meter_new_start') }}</td>
+                <td class="v"><span class="ltr">{{ number_format((float) $reading->new_meter_start, 0) }}</span></td>
+            </tr>
+        @elseif ($reading->is_estimated)
+            {{-- The stored meter value is derived, not read: printing it invites
+                 "my meter says something else". Show what was billed instead. --}}
+            <tr>
+                <td class="k">{{ __('prt.prev_reading') }}</td>
+                <td class="v"><span class="ltr">{{ number_format((float) $reading->previous_reading, 0) }}</span></td>
+                <td class="k">{{ __('prt.estimated_kwh_short') }}</td>
+                <td class="v"><span class="ltr">{{ number_format((float) $reading->consumption, 1) }} {{ __('prt.kwh') }}</span></td>
+            </tr>
+        @else
+            <tr>
+                <td class="k">{{ __('prt.prev_reading') }}</td>
+                <td class="v"><span class="ltr">{{ number_format((float) $reading->previous_reading, 0) }}</span></td>
+                <td class="k">{{ __('prt.cur_reading') }}</td>
+                <td class="v"><span class="ltr">{{ number_format((float) $reading->current_reading, 0) }}</span></td>
+            </tr>
+        @endif
     @endif
 </table>
+
+@if ($bill->reading?->hasMeterSwap())
+    <div class="note">
+        {{ __('prt.meter_swap_line') }}
+        <div class="ltr-line">&#8206;{{ $bill->reading->old_meter_no ?: '—' }} <span class="sym">&#8594;</span> {{ $bill->reading->new_meter_no }}&#8206;</div>
+    </div>
+@elseif ($bill->reading?->is_estimated)
+    <div class="note">
+        <span class="badge badge-partial">{{ __('prt.estimated_badge') }}</span>
+        @if ($bill->reading->estimate_reason)
+            {{ __('prt.estimate_reason_label') }}: {{ $bill->reading->estimate_reason }}
+        @endif
+    </div>
+@endif
 
 <table class="charges">
     <thead>
@@ -71,10 +105,15 @@
                 <td>
                     {{ __('prt.usage_short') }}
                     <span class="ltr">({{ number_format((float) $bill->consumption, 1) }} kWh × {{ money($bill->kwh_price ?? \App\Services\BillingService::kwhPrice($bill->period)) }})</span>
-                    @if ($bill->reading)
+                    @if ($bill->reading && ! $bill->reading->is_estimated && ! $bill->reading->hasMeterSwap())
                         {{-- LRM-wrapped LTR block: inside RTL text bidi reorders the two numbers
                              and mirrors the arrow, so the span must live in its own LTR line. --}}
-                        <div class="muted ltr-line">&#8206;{{ number_format((float) $bill->reading->previous_reading, 0) }} → {{ number_format((float) $bill->reading->current_reading, 0) }}&#8206;</div>
+                        <div class="muted ltr-line">&#8206;{{ number_format((float) $bill->reading->previous_reading, 0) }} <span class="sym">&#8594;</span> {{ number_format((float) $bill->reading->current_reading, 0) }}&#8206;</div>
+                    @elseif ($bill->reading?->is_estimated)
+                        <div class="muted">{{ __('prt.estimated_short') }}</div>
+                    @elseif ($bill->reading?->hasMeterSwap())
+                        {{-- Two meters in one cycle: show the split, not a single range. --}}
+                        <div class="muted ltr-line">&#8206;({{ number_format((float) $bill->reading->old_meter_reading, 0) }} − {{ number_format((float) $bill->reading->previous_reading, 0) }}) + ({{ number_format((float) $bill->reading->current_reading, 0) }} − {{ number_format((float) $bill->reading->new_meter_start, 0) }})&#8206;</div>
                     @endif
                 </td>
                 <td class="num">{{ number_format((float) $bill->consumption, 1) }} {{ __('prt.kwh') }}</td>

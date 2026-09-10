@@ -196,6 +196,62 @@ class DemoSeeder extends Seeder
 
         $this->seedExpenses();
         $this->seedHandovers();
+        $this->seedMeterStories();
+    }
+
+    /**
+     * October cycle, left half-recorded on purpose so the operator can SEE the meter
+     * lifecycle: an estimate (dead meter), a replacement, a normal read, a field report
+     * still waiting for a decision, and a subscriber moved to a flat rate for good.
+     * The coverage gate on the bulk-issue page shows the resulting mix.
+     */
+    private function seedMeterStories(): void
+    {
+        $collectors = User::where('role', User::ROLE_COLLECTOR)->orderBy('id')->pluck('id')->all();
+        $sub = fn (string $name): Subscriber => Subscriber::where('name', $name)->firstOrFail();
+
+        // 1) Dead meter, estimated cycle: the meter stays at 1,340 and October bills 60 kWh.
+        $estimated = BillingService::enterEstimatedReading(
+            $sub('محمد عيتاني'),
+            '2026-10',
+            60,
+            'العدّاد معطّل — بانتظار الاستبدال',
+            $collectors[0],
+        );
+        $this->touchDates(
+            [$estimated['reading'], $estimated['bill']],
+            Carbon::create(2026, 10, 3, 10, 20),
+        );
+
+        // 2) Meter replaced mid-cycle: 1,124 ran to 920 (18 kWh) + the new one at 8 kWh.
+        $swap = BillingService::enterMeteredReading(
+            $sub('رنا الحاج'),
+            '2026-10',
+            8,
+            $collectors[1],
+            'العدّاد القديم توقف — رُكّب عدّاد جديد',
+            ['swap' => [
+                'old_meter_no' => '1124',
+                'old_reading' => 920,
+                'new_meter_no' => '4478',
+                'new_start' => 0,
+            ]],
+        );
+        $this->touchDates([$swap['reading'], $swap['bill']], Carbon::create(2026, 10, 5, 9, 15));
+
+        // 3) A plain reading, so a normal October bill sits next to the special ones.
+        $normal = BillingService::enterMeteredReading($sub('لينا مرعب'), '2026-10', 1035, $collectors[0], 'Meter read on site');
+        $this->touchDates([$normal['reading'], $normal['bill']], Carbon::create(2026, 10, 6, 11, 40));
+
+        // 4) Collectors reported a dead meter; nobody has decided yet (badge + gate).
+        $sub('جورج صليبا')->reportMeterBroken('العدّاد يوقف ويشتغل كل شوي', $collectors[0]);
+        $sub('حسن عواد')->reportMeterBroken('شك بالعدّاد — القراءة ما بتتحرك', $collectors[1]);
+
+        // 5) No meter coming back: a flat rate instead, with the reason on the record.
+        $flat = $sub('علي شرارة');
+        $flat->convertToFlat(70, 'العدّاد معطّل ولم يُستبدل', $this->admin->id);
+        $flatBill = BillingService::ensureFlatBill($flat->fresh(), '2026-10');
+        $this->touchDates([$flatBill], Carbon::create(2026, 10, 1, 8, 30));
     }
 
     /** Cash the collectors handed to the operator (so the report shows in-hand balances). */

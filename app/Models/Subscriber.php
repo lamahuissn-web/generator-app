@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Services\Audit;
+use App\Services\BillingService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -26,7 +28,15 @@ class Subscriber extends Model
     protected $fillable = [
         'route_id', 'name', 'phone', 'address', 'meter_no', 'type',
         'amperage', 'maintenance_fee', 'maintenance_mode', 'flat_fee', 'status', 'notes', 'created_by',
+        'meter_broken_reported_at', 'meter_broken_note',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'meter_broken_reported_at' => 'datetime',
+        ];
+    }
 
     /** Every new subscriber starts in "custom" mode unless told otherwise. */
     protected $attributes = [
@@ -87,7 +97,7 @@ class Subscriber extends Model
         return match ($this->maintenance_mode) {
             self::MAINT_EXEMPT => 0.0,
             self::MAINT_CUSTOM => (float) $this->maintenance_fee,
-            default => \App\Services\BillingService::defaultMaintenanceFee(),
+            default => BillingService::defaultMaintenanceFee(),
         };
     }
 
@@ -119,5 +129,101 @@ class Subscriber extends Model
             ->orderBy('period')
             ->orderBy('id')
             ->get();
+    }
+
+    /** A collector flagged the meter as dead (nothing decided yet). */
+    public function hasBrokenMeterReport(): bool
+    {
+        return $this->meter_broken_reported_at !== null;
+    }
+
+    /** Field report from the collector: the meter is dead. The admin decides what next. */
+    public function reportMeterBroken(?string $note = null, ?int $userId = null): void
+    {
+        $this->forceFill([
+            'meter_broken_reported_at' => now(),
+            'meter_broken_note' => $note,
+        ])->save();
+
+        Audit::log('subscriber.meter_reported_broken', $this, ['note' => $note, 'by' => $userId]);
+    }
+
+    public function clearMeterReport(): void
+    {
+        $this->forceFill(['meter_broken_reported_at' => null, 'meter_broken_note' => null])->save();
+    }
+
+    /**
+     * The meter is gone for good: bill a fixed monthly amount instead. The released
+     * meter number and the reason stay in the audit trail.
+     */
+    public function convertToFlat(float $flatFee, string $reason, ?int $userId = null): void
+    {
+        if ($this->isFlat()) {
+            throw new \RuntimeException('This subscriber is already on a flat rate.');
+        }
+
+        $released = $this->meter_no;
+
+        $this->forceFill([
+            'type' => self::TYPE_FLAT,
+            'flat_fee' => round($flatFee, 2),
+            'meter_no' => null,
+            'amperage' => null,
+            'maintenance_fee' => 0,
+            'maintenance_mode' => self::MAINT_CUSTOM,
+            'meter_broken_reported_at' => null,
+            'meter_broken_note' => null,
+        ])->save();
+
+        Audit::log('subscriber.converted_to_flat', $this, [
+            'reason' => $reason,
+            'flat_fee' => round($flatFee, 2),
+            'released_meter' => $released,
+            'by' => $userId,
+        ]);
+    }
+
+    /**
+     * Put a meter back on the subscriber. The starting reading is recorded as a baseline
+     * (no charge) — without it the first cycle would bill the meter's whole value.
+     */
+    public function convertToMetered(
+        string $meterNo,
+        float $initialReading,
+        ?int $amperage = null,
+        ?float $maintenanceFee = null,
+        ?string $reason = null,
+        ?string $period = null,
+        ?int $userId = null,
+    ): Reading {
+        if ($this->isMetered()) {
+            throw new \RuntimeException('This subscriber already has a meter.');
+        }
+
+        $period ??= BillingService::currentPeriod();
+
+        $this->forceFill([
+            'type' => self::TYPE_METERED,
+            'flat_fee' => null,
+            'meter_no' => $meterNo ?: null,
+            'amperage' => $amperage,
+            'maintenance_fee' => $maintenanceFee ?? BillingService::defaultMaintenanceFee(),
+            'maintenance_mode' => $maintenanceFee === null ? self::MAINT_AUTO : self::MAINT_CUSTOM,
+            'meter_broken_reported_at' => null,
+            'meter_broken_note' => null,
+        ])->save();
+
+        $reading = BillingService::recordBaselineReading($this, $period, $initialReading, $userId);
+
+        Audit::log('subscriber.converted_to_metered', $this, [
+            'reason' => $reason,
+            'meter_no' => $meterNo,
+            'initial_reading' => round($initialReading, 2),
+            'period' => $period,
+            'by' => $userId,
+        ]);
+
+        return $reading;
     }
 }

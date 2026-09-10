@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\SubscriberResource\Pages;
 
+use App\Filament\Resources\ReadingResource;
 use App\Filament\Resources\SubscriberResource;
 use App\Models\Payment;
 use App\Models\Subscriber;
@@ -112,29 +113,27 @@ class ViewSubscriber extends ViewRecord
                 ->icon(Heroicon::ClipboardDocumentList)
                 ->color('info')
                 ->visible(fn (): bool => $record->isMetered() && $record->status === Subscriber::STATUS_ACTIVE)
+                ->modalHeading(fn (): string => __('a.record_reading_for', ['name' => $record->name]))
                 ->schema([
+                    Forms\Components\Hidden::make('subscriber_id')->default($record->id),
                     Forms\Components\TextInput::make('period')
                         ->label(__('t.period_ym'))
                         ->default(BillingService::currentPeriod())
                         ->regex(BillingService::PERIOD_REGEX)
-                        ->required(),
-                    Forms\Components\TextInput::make('current_reading')
-                        ->label(__('t.cur_meter_reading'))
-                        ->numeric()->minValue(0)->required(),
-                    Forms\Components\TextInput::make('note')->label(__('t.note'))->maxLength(200),
+                        ->required()
+                        ->live(),
+                    ...ReadingResource::modeFields(),
                 ])
                 ->action(function (array $data): void {
                     try {
-                        BillingService::enterMeteredReading(
-                            $this->getRecord(),
-                            $data['period'],
-                            (float) $data['current_reading'],
-                            auth()->id(),
-                            $data['note'] ?? null,
-                        );
-                        Notification::make()->title('Reading recorded & bill generated')->success()->send();
+                        $result = ReadingResource::record($this->getRecord(), $data, auth()->id());
+                        Notification::make()
+                            ->title(__('t.reading_ok'))
+                            ->body(ReadingResource::recordSummary($result['reading'], (float) $result['bill']->total, (float) $result['bill']->prev_debt))
+                            ->success()
+                            ->send();
                     } catch (\RuntimeException $e) {
-                        Notification::make()->title('Could not record reading')->body($e->getMessage())->danger()->send();
+                        Notification::make()->title(__('t.err_reading_failed'))->body($e->getMessage())->danger()->send();
                     }
                 }),
             Action::make('statement')
@@ -143,6 +142,7 @@ class ViewSubscriber extends ViewRecord
                 ->color('gray')
                 ->url(fn (): string => route('print.statement', ['subscriber' => $record->id, 'size' => 'a4']))
                 ->openUrlInNewTab(),
+            ...SubscriberResource::meterActions(),
             EditAction::make(),
             DeleteAction::make(),
         ];

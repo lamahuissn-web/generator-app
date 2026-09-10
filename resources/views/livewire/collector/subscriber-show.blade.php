@@ -113,6 +113,12 @@
                 <dl class="mt-3 space-y-1.5 text-sm">
                     @if ($currentBill->type === 'metered')
                         <div class="flex justify-between text-slate-600"><dt>{{ __('portal.consumption') }}</dt><dd class="font-semibold tabular-nums">{{ number_format((float) $currentBill->consumption, 1) }} kWh</dd></div>
+                    @if ($currentBill->reading?->is_estimated)
+                        <p class="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-800">{{ __('portal.reading_estimated_badge') }}</p>
+                    @endif
+                    @if ($currentBill->reading?->hasMeterSwap())
+                        <p class="rounded-lg bg-sky-50 px-2.5 py-1.5 text-[11px] font-bold text-sky-800">{{ __('t.meter_swap') }}: <span dir="ltr">{{ $currentBill->reading->meterSwapLabel() }}</span></p>
+                    @endif
                         @if ((float) $currentBill->usage_amount > 0)
                             <div class="flex justify-between text-slate-600"><dt>{{ __('portal.usage_kwh', ['price' => money($currentBill->kwh_price)]) }}</dt><dd class="font-semibold tabular-nums">{{ money($currentBill->usage_amount) }}</dd></div>
                         @endif
@@ -217,6 +223,12 @@
                     <div class="flex justify-between text-slate-600"><dt>{{ __('portal.prev_reading') }}</dt><dd class="font-semibold tabular-nums">{{ number_format((float) $currentBill->reading?->previous_reading, 0) }}</dd></div>
                     <div class="flex justify-between text-slate-600"><dt>{{ __('portal.cur_reading') }}</dt><dd class="font-semibold tabular-nums">{{ number_format((float) $currentBill->reading?->current_reading, 0) }}</dd></div>
                     <div class="flex justify-between text-slate-600"><dt>{{ __('portal.consumption') }}</dt><dd class="font-semibold tabular-nums">{{ number_format((float) $currentBill->consumption, 1) }} kWh</dd></div>
+                    @if ($currentBill->reading?->is_estimated)
+                        <p class="rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-800">{{ __('portal.reading_estimated_badge') }}</p>
+                    @endif
+                    @if ($currentBill->reading?->hasMeterSwap())
+                        <p class="rounded-lg bg-sky-50 px-2.5 py-1.5 text-[11px] font-bold text-sky-800">{{ __('t.meter_swap') }}: <span dir="ltr">{{ $currentBill->reading->meterSwapLabel() }}</span></p>
+                    @endif
                     <div class="border-t border-dashed border-slate-200 pt-2"></div>
                     <div class="flex justify-between font-bold text-slate-900"><dt>{{ __('portal.bill_total_incl') }}</dt><dd class="tabular-nums">{{ money($currentBill->total + $currentBill->prev_debt) }}</dd></div>
                 </dl>
@@ -236,6 +248,26 @@
                 </div>
             </section>
         @else
+            @if ($sub->hasBrokenMeterReport())
+                <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <p class="text-sm font-bold text-amber-900">{{ __('portal.broken_banner_title') }}</p>
+                            <p class="mt-0.5 text-xs text-amber-800">
+                                {{ __('portal.broken_banner_body', ['since' => $sub->meter_broken_reported_at?->diffForHumans()]) }}
+                            </p>
+                            @if ($sub->meter_broken_note)
+                                <p class="mt-1 text-xs text-amber-900">«{{ $sub->meter_broken_note }}»</p>
+                            @endif
+                        </div>
+                        <button wire:click="cancelBrokenReport"
+                                class="shrink-0 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-bold text-amber-800 transition hover:bg-amber-100">
+                            {{ __('portal.broken_cancel') }}
+                        </button>
+                    </div>
+                </div>
+            @endif
+
             <section class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h3 class="font-bold text-slate-900">{{ __('portal.enter_reading') }}</h3>
                 <p class="mt-0.5 text-sm text-slate-500">
@@ -274,6 +306,35 @@
                         </button>
                     @endif
                 @endif
+
+                @error('broken') <p class="mt-3 text-sm font-medium text-rose-600">{{ $message }}</p> @enderror
+
+                @unless ($sub->hasBrokenMeterReport())
+                    @if ($showBrokenReport)
+                        <div class="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-3">
+                            <p class="text-xs font-bold text-amber-900">{{ __('portal.broken_form_title') }}</p>
+                            <input type="text" wire:model="brokenNote" maxlength="200"
+                                   placeholder="{{ __('portal.broken_note_ph') }}"
+                                   class="mt-2 w-full rounded-xl border-0 bg-white px-3 py-2.5 text-sm ring-1 ring-amber-200 focus:ring-2 focus:ring-amber-400 focus:outline-none">
+                            <div class="mt-2 grid grid-cols-2 gap-2">
+                                <button wire:click="reportBrokenMeter"
+                                        class="rounded-xl bg-amber-600 py-2.5 text-sm font-bold text-white transition hover:bg-amber-700">
+                                    {{ __('portal.broken_send') }}
+                                </button>
+                                <button wire:click="toggleBrokenReport"
+                                        class="rounded-xl border border-slate-300 bg-white py-2.5 text-sm font-bold text-slate-600 transition hover:bg-slate-50">
+                                    {{ __('portal.broken_dismiss') }}
+                                </button>
+                            </div>
+                        </div>
+                    @else
+                        <button wire:click="toggleBrokenReport"
+                                class="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-amber-300 bg-white py-2.5 text-xs font-bold text-amber-700 transition hover:bg-amber-50">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"/></svg>
+                            {{ __('portal.broken_btn') }}
+                        </button>
+                    @endif
+                @endunless
             </section>
         @endif
     @endif
