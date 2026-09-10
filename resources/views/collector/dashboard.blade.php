@@ -31,6 +31,33 @@
         </div>
     </section>
 
+    {{-- Cash reconciliation for this collector --}}
+    <section class="mb-5 rounded-2xl border p-5 shadow-sm {{ $stats['in_hand'] > 0 ? 'border-amber-200 bg-gradient-to-br from-amber-50 to-white' : 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-white' }}">
+        <div class="flex items-start justify-between gap-3">
+            <div>
+                <p class="text-[11px] font-bold uppercase tracking-widest text-slate-500">{{ __('portal.in_hand') }}</p>
+                <p class="mt-1 text-3xl font-extrabold tabular-nums {{ $stats['in_hand'] > 0 ? 'text-amber-600' : 'text-emerald-600' }}">
+                    {{ money($stats['in_hand']) }}
+                </p>
+                <p class="mt-1 text-xs text-slate-500">
+                    {{ __('portal.in_hand_body', ['handed' => money($stats['handed_total'])]) }}
+                </p>
+            </div>
+            <span class="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-white text-xl shadow-sm">{{ $stats['in_hand'] > 0 ? '💰' : '✅' }}</span>
+        </div>
+
+        @if ($handovers->isNotEmpty())
+            <ul class="mt-4 space-y-1.5 border-t border-dashed border-slate-200 pt-3">
+                @foreach ($handovers as $handover)
+                    <li class="flex items-center justify-between text-xs">
+                        <span class="text-slate-500">{{ $handover->handover_date->format('Y-m-d') }}{{ $handover->note ? ' · '.$handover->note : '' }}</span>
+                        <span class="font-bold tabular-nums text-slate-700">{{ money($handover->amount) }}</span>
+                    </li>
+                @endforeach
+            </ul>
+        @endif
+    </section>
+
     {{-- Global search --}}
     <livewire:collector.global-search />
 

@@ -6,9 +6,9 @@ use App\Filament\Resources\SubscriberResource\Pages;
 use App\Filament\Resources\SubscriberResource\RelationManagers\BillsRelationManager;
 use App\Filament\Resources\SubscriberResource\RelationManagers\PaymentsRelationManager;
 use App\Filament\Resources\SubscriberResource\RelationManagers\ReadingsRelationManager;
-use App\Models\Route;
 use App\Models\Subscriber;
 use App\Services\BillingService;
+use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms;
@@ -76,7 +76,7 @@ class SubscriberResource extends Resource
                     Forms\Components\Select::make('maintenance_mode')
                         ->label(__('s.mode_label'))
                         ->options([
-                            Subscriber::MAINT_AUTO => __('s.mode_auto', ['fee' => money(\App\Services\BillingService::defaultMaintenanceFee())]),
+                            Subscriber::MAINT_AUTO => __('s.mode_auto', ['fee' => money(BillingService::defaultMaintenanceFee())]),
                             Subscriber::MAINT_CUSTOM => __('s.mode_custom'),
                             Subscriber::MAINT_EXEMPT => __('s.mode_exempt'),
                         ])
@@ -108,7 +108,7 @@ class SubscriberResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->defaultNumberLocale("en")
+            ->defaultNumberLocale('en')
             ->defaultSort('name')
             ->recordUrl(fn (Subscriber $record): string => static::getUrl('view', ['record' => $record]))
             ->columns([
@@ -158,7 +158,7 @@ class SubscriberResource extends Resource
                     ->falseLabel('Inactive only'),
             ])
             ->actions([
-                \Filament\Actions\Action::make('collect')
+                Action::make('collect')
                     ->label(__('a.collect'))
                     ->icon(Heroicon::Banknotes)
                     ->color('success')
@@ -185,6 +185,12 @@ class SubscriberResource extends Resource
                         }
                     }),
                 EditAction::make(),
+                Action::make('statement')
+                    ->label(__('col.statement'))
+                    ->icon(Heroicon::DocumentText)
+                    ->color('gray')
+                    ->url(fn (Subscriber $record): string => route('print.statement', ['subscriber' => $record->id, 'size' => 'a4']))
+                    ->openUrlInNewTab(),
                 DeleteAction::make()
                     ->requiresConfirmation()
                     ->modalDescription(fn (Subscriber $record): string => $record->bills()->exists()

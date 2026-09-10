@@ -30,6 +30,10 @@ Route::middleware(['auth', 'locale'])->prefix('print')->name('print.')->group(fu
     Route::get('/receipt/{payment}', [PrintController::class, 'receipt'])->name('receipt');
     Route::get('/receipt/{payment}/pdf', [PrintController::class, 'receiptPdf'])->name('receipt.pdf');
     Route::get('/receipts', [PrintController::class, 'receipts'])->name('receipts');
+
+    Route::get('/collection-report', [PrintController::class, 'collectionReport'])->name('collection-report');
+    Route::get('/collector-statement', [PrintController::class, 'collectorStatement'])->name('collector-statement');
+    Route::get('/statement/{subscriber}', [PrintController::class, 'statement'])->name('statement');
 });
 
 // ---- Collector mobile portal -------------------------------------------------

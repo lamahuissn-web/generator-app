@@ -15,7 +15,7 @@
         </td>
         <td style="width:45%">
             <div class="doc-title">{{ __('prt.receipt_title') }}</div>
-            <div class="doc-meta">{{ __('prt.receipt_no') }} <span class="ltr">#{{ $payment->id }}</span></div>
+            <div class="doc-meta">{{ __('prt.receipt_no') }} <span class="ltr">{{ $payment->number ?: '#'.$payment->id }}</span></div>
         </td>
     </tr>
 </table>

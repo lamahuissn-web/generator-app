@@ -8,7 +8,6 @@ use App\Models\Subscriber;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -28,9 +27,15 @@ class BillResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->defaultNumberLocale("en")
+            ->defaultNumberLocale('en')
             ->defaultSort('period', 'desc')
             ->columns([
+                Tables\Columns\TextColumn::make('number')->label(__('t.bill_no'))
+                    ->searchable()
+                    ->copyable()
+                    ->weight('bold')
+                    ->placeholder('—')
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('subscriber.name')->label(__('t.subscriber'))
                     ->label(__('t.subscriber'))
                     ->searchable()
@@ -46,6 +51,12 @@ class BillResource extends Resource
                 Tables\Columns\TextColumn::make('consumption')->label(__('t.kwh'))
                     ->label(__('t.kwh'))
                     ->numeric()
+                    ->toggleable(),
+                Tables\Columns\TextColumn::make('reading_span')->label(__('gen.col_reading_span'))
+                    ->state(fn (Bill $record): string => $record->reading
+                        ? number_format((float) $record->reading->previous_reading, 0).' → '.number_format((float) $record->reading->current_reading, 0)
+                        : '—')
+                    ->extraCellAttributes(['class' => 'gx-ltr'])
                     ->toggleable(),
                 Tables\Columns\TextColumn::make('usage_amount')->label(__('t.usage'))
                     ->label(__('t.usage'))

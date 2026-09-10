@@ -8,7 +8,6 @@ use App\Models\User;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\Collection;
@@ -27,9 +26,15 @@ class PaymentResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->defaultNumberLocale("en")
+            ->defaultNumberLocale('en')
             ->defaultSort('created_at', 'desc')
             ->columns([
+                Tables\Columns\TextColumn::make('number')->label(__('prt.receipt_no'))
+                    ->searchable()
+                    ->copyable()
+                    ->weight('bold')
+                    ->placeholder('—')
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('subscriber.name')->label(__('t.subscriber'))
                     ->label(__('t.subscriber'))
                     ->searchable()
@@ -57,7 +62,7 @@ class PaymentResource extends Resource
                 Tables\Filters\SelectFilter::make('period')
                     ->label(__('t.payment_month'))
                     ->options(fn (): array => Payment::query()
-                        ->selectRaw("substr(created_at, 1, 7) as p")
+                        ->selectRaw('substr(created_at, 1, 7) as p')
                         ->distinct()->orderByDesc('p')->pluck('p', 'p')->all()),
             ])
             ->headerActions([

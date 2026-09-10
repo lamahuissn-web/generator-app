@@ -5,7 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Bill;
 use App\Models\Payment;
 use App\Models\Route;
+use App\Models\Subscriber;
+use App\Models\User;
+use App\Services\CollectionService;
 use App\Services\PdfService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
@@ -120,6 +124,134 @@ class PrintController extends Controller
             'label' => $this->batchLabel($request),
             'forPdf' => false,
         ]);
+    }
+
+    /* ---------------------------------------------------- collection report */
+
+    /** Cash-collection report for a date range (+ optional route / collector). */
+    public function collectionReport(Request $request)
+    {
+        $this->authorizeAdmin($request);
+
+        $format = (string) $request->input('format', 'html');
+        $size = PdfService::normalizeSize((string) $request->input('size', 'a4'), ['a4', 'a5']);
+
+        $from = Carbon::parse($request->input('from', now()->startOfMonth()->toDateString()))->startOfDay();
+        $to = Carbon::parse($request->input('to', now()->toDateString()))->endOfDay();
+        if ($from->gt($to)) {
+            [$from, $to] = [$to->copy()->startOfDay(), $from->copy()->endOfDay()];
+        }
+
+        $routeId = $request->filled('route_id') ? (int) $request->input('route_id') : null;
+        $collectorId = $request->filled('collector_id') ? (int) $request->input('collector_id') : null;
+
+        $routeName = $routeId ? (string) Route::whereKey($routeId)->value('name') : null;
+        $collectorName = $collectorId ? (string) User::whereKey($collectorId)->value('name') : null;
+
+        $label = implode(' · ', array_filter([
+            $from->toDateString().' → '.$to->toDateString(),
+            $routeName,
+            $collectorName,
+        ]));
+
+        $data = [
+            'totals' => CollectionService::totals($from, $to, $collectorId, $routeId),
+            'byCollector' => CollectionService::byCollector($from, $to)
+                ->when($collectorId, fn ($rows, $id) => $rows->where('collector_id', $id)->values())
+                ->all(),
+            'byRoute' => CollectionService::byRoute($from, $to, $collectorId)->all(),
+            'byDay' => CollectionService::byDay($from, $to, $collectorId, $routeId)->all(),
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+            'routeName' => $routeName,
+            'collectorName' => $collectorName,
+            'label' => $label,
+        ];
+
+        if ($format === 'pdf') {
+            return $this->pdfResponse(
+                PdfService::render('print.collection-report', $data, $size),
+                'collections-'.$from->toDateString().'_'.$to->toDateString().'-'.$size.'.pdf'
+            );
+        }
+
+        return view('print.collection-report', [...$data, 'size' => $size, 'forPdf' => false]);
+    }
+
+    /* -------------------------------------------------- collector statement */
+
+    /** Cash ledger of one collector: what they collected and handed over. */
+    public function collectorStatement(Request $request)
+    {
+        $this->authorizeAdmin($request);
+
+        $collector = User::whereKey($request->input('collector_id'))->first();
+        abort_if($collector === null || ! $collector->isCollector(), 404);
+
+        $size = PdfService::normalizeSize((string) $request->input('size', 'a4'), ['a4', 'a5']);
+        $allTime = $request->boolean('all_time');
+        $from = $allTime || ! $request->filled('from')
+            ? null
+            : Carbon::parse((string) $request->input('from'))->startOfDay();
+        $to = $allTime || ! $request->filled('to')
+            ? null
+            : Carbon::parse((string) $request->input('to'))->endOfDay();
+
+        $data = [
+            'collector' => $collector,
+            'ledger' => CollectionService::collectorLedger($collector, $from),
+            'inHand' => CollectionService::inHand($collector->id),
+            'allTime' => $allTime,
+            'from' => $from?->toDateString(),
+            'to' => $to?->toDateString(),
+            'periodLabel' => $allTime || ! $from
+                ? __('col.st_period_all')
+                : $from->toDateString().' — '.($to ?? $from)->toDateString(),
+        ];
+
+        if ((string) $request->input('format', 'html') === 'pdf') {
+            return $this->pdfResponse(
+                PdfService::render('print.collector-statement', [...$data, 'size' => $size], $size),
+                'collector-'.$collector->id.'-'.$size.'.pdf'
+            );
+        }
+
+        return view('print.collector-statement', [...$data, 'size' => $size, 'forPdf' => false]);
+    }
+
+    /* ---------------------------------------------------- account statement */
+
+    public function statement(Request $request, Subscriber $subscriber)
+    {
+        $this->authorizeCollector($request);
+        $size = PdfService::normalizeSize((string) $request->input('size', 'a4'), ['a4', 'a5']);
+        $statement = $this->statementData($request, $subscriber);
+
+        if ((string) $request->input('format', 'html') === 'pdf') {
+            return $this->pdfResponse(
+                PdfService::render('print.statement', [...$statement, 'size' => $size], $size),
+                'statement-'.$subscriber->id.'-'.$size.'.pdf'
+            );
+        }
+
+        return view('print.statement', [...$statement, 'size' => $size, 'forPdf' => false]);
+    }
+
+    /** @return array<string,mixed> */
+    private function statementData(Request $request, Subscriber $subscriber): array
+    {
+        $from = $request->filled('from')
+            ? Carbon::parse((string) $request->input('from'))->startOfDay()
+            : null;
+
+        return [
+            'subscriber' => $subscriber,
+            'statement' => CollectionService::statement($subscriber, $from),
+            'from' => $from?->toDateString(),
+            'label' => $from
+                ? __('col.st_period_from', ['from' => $from->toDateString()])
+                : __('col.st_period_all'),
+        ];
     }
 
     /* -------------------------------------------------------------- helpers */

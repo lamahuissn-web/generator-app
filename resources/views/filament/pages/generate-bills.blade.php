@@ -1,6 +1,8 @@
 @php
     $run = $this->run();
     $s = $run['summary'];
+    $tariff = $this->tariff();
+    $progress = $this->progress();
     $toCreate = $s[\App\Services\BillingService::RUN_CREATE];
     $rows = $run['rows'];
     $invoicedTotal = array_sum(array_map(
@@ -25,7 +27,42 @@
         <span class="gx-chip">{{ __('gen.chip_exists', ['count' => $s[\App\Services\BillingService::RUN_EXISTS]]) }}</span>
         <span class="gx-chip gx-chip-warn">{{ __('gen.chip_skipped', ['count' => $s[\App\Services\BillingService::RUN_NO_READING] + $s[\App\Services\BillingService::RUN_INACTIVE] + $s[\App\Services\BillingService::RUN_ZERO]]) }}</span>
         <span class="gx-chip gx-chip-dark">{{ __('gen.chip_total', ['amount' => money($invoicedTotal)]) }}</span>
+        <span class="gx-chip {{ $tariff['from_tariff'] ? 'gx-chip-warn' : '' }}">
+            {{ __('gen.chip_tariff', ['price' => money($tariff['price']), 'source' => $tariff['from_tariff'] ? __('gen.tariff_cycle') : __('gen.tariff_global')]) }}
+        </span>
     </p>
+
+    {{-- Metering coverage of the cycle: the "all readings in?" gate --}}
+    <div class="gx-cover">
+        <div class="gx-cover-head">
+            <span class="gx-cover-title">{{ __('gen.coverage_title') }}</span>
+            <span class="gx-chip {{ $progress['pending'] > 0 ? 'gx-chip-warn' : 'gx-chip-ok' }}">
+                {{ $progress['pending'] > 0
+                    ? __('gen.coverage_pending', ['count' => $progress['pending']])
+                    : __('gen.coverage_done') }}
+            </span>
+            <span class="gx-cell-muted">{{ __('gen.coverage_counts', ['recorded' => $progress['recorded'], 'total' => $progress['total']]) }}</span>
+        </div>
+
+        @if ($progress['routes'])
+            <div class="gx-cover-routes">
+                @foreach ($progress['routes'] as $route)
+                    @php($pct = $route['total'] > 0 ? round($route['recorded'] / $route['total'] * 100) : 0)
+                    <div class="gx-cover-route">
+                        <span class="gx-cover-name">{{ $route['name'] }}</span>
+                        <span class="gx-cover-bar">
+                            <span class="gx-cover-fill {{ $route['pending'] > 0 ? 'gx-cover-fill-warn' : '' }}" style="width: {{ $pct }}%"></span>
+                        </span>
+                        <span class="gx-cover-nums">{{ $route['recorded'] }}/{{ $route['total'] }}</span>
+                    </div>
+                @endforeach
+            </div>
+        @endif
+
+        @if ($progress['pending'] > 0)
+            <p class="gx-cover-note">{{ __('gen.coverage_note') }}</p>
+        @endif
+    </div>
 
     @if ($lastRun && $lastRun['created'] > 0)
         <div class="gx-panel-ok">
@@ -48,7 +85,7 @@
                     <th>{{ __('gen.col_subscriber') }}</th>
                     <th>{{ __('gen.col_route') }}</th>
                     <th>{{ __('gen.col_type') }}</th>
-                    <th class="gx-num">{{ __('gen.col_reading') }}</th>
+                    <th class="gx-num">{{ __('gen.col_reading_span') }}</th>
                     <th class="gx-num">{{ __('gen.col_consumption') }}</th>
                     <th class="gx-num">{{ __('gen.col_usage') }}</th>
                     <th class="gx-num">{{ __('gen.col_maintenance') }}</th>
@@ -69,7 +106,15 @@
                         </td>
                         <td class="gx-cell-muted">{{ $r['route'] ?? '—' }}</td>
                         <td class="gx-cell-muted">{{ $r['type'] === 'metered' ? __('gen.type_metered') : __('gen.type_flat') }}</td>
-                        <td class="gx-num gx-cell-muted">{{ $r['reading'] !== null ? number_format((float) $r['reading'], 0) : '—' }}</td>
+                        <td class="gx-num gx-cell-muted">
+                            @if ($r['reading_prev'] !== null && $r['reading'] !== null)
+                                <span class="gx-ltr">{{ number_format((float) $r['reading_prev'], 0) }} → {{ number_format((float) $r['reading'], 0) }}</span>
+                            @elseif ($r['reading'] !== null)
+                                <span class="gx-ltr">{{ number_format((float) $r['reading'], 0) }}</span>
+                            @else
+                                —
+                            @endif
+                        </td>
                         <td class="gx-num gx-cell-muted">{{ $r['consumption'] !== null ? number_format((float) $r['consumption'], 1) : '—' }}</td>
                         <td class="gx-num">{{ money($r['usage']) }}</td>
                         <td class="gx-num">{{ money($r['maintenance']) }}</td>

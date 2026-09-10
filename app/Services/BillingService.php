@@ -8,6 +8,8 @@ use App\Models\PaymentAllocation;
 use App\Models\Reading;
 use App\Models\Setting;
 use App\Models\Subscriber;
+use App\Models\Tariff;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
 class BillingService
@@ -30,9 +32,87 @@ class BillingService
         return now()->format('Y-m');
     }
 
-    public static function kwhPrice(): float
+    /**
+     * kWh price for a period. The ministry tariff changes every cycle, so a
+     * tariff row for the period wins; otherwise the global setting applies.
+     */
+    public static function kwhPrice(?string $period = null): float
     {
+        if ($period !== null) {
+            $tariff = Tariff::priceFor($period);
+            if ($tariff !== null) {
+                return $tariff;
+            }
+        }
+
         return (float) Setting::get('kwh_price', 0.25);
+    }
+
+    /** Where the price for a period comes from — used by the UI. */
+    public static function priceSource(string $period): string
+    {
+        return Tariff::priceFor($period) === null ? 'setting' : 'tariff';
+    }
+
+    /** Human-readable bill number: INV-2026-09-0012 (period + subscriber). */
+    public static function billNumber(string $period, int $subscriberId): string
+    {
+        return 'INV-'.$period.'-'.str_pad((string) $subscriberId, 4, '0', STR_PAD_LEFT);
+    }
+
+    /** Human-readable receipt number: REC-2026-09-0007 (month + payment id). */
+    public static function receiptNumber(CarbonInterface $date, int $paymentId): string
+    {
+        return 'REC-'.$date->format('Y-m').'-'.str_pad((string) $paymentId, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Metering coverage of a cycle: how many metered subscribers have a reading
+     * for $period, overall and per route. Drives the "readings complete"
+     * gate on the billing-run page.
+     *
+     * @return array{total: int, recorded: int, pending: int, routes: array<int, array{id: null|int, name: string, total: int, recorded: int, pending: int}>}
+     */
+    public static function readingProgress(string $period, ?int $routeId = null): array
+    {
+        $subscribers = Subscriber::query()
+            ->metered()
+            ->active()
+            ->with(['route:id,name'])
+            ->when($routeId, fn ($q) => $q->where('route_id', $routeId))
+            ->get();
+
+        $recorded = Reading::query()
+            ->where('period', $period)
+            ->whereIn('subscriber_id', $subscribers->pluck('id'))
+            ->pluck('subscriber_id')
+            ->flip();
+
+        $routes = [];
+        foreach ($subscribers as $subscriber) {
+            $key = $subscriber->route_id ?? 0;
+            $routes[$key] ??= [
+                'id' => $subscriber->route_id,
+                'name' => $subscriber->route?->name ?? __('col.no_route'),
+                'total' => 0,
+                'recorded' => 0,
+                'pending' => 0,
+            ];
+            $routes[$key]['total']++;
+            $recorded->has($subscriber->id) ? $routes[$key]['recorded']++ : $routes[$key]['pending']++;
+        }
+
+        usort($routes, fn ($a, $b) => [$b['pending'], $a['name']] <=> [$a['pending'], $b['name']]);
+
+        $total = $subscribers->count();
+        $recordedCount = $subscribers->filter(fn ($subscriber) => $recorded->has($subscriber->id))->count();
+
+        return [
+            'total' => $total,
+            'recorded' => $recordedCount,
+            'pending' => $total - $recordedCount,
+            'routes' => array_values($routes),
+        ];
     }
 
     /** Global default maintenance fee, or 0 when unset. */
@@ -92,7 +172,7 @@ class BillingService
         }
 
         $consumption = round($currentReading - $prevValue, 2);
-        $price = self::kwhPrice();
+        $price = self::kwhPrice($period);
         $usage = round($consumption * $price, 2);
         $maintenance = $subscriber->effectiveMaintenanceFee();
         $prevDebt = self::outstandingBefore($subscriber, $period);
@@ -113,6 +193,7 @@ class BillingService
             ]);
 
             $bill = Bill::create([
+                'number' => self::billNumber($period, $subscriber->id),
                 'subscriber_id' => $subscriber->id,
                 'period' => $period,
                 'type' => Subscriber::TYPE_METERED,
@@ -224,6 +305,7 @@ class BillingService
             'meter_no' => $subscriber->meter_no,
             'prev_debt' => $prevDebt,
             'reading' => $reading?->current_reading,
+            'reading_prev' => $reading?->previous_reading,
             'consumption' => null,
             'usage' => 0.0,
             'maintenance' => 0.0,
@@ -234,8 +316,12 @@ class BillingService
         ];
 
         if ($existing) {
+            $existing->loadMissing('reading');
+
             return [...$row, ...[
                 'state' => self::RUN_EXISTS,
+                'reading' => $existing->reading?->current_reading ?? $existing->consumption,
+                'reading_prev' => $existing->reading?->previous_reading,
                 'consumption' => $existing->consumption,
                 'usage' => (float) $existing->usage_amount,
                 'maintenance' => (float) $existing->maintenance_fee,
@@ -248,7 +334,7 @@ class BillingService
 
         if ($subscriber->isMetered()) {
             $consumption = $reading ? (float) $reading->consumption : null;
-            $usage = $consumption === null ? 0.0 : round($consumption * self::kwhPrice(), 2);
+            $usage = $consumption === null ? 0.0 : round($consumption * self::kwhPrice($period), 2);
             $maintenance = $subscriber->effectiveMaintenanceFee();
         } else {
             $consumption = null;
@@ -280,12 +366,13 @@ class BillingService
             $isMetered = $subscriber->isMetered();
 
             $bill = Bill::create([
+                'number' => self::billNumber($period, $subscriber->id),
                 'subscriber_id' => $subscriber->id,
                 'period' => $period,
                 'type' => $subscriber->type,
                 'reading_id' => $subscriber->readings->first()?->id,
                 'consumption' => $isMetered ? $row['consumption'] : null,
-                'kwh_price' => $isMetered ? self::kwhPrice() : null,
+                'kwh_price' => $isMetered ? self::kwhPrice($period) : null,
                 'usage_amount' => $row['usage'],
                 'maintenance_fee' => $row['maintenance'],
                 'flat_amount' => $row['flat'],
@@ -324,6 +411,7 @@ class BillingService
 
         return DB::transaction(function () use ($subscriber, $period, $flatFee, $prevDebt) {
             return Bill::create([
+                'number' => self::billNumber($period, $subscriber->id),
                 'subscriber_id' => $subscriber->id,
                 'period' => $period,
                 'type' => Subscriber::TYPE_FLAT,
@@ -380,6 +468,11 @@ class BillingService
                 'method' => 'cash',
                 'note' => $note,
             ]);
+
+            // Receipt number mirrors the invoice series (REC-2026-09-0007).
+            $payment->forceFill([
+                'number' => self::receiptNumber($payment->created_at ?? now(), $payment->id),
+            ])->save();
 
             $remainingToAllocate = $applied;
             foreach ($subscriber->unpaidBills() as $unpaidBill) {

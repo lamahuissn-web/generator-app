@@ -84,6 +84,11 @@
     /* LTR island inside RTL text: mPDF ignores `isolate`, so force the run
        character-by-character or neutrals like "#" and "−" flip to the far side. */
     .ltr { direction: ltr; unicode-bidi: bidi-override; display: inline-block; }
+    /* A whole LTR line: mPDF ignores direction/unicode-bidi on INLINE elements, so a
+       digits+neutral-arrow run inside RTL text gets reordered and the arrow mirrored
+       ("131 → 150" printed as "150 ← 131"). A BLOCK element with direction:ltr plus
+       LRM marks around the run renders it in true left-to-right order. */
+    .ltr-line { direction: ltr; unicode-bidi: embed; text-align: right; }
     .page-break { page-break-after: always; }
 
     /* ---- screen-only toolbar ---- */

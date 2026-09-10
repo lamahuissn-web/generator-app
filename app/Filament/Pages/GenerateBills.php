@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Models\Route;
+use App\Models\Tariff;
 use App\Services\BillingService;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -115,6 +116,28 @@ class GenerateBills extends Page implements HasSchemas
         return BillingService::periodRun($this->period(), $this->routeId());
     }
 
+    /** kWh price used for this period + where it comes from. */
+    public function tariff(): array
+    {
+        $period = $this->period();
+
+        return [
+            'price' => BillingService::kwhPrice($period),
+            'from_tariff' => BillingService::priceSource($period) === 'tariff',
+            'row' => Tariff::forPeriod($period),
+        ];
+    }
+
+    /**
+     * Metering coverage of the cycle — the "all readings in?" gate.
+     *
+     * @return array{total: int, recorded: int, pending: int, routes: array<int, array<string, mixed>>}
+     */
+    public function progress(): array
+    {
+        return BillingService::readingProgress($this->period(), $this->routeId());
+    }
+
     public function generate(): void
     {
         $result = BillingService::periodRun($this->period(), $this->routeId(), true, auth()->id());
@@ -175,10 +198,19 @@ class GenerateBills extends Page implements HasSchemas
                 ->color('warning')
                 ->requiresConfirmation()
                 ->modalHeading(__('gen.confirm_heading'))
-                ->modalDescription(__('gen.confirm_body', [
-                    'count' => collect($this->run()['rows'])->where('state', BillingService::RUN_CREATE)->count(),
-                    'period' => $this->monthLabel($this->period()),
-                ]))
+                ->modalDescription(function (): string {
+                    $body = __('gen.confirm_body', [
+                        'count' => collect($this->run()['rows'])->where('state', BillingService::RUN_CREATE)->count(),
+                        'period' => $this->monthLabel($this->period()),
+                    ]);
+
+                    $pending = $this->progress()['pending'];
+                    if ($pending > 0) {
+                        $body .= ' '.__('gen.pending_warning', ['count' => $pending]);
+                    }
+
+                    return $body;
+                })
                 ->modalSubmitActionLabel(__('gen.run_btn'))
                 ->action('generate'),
             Action::make('print')

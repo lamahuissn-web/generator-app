@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Collector;
 
 use App\Http\Controllers\Controller;
+use App\Models\CashHandover;
 use App\Models\Payment;
 use App\Models\Route;
+use App\Services\CollectionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -36,8 +38,19 @@ class DashboardController extends Controller
             'today_count' => (clone $today)->count(),
             'month_total' => (float) (clone $month)->sum('amount'),
             'month_count' => (clone $month)->count(),
+            // Cash still in the collector's pocket: everything collected ever,
+            // minus everything already handed to the operator.
+            'in_hand' => CollectionService::inHand($user->id),
+            'handed_total' => CollectionService::handedOverAllTime($user->id),
         ];
 
-        return view('collector.dashboard', compact('routes', 'owedByRoute', 'stats'));
+        $handovers = CashHandover::query()
+            ->where('collector_id', $user->id)
+            ->latest('handover_date')
+            ->latest('id')
+            ->limit(3)
+            ->get();
+
+        return view('collector.dashboard', compact('routes', 'owedByRoute', 'stats', 'handovers'));
     }
 }

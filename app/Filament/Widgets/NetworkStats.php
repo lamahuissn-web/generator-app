@@ -5,6 +5,7 @@ namespace App\Filament\Widgets;
 use App\Models\Bill;
 use App\Models\Payment;
 use App\Models\Subscriber;
+use App\Services\BillingService;
 use Filament\Widgets\StatsOverviewWidget as BaseWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
 
@@ -34,9 +35,26 @@ class NetworkStats extends BaseWidget
 
         $kwh = (float) Bill::query()->where('period', $period)->sum('consumption');
 
+        // Previous cycle, for the month-over-month comparison (like PG Unite's "vs Last Cycle").
+        $previous = now()->subMonthNoOverflow();
+        $prevPeriod = $previous->format('Y-m');
+        $prevInvoiced = (float) Bill::query()->where('period', $prevPeriod)->sum('total');
+        $prevCollected = (float) Payment::query()
+            ->whereBetween('created_at', [$previous->copy()->startOfMonth(), $previous->copy()->endOfMonth()])
+            ->sum('amount');
+        $prevRate = $prevInvoiced > 0 ? round($prevCollected / $prevInvoiced * 100, 1) : 0.0;
+        $invoicedDelta = $prevInvoiced > 0 ? round(($invoiced - $prevInvoiced) / $prevInvoiced * 100, 1) : null;
+        $rateDelta = round($rate - $prevRate, 1);
+
+        $tariff = BillingService::kwhPrice($period);
+        $tariffSource = BillingService::priceSource($period);
+
         return [
             Stat::make('Invoiced '.period_label($period), money($invoiced))
-                ->description('Total billed this period')
+                ->description($invoicedDelta === null
+                    ? 'Total billed this period'
+                    : 'vs previous cycle: '.($invoicedDelta >= 0 ? '+' : '').$invoicedDelta.'%')
+                ->descriptionIcon($invoicedDelta !== null && $invoicedDelta < 0 ? 'heroicon-m-arrow-trending-down' : 'heroicon-m-arrow-trending-up')
                 ->icon('heroicon-o-document-text')
                 ->color('info'),
             Stat::make('Collected this month', money($collected))
@@ -44,7 +62,7 @@ class NetworkStats extends BaseWidget
                 ->icon('heroicon-o-banknotes')
                 ->color('success'),
             Stat::make('Collection rate', $rate.'%')
-                ->description('Collected ÷ invoiced, this period')
+                ->description('Previous cycle: '.$prevRate.'% ('.($rateDelta >= 0 ? '+' : '').$rateDelta.')')
                 ->icon('heroicon-o-arrow-trending-up')
                 ->color($rate >= 80 ? 'success' : ($rate >= 50 ? 'warning' : 'danger')),
             Stat::make('Outstanding debt', money($outstanding))
@@ -59,6 +77,12 @@ class NetworkStats extends BaseWidget
                 ->description('Network total for '.period_label($period))
                 ->icon('heroicon-o-bolt')
                 ->color('gray'),
+            Stat::make('kWh price '.period_label($period), money($tariff))
+                ->description($tariffSource === 'tariff'
+                    ? 'Ministry tariff for this cycle'
+                    : 'Global price (no tariff set for this cycle)')
+                ->icon('heroicon-o-currency-dollar')
+                ->color($tariffSource === 'tariff' ? 'warning' : 'gray'),
         ];
     }
 }

@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Bill extends Model
 {
     protected $fillable = [
-        'subscriber_id', 'period', 'type', 'reading_id', 'consumption', 'kwh_price',
+        'number', 'subscriber_id', 'period', 'type', 'reading_id', 'consumption', 'kwh_price',
         'usage_amount', 'maintenance_fee', 'flat_amount', 'prev_debt', 'total', 'paid_amount',
     ];
 

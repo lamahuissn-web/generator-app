@@ -10,38 +10,42 @@ use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Forms;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Schema;
+use Filament\Support\Enums\TextSize;
 use Filament\Support\Icons\Heroicon;
 
 class ViewSubscriber extends ViewRecord
 {
     protected static string $resource = SubscriberResource::class;
 
-    protected static string | \BackedEnum | null $navigationIcon = Heroicon::Eye;
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::Eye;
 
-    public function infolist(\Filament\Schemas\Schema $schema): \Filament\Schemas\Schema
+    public function infolist(Schema $schema): Schema
     {
         return $schema->components([
-            \Filament\Schemas\Components\Section::make()->columns(4)->components([
-                \Filament\Infolists\Components\TextEntry::make('outstanding')
+            Section::make()->columns(4)->components([
+                TextEntry::make('outstanding')
                     ->label(__('t.outstanding_bal'))
                     ->state(fn (Subscriber $r): string => money($r->outstanding()))
                     ->color(fn (Subscriber $r): string => $r->outstanding() > 0 ? 'danger' : 'success')
-                    ->size(\Filament\Support\Enums\TextSize::Large),
-                \Filament\Infolists\Components\TextEntry::make('status')
+                    ->size(TextSize::Large),
+                TextEntry::make('status')
                     ->badge()
                     ->formatStateUsing(fn (string $state): string => ucfirst($state))
                     ->color(fn (string $state): string => $state === 'active' ? 'success' : 'gray'),
-                \Filament\Infolists\Components\TextEntry::make('type')
+                TextEntry::make('type')
                     ->formatStateUsing(fn (string $state): string => $state === Subscriber::TYPE_METERED ? 'Metered' : 'Flat rate')
                     ->badge()
                     ->color(fn (string $state): string => $state === 'Metered' ? 'info' : 'violet'),
-                \Filament\Infolists\Components\TextEntry::make('route.name')->label(__('t.route'))->placeholder('—'),
-                \Filament\Infolists\Components\TextEntry::make('meter_no')->label(__('t.meter'))->placeholder('—'),
-                \Filament\Infolists\Components\TextEntry::make('amperage')->label(__('t.amperage'))->formatStateUsing(fn (?int $state): string => $state ? $state.'A' : '—'),
-                \Filament\Infolists\Components\TextEntry::make('phone')->copyable()->icon(Heroicon::Phone),
-                \Filament\Infolists\Components\TextEntry::make('address')->placeholder('—')->columnSpan(2),
+                TextEntry::make('route.name')->label(__('t.route'))->placeholder('—'),
+                TextEntry::make('meter_no')->label(__('t.meter'))->placeholder('—'),
+                TextEntry::make('amperage')->label(__('t.amperage'))->formatStateUsing(fn (?int $state): string => $state ? $state.'A' : '—'),
+                TextEntry::make('phone')->copyable()->icon(Heroicon::Phone),
+                TextEntry::make('address')->placeholder('—')->columnSpan(2),
             ]),
         ]);
     }
@@ -125,6 +129,12 @@ class ViewSubscriber extends ViewRecord
                         Notification::make()->title('Could not record reading')->body($e->getMessage())->danger()->send();
                     }
                 }),
+            Action::make('statement')
+                ->label(__('col.statement'))
+                ->icon(Heroicon::DocumentText)
+                ->color('gray')
+                ->url(fn (): string => route('print.statement', ['subscriber' => $record->id, 'size' => 'a4']))
+                ->openUrlInNewTab(),
             EditAction::make(),
             DeleteAction::make(),
         ];

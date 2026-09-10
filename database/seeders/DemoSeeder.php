@@ -2,12 +2,18 @@
 
 namespace Database\Seeders;
 
+use App\Models\Bill;
+use App\Models\CashHandover;
+use App\Models\Expense;
+use App\Models\Reading;
 use App\Models\Route;
 use App\Models\Setting;
 use App\Models\Subscriber;
+use App\Models\Tariff;
 use App\Models\User;
 use App\Services\BillingService;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
@@ -65,6 +71,21 @@ class DemoSeeder extends Seeder
         ]);
 
         $this->admin = $admin;
+
+        // Ministry tariff per cycle: past cycles match the demo bills, and the
+        // upcoming cycle carries a new price, exactly how MoEW updates it.
+        foreach ([
+            ['2026-08', 0.25, 'تسعيرة وزارة الطاقة — آب'],
+            ['2026-09', 0.25, 'تسعيرة وزارة الطاقة — أيلول'],
+            ['2026-10', 0.54, 'تسعيرة وزارة الطاقة — تشرين الأول (جديدة)'],
+        ] as [$period, $price, $note]) {
+            Tariff::create([
+                'period' => $period,
+                'kwh_price' => $price,
+                'note' => $note,
+                'created_by' => $admin->id,
+            ]);
+        }
     }
 
     private ?User $admin = null;
@@ -110,7 +131,7 @@ class DemoSeeder extends Seeder
 
             // Baseline "opening" reading so August bills only cover real usage.
             if (isset($row['open'])) {
-                $opening = \App\Models\Reading::create([
+                $opening = Reading::create([
                     'subscriber_id' => $sub->id,
                     'period' => $row['open_period'] ?? '2026-07',
                     'current_reading' => (float) $row['open'],
@@ -168,6 +189,33 @@ class DemoSeeder extends Seeder
         }
 
         $this->seedExpenses();
+        $this->seedHandovers();
+    }
+
+    /** Cash the collectors handed to the operator (so the report shows in-hand balances). */
+    private function seedHandovers(): void
+    {
+        $collectors = User::where('role', User::ROLE_COLLECTOR)->orderBy('id')->get();
+        $rows = [
+            // [collector index, amount, date, note]
+            [0, 60, '2026-08-31', 'August settlement'],
+            [1, 25, '2026-08-31', 'August settlement'],
+            [0, 40, '2026-09-08', 'Partial settlement'],
+        ];
+
+        foreach ($rows as [$idx, $amount, $date, $note]) {
+            $handover = CashHandover::create([
+                'collector_id' => $collectors[$idx]->id,
+                'amount' => $amount,
+                'handover_date' => $date,
+                'note' => $note,
+                'recorded_by' => $this->admin->id,
+            ]);
+            DB::table('cash_handovers')->where('id', $handover->id)->update([
+                'created_at' => Carbon::parse($date.' 18:30'),
+                'updated_at' => Carbon::parse($date.' 18:30'),
+            ]);
+        }
     }
 
     private function seedExpenses(): void
@@ -187,7 +235,7 @@ class DemoSeeder extends Seeder
         ];
 
         foreach ($rows as [$category, $amount, $qty, $date, $description]) {
-            \App\Models\Expense::create([
+            Expense::create([
                 'category' => $category,
                 'amount' => $amount,
                 'quantity' => $qty,
@@ -198,7 +246,7 @@ class DemoSeeder extends Seeder
         }
     }
 
-    /** @return array{0: \App\Models\Reading, 1: \App\Models\Bill} */
+    /** @return array{0: Reading, 1: Bill} */
     private function reading(Subscriber $sub, string $period, float $current, int $collectorId, Carbon $date): array
     {
         $result = BillingService::enterMeteredReading($sub, $period, $current, $collectorId, 'Meter read on site');
@@ -216,7 +264,7 @@ class DemoSeeder extends Seeder
         }
     }
 
-    /** @param  \Illuminate\Database\Eloquent\Model[]  $models */
+    /** @param  Model[]  $models */
     private function touchDates(array $models, Carbon $date): void
     {
         foreach ($models as $m) {

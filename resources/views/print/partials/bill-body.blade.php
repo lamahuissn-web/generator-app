@@ -21,7 +21,7 @@
         <td style="width:42%">
             <div class="doc-title">{{ __('prt.bill_title') }}</div>
             <div class="doc-meta">{{ $periodLabel }}</div>
-            <div class="doc-meta">{{ __('prt.bill_no') }} <span class="ltr">#{{ $bill->id }}</span></div>
+            <div class="doc-meta">{{ __('prt.bill_no') }} <span class="ltr">{{ $bill->number ?: '#'.$bill->id }}</span></div>
         </td>
     </tr>
 </table>
@@ -68,7 +68,15 @@
     <tbody>
         @if ($bill->type === \App\Models\Subscriber::TYPE_METERED)
             <tr>
-                <td>{{ __('prt.usage_short') }} <span class="ltr">({{ number_format((float) $bill->consumption, 1) }} kWh × {{ money($bill->kwh_price ?? \App\Services\BillingService::kwhPrice()) }})</span></td>
+                <td>
+                    {{ __('prt.usage_short') }}
+                    <span class="ltr">({{ number_format((float) $bill->consumption, 1) }} kWh × {{ money($bill->kwh_price ?? \App\Services\BillingService::kwhPrice($bill->period)) }})</span>
+                    @if ($bill->reading)
+                        {{-- LRM-wrapped LTR block: inside RTL text bidi reorders the two numbers
+                             and mirrors the arrow, so the span must live in its own LTR line. --}}
+                        <div class="muted ltr-line">&#8206;{{ number_format((float) $bill->reading->previous_reading, 0) }} → {{ number_format((float) $bill->reading->current_reading, 0) }}&#8206;</div>
+                    @endif
+                </td>
                 <td class="num">{{ number_format((float) $bill->consumption, 1) }} {{ __('prt.kwh') }}</td>
                 <td class="num">{{ money($bill->usage_amount) }}</td>
             </tr>

@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Payment extends Model
 {
-    protected $fillable = ['subscriber_id', 'collector_id', 'amount', 'method', 'note'];
+    protected $fillable = ['number', 'subscriber_id', 'collector_id', 'amount', 'method', 'note'];
 
     public function subscriber(): BelongsTo
     {
