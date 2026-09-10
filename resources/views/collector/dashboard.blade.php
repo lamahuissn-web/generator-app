@@ -27,7 +27,7 @@
                 <div class="flex flex-col gap-1">
                     <span class="text-sm font-medium text-muted-foreground">{{ __('portal.today_cash') }}</span>
                     <span class="text-xl font-semibold tabular-nums text-mono">{{ money($stats['today_total']) }}</span>
-                    <span class="text-2xs text-muted-foreground">{{ __('portal.today_payments', ['n' => $stats['today_count']]) }}</span>
+                    <span class="text-2xs text-muted-foreground">{{ plural('portal.today_payments', $stats['today_count']) }}</span>
                 </div>
                 <span class="tile tile-success size-10 text-lg">
                     <i class="ki-filled ki-wallet"></i>
@@ -40,7 +40,7 @@
                 <div class="flex flex-col gap-1">
                     <span class="text-sm font-medium text-muted-foreground">{{ __('portal.month_cash') }}</span>
                     <span class="text-xl font-semibold tabular-nums text-mono">{{ money($stats['month_total']) }}</span>
-                    <span class="text-2xs text-muted-foreground">{{ __('portal.today_payments', ['n' => $stats['month_count']]) }}</span>
+                    <span class="text-2xs text-muted-foreground">{{ plural('portal.today_payments', $stats['month_count']) }}</span>
                 </div>
                 <span class="tile tile-primary size-10 text-lg">
                     <i class="ki-filled ki-chart-pie-3"></i>
@@ -89,7 +89,7 @@
     {{-- Routes --}}
     <div class="mb-3 flex items-baseline justify-between px-1">
         <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{{ __('portal.routes') }}</h2>
-        <span class="text-xs text-muted-foreground">{{ __('portal.areas_count', ['n' => $routes->count()]) }}</span>
+        <span class="text-xs text-muted-foreground">{{ plural('portal.areas_count', $routes->count()) }}</span>
     </div>
 
     @if ($routes->isEmpty())
@@ -113,7 +113,7 @@
                     <span class="min-w-0 flex-1">
                         <span class="block truncate font-semibold text-mono">{{ $route->name }}</span>
                         <span class="block text-xs text-muted-foreground">
-                            {{ __('portal.route_stats', ['active' => $route->active_count, 'total' => $route->subscribers_count]) }}
+                            {{ __('portal.route_stats', ['active' => ltr_isolate($route->active_count), 'total' => ltr_isolate($route->subscribers_count)]) }}
                         </span>
                     </span>
                     @if ($owed > 0)

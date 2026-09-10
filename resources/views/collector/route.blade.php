@@ -17,7 +17,7 @@
             <div class="min-w-0">
                 <h1 class="truncate text-xl font-medium leading-none text-mono">{{ $route->name }}</h1>
                 <p class="mt-1 text-sm text-muted-foreground">
-                    {{ __('portal.route_subscribers', ['n' => $subscribers->count()]) }}
+                    {{ plural('portal.route_subscribers', $subscribers->count()) }}
                     @if ($route->notes) · {{ $route->notes }} @endif
                 </p>
             </div>
@@ -33,7 +33,7 @@
     @if ($subscribers->isEmpty())
         <div class="kt-card border-dashed">
             <div class="kt-card-content text-center text-sm text-muted-foreground">
-                {{ __('portal.route_subscribers', ['n' => 0]) }}
+                {{ plural('portal.route_subscribers', 0) }}
             </div>
         </div>
     @endif

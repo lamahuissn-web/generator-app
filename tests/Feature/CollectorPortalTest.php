@@ -184,6 +184,76 @@ class CollectorPortalTest extends TestCase
             ->assertSee('$35.00');
     }
 
+    /**
+     * Counted labels must agree with their number. Arabic has six plural forms, so a
+     * key written as a fixed singular noun reads as broken Arabic — "3 منطقة" instead
+     * of "3 مناطق", "4 دفعة" instead of "4 دفعات" — which is what the operator sees
+     * on the dashboard and the collector on a route list.
+     */
+    public function test_counted_labels_use_the_arabic_plural_form(): void
+    {
+        app()->setLocale('ar');
+
+        $this->assertSame('لا مناطق', plural('portal.areas_count', 0));
+        $this->assertSame('منطقة واحدة', plural('portal.areas_count', 1));
+        $this->assertSame('منطقتان', plural('portal.areas_count', 2));
+        $this->assertSame('3 مناطق', plural('portal.areas_count', 3));
+        $this->assertSame('10 مناطق', plural('portal.areas_count', 10));
+        $this->assertSame('11 منطقة', plural('portal.areas_count', 11));
+
+        $this->assertSame('دفعة واحدة', plural('portal.today_payments', 1));
+        $this->assertSame('4 دفعات', plural('portal.today_payments', 4));
+        $this->assertSame('11 دفعة', plural('portal.today_payments', 11));
+
+        $this->assertSame('مشترك واحد', plural('portal.route_subscribers', 1));
+        $this->assertSame('3 مشتركين', plural('portal.route_subscribers', 3));
+    }
+
+    public function test_counted_labels_use_the_english_plural_form(): void
+    {
+        app()->setLocale('en');
+
+        $this->assertSame('1 area', plural('portal.areas_count', 1));
+        $this->assertSame('3 areas', plural('portal.areas_count', 3));
+        $this->assertSame('1 payment', plural('portal.today_payments', 1));
+        $this->assertSame('3 payments', plural('portal.today_payments', 3));
+        $this->assertSame('1 subscriber', plural('portal.route_subscribers', 1));
+    }
+
+    public function test_dashboard_phrases_the_area_count_in_arabic(): void
+    {
+        Route::create(['name' => 'Second area']);
+        Route::create(['name' => 'Third area']);
+
+        $arCollector = User::create(['name' => 'سليم', 'email' => 'salim@x.com', 'password' => 'x', 'role' => 'collector', 'locale' => 'ar']);
+
+        $this->actingAs($arCollector)
+            ->get(route('collector.dashboard'))
+            ->assertOk()
+            ->assertSee('3 مناطق')
+            ->assertDontSee('3 منطقة');
+    }
+
+    public function test_route_page_phrases_the_subscriber_count_in_arabic(): void
+    {
+        Subscriber::create([
+            'route_id' => $this->route->id,
+            'name' => 'مشترك ثالث',
+            'type' => Subscriber::TYPE_FLAT,
+            'flat_fee' => 40,
+            'status' => Subscriber::STATUS_ACTIVE,
+            'created_by' => $this->collector->id,
+        ]);
+
+        $arCollector = User::create(['name' => 'سليم', 'email' => 'salim@x.com', 'password' => 'x', 'role' => 'collector', 'locale' => 'ar']);
+
+        $this->actingAs($arCollector)
+            ->get(route('collector.route.show', $this->route))
+            ->assertOk()
+            ->assertSee('3 مشتركين')
+            ->assertDontSee('3 مشترك<');
+    }
+
     public function test_metered_subscriber_page_offers_reading_entry(): void
     {
         $this->actingAs($this->collector)

@@ -44,6 +44,26 @@ if (! function_exists('money_ltr')) {
     }
 }
 
+if (! function_exists('plural')) {
+    /**
+     * Counted label: pick the translation form that agrees with $count, then bind
+     * ":n" to that same number.
+     *
+     * Arabic has six CLDR plural forms (zero, one, two, few, many, other), so a
+     * key written as ":n منطقة" would print "3 منطقة" — a singular noun under a
+     * plural count, which is plain wrong to an Arabic reader. Laravel's selector
+     * already knows the Arabic rules, but only trans_choice() applies them and only
+     * when the translation is written as pipe-separated forms in that exact order.
+     *
+     * Binding :n here rather than at each call site is deliberate: the number that
+     * selects the form and the number printed must never drift apart.
+     */
+    function plural(string $key, int $count, array $replace = []): string
+    {
+        return trans_choice($key, $count, $replace + ['n' => $count]);
+    }
+}
+
 if (! function_exists('period_label')) {
     /** '2026-09' => 'Sep 2026' */
     function period_label(string $ym): string
