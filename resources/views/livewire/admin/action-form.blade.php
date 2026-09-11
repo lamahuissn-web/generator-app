@@ -1,7 +1,7 @@
 <div>
     {{-- Trigger. The modal itself is only in the DOM while open, so nothing has to be
          initialised on load and no backdrop can outlive the list under it. --}}
-    <button type="button" wire:click="open" class="kt-btn kt-btn-sm {{ $definition->triggerClass() }}">
+    <button type="button" wire:click="openModal" class="kt-btn kt-btn-sm {{ $definition->triggerClass() }}">
         @if ($definition->icon())
             <i class="ki-filled {{ $definition->icon() }}"></i>
         @endif

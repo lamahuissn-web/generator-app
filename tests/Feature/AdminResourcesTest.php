@@ -434,7 +434,7 @@ class AdminResourcesTest extends TestCase
                 'action' => \App\Admin\Actions\RecordReading::class,
                 'subjectId' => $this->subscriber->id,
             ])
-            ->call('open')
+            ->call('openModal')
             ->assertSet('state.period', now()->format('Y-m'))
             ->set('state.period', '2026-10')
             ->set('state.current_reading', '1125')
@@ -450,7 +450,7 @@ class AdminResourcesTest extends TestCase
     {
         $component = Livewire::actingAs($this->admin)
             ->test(ActionForm::class, ['action' => CollectPayment::class, 'subjectId' => $this->subscriber->id])
-            ->call('open')
+            ->call('openModal')
             ->assertSet('open', true);
 
         // Opened with the outstanding figure already in the box: the overwhelmingly common
@@ -483,7 +483,7 @@ class AdminResourcesTest extends TestCase
 
         Livewire::actingAs($this->admin)
             ->test(ActionForm::class, ['action' => CollectPayment::class, 'subjectId' => $this->subscriber->id])
-            ->call('open')
+            ->call('openModal')
             ->set('state.amount', '10')
             ->call('submit')
             ->assertHasErrors('action')
@@ -496,7 +496,7 @@ class AdminResourcesTest extends TestCase
     {
         Livewire::actingAs($this->admin)
             ->test(ActionForm::class, ['action' => SpecialInvoice::class, 'subjectId' => $this->subscriber->id])
-            ->call('open')
+            ->call('openModal')
             ->set('state.title', 'Cable repair')
             ->set('state.items.0.description', 'Cable')
             ->set('state.items.0.quantity', '2')
@@ -513,7 +513,7 @@ class AdminResourcesTest extends TestCase
     {
         Livewire::actingAs($this->admin)
             ->test(ActionForm::class, ['action' => SpecialInvoice::class, 'subjectId' => $this->subscriber->id])
-            ->call('open')
+            ->call('openModal')
             ->call('removeItem', 'items', 0)
             ->call('submit')
             ->assertHasErrors('state.items');
@@ -525,7 +525,7 @@ class AdminResourcesTest extends TestCase
     {
         Livewire::actingAs($this->admin)
             ->test(ActionForm::class, ['action' => ConvertToFlat::class, 'subjectId' => $this->subscriber->id])
-            ->call('open')
+            ->call('openModal')
             ->set('state.flat_fee', '40')
             ->set('state.reason', 'Meter burnt')
             ->call('submit')
@@ -542,7 +542,7 @@ class AdminResourcesTest extends TestCase
 
         Livewire::actingAs($this->admin)
             ->test(ActionForm::class, ['action' => ConvertToMetered::class, 'subjectId' => $this->subscriber->id])
-            ->call('open')
+            ->call('openModal')
             ->set('state.meter_no', '')
             ->call('submit')
             ->assertHasErrors('state.meter_no');
@@ -560,7 +560,7 @@ class AdminResourcesTest extends TestCase
 
         Livewire::actingAs($this->admin)
             ->test(ActionForm::class, ['action' => ConvertToMetered::class, 'subjectId' => $this->subscriber->id])
-            ->call('open')
+            ->call('openModal')
             ->set('state.meter_no', '9999')
             ->call('submit')
             ->assertHasErrors('state.meter_no');

@@ -48,7 +48,16 @@ class ActionForm extends Component
         return $model::query()->findOrFail($this->subjectId);
     }
 
-    public function open(): void
+    /**
+     * Open the modal.
+     *
+     * NOT named `open()`: this component has a `public bool $open` for the view to read, and
+     * Livewire's `$wire` proxy resolves a PROPERTY before a method of the same name — so
+     * `wire:click="open"` compiled to `$wire.open()` against a boolean and threw
+     * "not a function" inside the click handler. The click did nothing, no request was sent,
+     * and nothing was logged. A test calling the method directly never sees it.
+     */
+    public function openModal(): void
     {
         $this->state = $this->definition()->defaults($this->subject());
         $this->resetErrorBag();
