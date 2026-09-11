@@ -26,7 +26,17 @@ class ActionForm extends Component
     /** @var array<string, mixed> */
     public array $state = [];
 
-    public function mount(string $action, int $subjectId): void
+    /**
+     * The page this modal was rendered on, so the post-action redirect can return to it.
+     *
+     * Passed in from the blade (`url()->fullUrl()` at render time) rather than read from the
+     * request's Referer header. That header is client-supplied: a forged value was followed
+     * verbatim (an open redirect), and an absent one — no-referrer policies, privacy
+     * extensions — sent the operator to the Livewire update endpoint as a JSON page.
+     */
+    public string $returnTo = '';
+
+    public function mount(string $action, int $subjectId, ?string $returnTo = null): void
     {
         if (! is_subclass_of($action, ActionDefinition::class)) {
             throw new \InvalidArgumentException("{$action} is not an action definition.");
@@ -34,6 +44,7 @@ class ActionForm extends Component
 
         $this->action = $action;
         $this->subjectId = $subjectId;
+        $this->returnTo = $returnTo ?? '';
     }
 
     public function definition(): ActionDefinition
@@ -98,8 +109,9 @@ class ActionForm extends Component
 
         // The record this action ran against is rendered by the PAGE, not by this component
         // (a subscriber's balance sits in a card beside it), so a partial refresh would leave
-        // the operator reading the pre-action figure. Reload instead.
-        $this->redirect(request()->header('Referer') ?: url()->current(), navigate: false);
+        // the operator reading the pre-action figure. Reload instead — at the URL the server
+        // rendered this modal on, falling back to the session's last page if that is missing.
+        $this->redirect($this->returnTo ?: url()->previous(), navigate: false);
     }
 
     public function shows(array $field): bool
@@ -136,5 +148,4 @@ class ActionForm extends Component
             'sections' => $definition->sections(),
         ]);
     }
-
 }

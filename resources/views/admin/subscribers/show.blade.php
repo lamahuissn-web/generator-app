@@ -8,6 +8,12 @@
     @php
         $initials = str($subscriber->name)->trim()->explode(' ')->filter()->take(2)
             ->map(fn ($p) => mb_substr($p, 0, 1))->implode('');
+
+        // The URL this page was rendered at, handed to every action modal so the redirect after
+        // an action returns HERE — including the tab in the query string. Taken from the incoming
+        // request rather than the request's Referer header, which a client can forge or omit.
+        // (fullUrl() lives on the Request, not on url() — UrlGenerator offers current()/full().)
+        $returnTo = request()->fullUrl();
     @endphp
 
     {{-- Identity + balance: what the operator needs before any action --}}
@@ -68,6 +74,7 @@
                     <livewire:admin.action-form
                         :action="\App\Admin\Actions\CollectPayment::class"
                         :subject-id="$subscriber->id"
+                        :return-to="$returnTo"
                         :key="'collect-'.$subscriber->id" />
 
                     {{-- Recording the reading is the visit; it belongs next to collecting,
@@ -75,22 +82,26 @@
                     <livewire:admin.action-form
                         :action="\App\Admin\Actions\RecordReading::class"
                         :subject-id="$subscriber->id"
+                        :return-to="$returnTo"
                         :key="'reading-'.$subscriber->id" />
 
                     <livewire:admin.action-form
                         :action="\App\Admin\Actions\SpecialInvoice::class"
                         :subject-id="$subscriber->id"
+                        :return-to="$returnTo"
                         :key="'special-'.$subscriber->id" />
 
                     @if ($subscriber->isMetered())
                         <livewire:admin.action-form
                             :action="\App\Admin\Actions\ConvertToFlat::class"
                             :subject-id="$subscriber->id"
+                            :return-to="$returnTo"
                             :key="'toflat-'.$subscriber->id" />
                     @else
                         <livewire:admin.action-form
                             :action="\App\Admin\Actions\ConvertToMetered::class"
                             :subject-id="$subscriber->id"
+                            :return-to="$returnTo"
                             :key="'tometer-'.$subscriber->id" />
                     @endif
 

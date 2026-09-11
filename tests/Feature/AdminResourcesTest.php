@@ -444,6 +444,57 @@ class AdminResourcesTest extends TestCase
         $this->assertSame(25.0, (float) \App\Models\Reading::where('period', '2026-10')->firstOrFail()->consumption);
     }
 
+    // ---- the redirect after an action --------------------------------------
+
+    /**
+     * After an action the operator must land back on the page they were on.
+     *
+     * The redirect target is the URL the server rendered the modal on. It used to be read from
+     * the request's Referer header, which the client controls: a forged value was followed
+     * verbatim (an open redirect) and an absent one sent the browser to the Livewire update
+     * endpoint as a JSON page. Both are asserted here so neither can come back.
+     */
+    public function test_the_post_action_redirect_returns_to_the_rendered_page(): void
+    {
+        $page = url('/admin/subscribers/'.$this->subscriber->id.'?tab=payments');
+
+        $component = Livewire::actingAs($this->admin)
+            ->test(ActionForm::class, [
+                'action' => CollectPayment::class,
+                'subjectId' => $this->subscriber->id,
+                'returnTo' => $page,
+            ]);
+
+        // A forged Referer must not decide where the operator ends up.
+        request()->headers->set('Referer', 'https://example.com/phishing');
+
+        $component->call('openModal')
+            ->set('state.amount', '10')
+            ->set('state.method', Payment::METHOD_CASH_USD)
+            ->call('submit')
+            ->assertRedirect($page);
+    }
+
+    /** …and it must not depend on that header being present at all. */
+    public function test_the_post_action_redirect_does_not_need_a_referer(): void
+    {
+        $page = url('/admin/subscribers/'.$this->subscriber->id);
+
+        request()->headers->remove('Referer');
+
+        Livewire::actingAs($this->admin)
+            ->test(ActionForm::class, [
+                'action' => CollectPayment::class,
+                'subjectId' => $this->subscriber->id,
+                'returnTo' => $page,
+            ])
+            ->call('openModal')
+            ->set('state.amount', '10')
+            ->set('state.method', Payment::METHOD_CASH_USD)
+            ->call('submit')
+            ->assertRedirect($page);
+    }
+
     // ---- layering ----------------------------------------------------------
 
     /**
