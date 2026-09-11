@@ -221,3 +221,80 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.01em;
 }
+
+/* ---------------------------------------------------------------------------
+ | Dialogs
+ |
+ | Our modals are rendered by Livewire, so KTUI's modal engine never runs for
+ | them (see the z-index note above) — their layout has to come from CSS.
+ | -------------------------------------------------------------------------- */
+
+/* The dialog's positioning wrapper.
+ |
+ | Upstream centres the card with `items-center`, and that means EVERY change to its height
+ | re-centres it. A validation message adds 22px the moment it appears, so everything above the
+ | message — title bar, close button, fields — slides down by 11px; with two messages, 22px. Two
+ | things follow, and both were reported from a real session:
+ |
+ |   - a press aimed where the button WAS lands on the footer instead. Half the button's own
+ |     height is 17px, so two validation messages are enough to make a press miss entirely —
+ |     which the operator experiences as "it only works if I press the edge of it";
+ |   - :hover strobes, because the control under the cursor moves away and back.
+ |
+ | Anchoring the top fixes both: nothing the operator types can move a control that is already on
+ | screen. A dialog too tall for the viewport now grows downwards into the modal's own scroll area
+ | instead of being pushed off both edges, which a centred flex item cannot recover from. */
+.kt-modal-panel {
+    align-items: flex-start;
+    padding-block: 1.75rem;
+}
+
+/* The close control.
+ |
+ | Upstream it is a 24px box whose entire hover feedback is its glyph going from 70% to 100%
+ | opacity: a 12px icon shifting shade slightly is easy to miss, which reads as "the hover works
+ | sometimes". It has no background and nothing for the keyboard either.
+ |
+ | Given a real hit box, a hover surface that cannot be missed, and a ring for keyboard use. The
+ | colour change carries the state, so the glyph stays at full opacity — a fading glyph is the
+ | one signal that is too quiet to be seen. */
+.kt-modal-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    inline-size: 2rem;
+    block-size: 2rem;
+    /* pulled into the header's padding so the glyph stays aligned with the title's edge */
+    margin-inline-end: -0.5rem;
+    border-radius: var(--radius-md);
+    color: var(--muted-foreground);
+    transition: background-color 120ms ease, color 120ms ease;
+}
+
+.kt-modal-close:hover {
+    background-color: var(--accent);
+    color: var(--accent-foreground);
+}
+
+.kt-modal-close:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+}
+
+.kt-modal-close i {
+    font-size: 1rem;
+    line-height: 1;
+    opacity: 1;
+}
+
+/* Icons in a dialog's actions.
+ |
+ | A glyph inside `kt-btn` inherits the button's own 13px text size, so the confirm icon comes out
+ | smaller than the same glyph anywhere else and the dialog reads as two different systems.
+ | Sized to the label's optical middle. The header needs no equivalent rule: its only icon is the
+ | close button, which is sized above — and a `.kt-modal-header i` rule would silently beat that
+ | one, both being (0,1,1) with the header's rule later in the file. */
+.kt-modal-footer .kt-btn i {
+    font-size: 0.875rem;
+    line-height: 1;
+}

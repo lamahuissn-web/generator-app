@@ -527,6 +527,51 @@ class AdminResourcesTest extends TestCase
             ->assertHasErrors('state.amount');
     }
 
+    // ---- view contracts ---------------------------------------------------
+
+    /**
+     * A button disabled by `wire:loading` must name the action it belongs to.
+     *
+     * `wire:loading` is true for ANY request the component makes — a live-bound select, a
+     * debounced search, a repeater line being typed into. Without `wire:target`, changing one of
+     * those fields disables this button for the whole round trip, and a press landing in that
+     * window is swallowed by the browser: no request, no message, nothing happens. Measured at
+     * 15 ms after a live field change and lasting ~150 ms locally, longer on a loaded server.
+     *
+     * `wire:target` keeps the guard where it is wanted — the button still disables during its own
+     * action, so a double press cannot send two requests — and nowhere else.
+     */
+    public function test_every_loading_disabled_button_names_its_own_action(): void
+    {
+        $offenders = [];
+        $checked = 0;
+
+        $views = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator(resource_path('views')));
+        foreach ($views as $file) {
+            if (! $file->isFile() || ! str_ends_with($file->getFilename(), '.blade.php')) {
+                continue;
+            }
+
+            $html = file_get_contents($file->getPathname());
+
+            // Whole opening tags only: the check is "does THIS element name a target", and a
+            // tag-less search would pick up a target belonging to a neighbouring element.
+            preg_match_all('/<[^>]*wire:loading\.attr="disabled"[^>]*>/s', $html, $tags);
+
+            foreach ($tags[0] as $tag) {
+                $checked++;
+
+                if (! str_contains($tag, 'wire:target=')) {
+                    $offenders[] = str_replace(resource_path('views').'/', '', $file->getPathname())
+                        .': '.preg_replace('/\s+/', ' ', substr($tag, 0, 90));
+                }
+            }
+        }
+
+        $this->assertGreaterThanOrEqual(6, $checked, 'The scan found too few buttons to be meaningful.');
+        $this->assertSame([], $offenders, "These buttons disable themselves for unrelated requests:\n".implode("\n", $offenders));
+    }
+
     // ---- refusals from the domain services ---------------------------------
 
     /**

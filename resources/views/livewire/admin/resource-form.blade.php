@@ -30,7 +30,7 @@
     @endforeach
 
     <div class="flex flex-wrap items-center gap-2.5">
-        <button type="submit" class="kt-btn kt-btn-lg" wire:loading.attr="disabled">
+        <button type="submit" class="kt-btn kt-btn-lg" wire:loading.attr="disabled" wire:target="save">
             <i class="ki-filled ki-check"></i>
             {{ __('t.save') }}
         </button>

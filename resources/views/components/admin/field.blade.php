@@ -12,6 +12,10 @@
     'span' => null,
     // … or as a compact cell in a filter bar.
     'compact' => false,
+    // Reserve the message's line even when there is no message. Used inside dialogs: the dialog's
+    // footer sits below this field, so a message that appears on validation pushes the confirm
+    // button down — out from under the operator's cursor, mid-press.
+    'reserveError' => false,
 ])
 
 @php
@@ -176,7 +180,13 @@
         <span class="text-xs text-muted-foreground">{{ $helper }}</span>
     @endif
 
-    @error($path)
-        <span class="text-xs font-medium text-destructive">{{ $message }}</span>
-    @enderror
+    @if ($reserveError)
+        {{-- min-h-4 reserves the message's own 16px line box, so the field's height is the same
+             whether or not a message is showing and nothing below it can move. --}}
+        <span class="min-h-4 text-xs font-medium text-destructive" role="alert">{{ $errors->first($path) }}</span>
+    @else
+        @error($path)
+            <span class="text-xs font-medium text-destructive">{{ $message }}</span>
+        @enderror
+    @endif
 </div>

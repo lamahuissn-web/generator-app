@@ -163,7 +163,10 @@
         <div class="kt-modal is-live" role="dialog" aria-modal="true" wire:key="run-confirm">
             <div class="kt-modal-backdrop" wire:click="cancel"></div>
 
-            <div class="relative flex min-h-full w-full items-center justify-center">
+            {{-- kt-modal-panel anchors the dialog to the top: a centred card re-centres on every
+                 height change, which slides the controls out from under the operator's cursor.
+                 See the rule in app.css for what that cost. --}}
+            <div class="kt-modal-panel relative flex min-h-full w-full justify-center">
                 <div class="kt-modal-content w-full max-w-md">
                     <div class="kt-modal-header">
                         <h3 class="kt-modal-title">{{ __('gen.confirm_heading') }}</h3>
@@ -195,7 +198,7 @@
                         <button type="button" wire:click="cancel" class="kt-btn kt-btn-outline">
                             {{ __('t.cancel') }}
                         </button>
-                        <button type="button" wire:click="generate" wire:loading.attr="disabled" class="kt-btn">
+                        <button type="button" wire:click="generate" wire:loading.attr="disabled" wire:target="generate" class="kt-btn">
                             <i class="ki-filled ki-copy"></i>
                             {{ __('gen.run_btn') }}
                         </button>

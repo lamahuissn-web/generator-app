@@ -15,7 +15,10 @@
             {{-- w-full is load-bearing: .kt-modal.is-live is a flex row, so without it this
                  wrapper shrinks to the dialog's width and sits at the flex start — which in
                  RTL is the RIGHT edge of the screen, not the centre. --}}
-            <div class="relative flex min-h-full w-full items-center justify-center">
+            {{-- kt-modal-panel anchors the dialog to the top: a centred card re-centres on every
+                 height change, which slides the controls out from under the operator's cursor.
+                 See the rule in app.css for what that cost. --}}
+            <div class="kt-modal-panel relative flex min-h-full w-full justify-center">
                 <div class="kt-modal-content w-full max-w-xl">
                     <div class="kt-modal-header">
                         <h3 class="kt-modal-title">{{ $definition->modalHeading($subject) }}</h3>
@@ -62,7 +65,7 @@
                                 @endif
 
                                 @foreach ($visibleFields as $field)
-                                    <x-admin.field :field="$field" model="state" :values="$state" id-prefix="a" />
+                                    <x-admin.field :field="$field" model="state" :values="$state" id-prefix="a" reserve-error />
                                 @endforeach
                             @endforeach
                         </div>
@@ -71,7 +74,7 @@
                             <button type="button" wire:click="close" class="kt-btn kt-btn-outline">
                                 {{ __('t.cancel') }}
                             </button>
-                            <button type="submit" wire:loading.attr="disabled" class="kt-btn">
+                            <button type="submit" wire:loading.attr="disabled" wire:target="submit" class="kt-btn">
                                 <i class="ki-filled ki-check"></i>
                                 {{ $definition->submitLabel() }}
                             </button>

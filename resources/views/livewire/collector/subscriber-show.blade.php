@@ -447,7 +447,7 @@
                                     <span class="amount-cell text-lg font-semibold text-primary">{{ money($preview['due_now']) }}</span>
                                 </div>
                             </div>
-                            <button wire:click="saveReading" wire:loading.attr="disabled" class="kt-btn kt-btn-lg mt-4 w-full justify-center">
+                            <button wire:click="saveReading" wire:loading.attr="disabled" wire:target="saveReading" class="kt-btn kt-btn-lg mt-4 w-full justify-center">
                                 <i class="ki-filled ki-check"></i>
                                 {{ __('portal.save_reading') }}
                             </button>
@@ -629,7 +629,7 @@
                         <input type="text" wire:model="paymentNote" placeholder="{{ __('portal.note_ph') }}" class="kt-input">
                     </div>
 
-                    <button wire:click="savePayment" wire:loading.attr="disabled" class="kt-btn kt-btn-lg w-full justify-center">
+                    <button wire:click="savePayment" wire:loading.attr="disabled" wire:target="savePayment" class="kt-btn kt-btn-lg w-full justify-center">
                         <i class="ki-filled ki-wallet"></i>
                         {{ __('portal.record_collection') }}
                     </button>

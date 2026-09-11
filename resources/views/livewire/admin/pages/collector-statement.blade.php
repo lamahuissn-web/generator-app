@@ -119,7 +119,10 @@
         <div class="kt-modal is-live" role="dialog" aria-modal="true" wire:key="handover-modal">
             <div class="kt-modal-backdrop" wire:click="closeHandover"></div>
 
-            <div class="relative flex min-h-full w-full items-center justify-center">
+            {{-- kt-modal-panel anchors the dialog to the top: a centred card re-centres on every
+                 height change, which slides the controls out from under the operator's cursor.
+                 See the rule in app.css for what that cost. --}}
+            <div class="kt-modal-panel relative flex min-h-full w-full justify-center">
                 <div class="kt-modal-content w-full max-w-md">
                     <div class="kt-modal-header">
                         <h3 class="kt-modal-title">{{ __('col.quick_handover_heading', ['name' => $collector?->name ?? '']) }}</h3>
@@ -140,27 +143,27 @@
                                     'type' => 'money',
                                     'helper' => __('col.quick_handover_helper'),
                                     'rules' => ['required'],
-                                ]" model="handover" :values="$handover" id-prefix="ho" />
+                                ]" model="handover" :values="$handover" id-prefix="ho" reserve-error />
 
                             <x-admin.field :field="[
                                     'key' => 'handover_date',
                                     'label' => __('col.date'),
                                     'type' => 'date',
                                     'rules' => ['required'],
-                                ]" model="handover" :values="$handover" id-prefix="ho" />
+                                ]" model="handover" :values="$handover" id-prefix="ho" reserve-error />
 
                             <x-admin.field :field="[
                                     'key' => 'note',
                                     'label' => __('col.note'),
                                     'rules' => ['nullable'],
-                                ]" model="handover" :values="$handover" id-prefix="ho" />
+                                ]" model="handover" :values="$handover" id-prefix="ho" reserve-error />
                         </div>
 
                         <div class="kt-modal-footer">
                             <button type="button" wire:click="closeHandover" class="kt-btn kt-btn-outline">
                                 {{ __('t.cancel') }}
                             </button>
-                            <button type="submit" wire:loading.attr="disabled" class="kt-btn">
+                            <button type="submit" wire:loading.attr="disabled" wire:target="saveHandover" class="kt-btn">
                                 <i class="ki-filled ki-check"></i>
                                 {{ __('col.quick_handover') }}
                             </button>

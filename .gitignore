@@ -29,3 +29,4 @@ Thumbs.db
 # Throwaway scripts used to render/inspect screens during development
 /tmp_*.php
 /tmp_*.sh
+/tmp_*.py
