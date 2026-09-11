@@ -49,5 +49,8 @@ Route::middleware(['auth', 'role:collector', 'locale'])->prefix('collector')->na
 
     Route::get('/routes/{route}', [RouteController::class, 'show'])->name('route.show');
 
+    // The route's readings as one worklist: a value per house, saved together.
+    Route::get('/routes/{route}/readings', [RouteController::class, 'readings'])->name('route.readings');
+
     Route::get('/subscribers/{subscriber}', [SubscriberController::class, 'show'])->name('subscriber.show');
 });

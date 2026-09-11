@@ -28,7 +28,25 @@
                 {{ money($routeDue) }}
             </span>
         @endif
+        @if ($meteredTotal > 0)
+            <span class="kt-badge kt-badge-lg kt-badge-outline {{ $meteredDone >= $meteredTotal ? 'kt-badge-success' : 'kt-badge-warning' }}">
+                <i class="ki-filled ki-bill"></i>
+                {{ __('portal.readings_progress', ['done' => $meteredDone, 'total' => $meteredTotal]) }}
+            </span>
+        @endif
     </div>
+
+    {{-- The walk starts here. Reading a street is one pass through this screen, so it gets
+         the first button on the page instead of being buried in each subscriber's card. --}}
+    @if ($meteredTotal > 0)
+        <a href="{{ route('collector.route.readings', $route) }}" class="kt-btn kt-btn-lg mb-4 w-full justify-center">
+            <i class="ki-filled ki-bill"></i>
+            {{ __('portal.route_readings') }}
+            @if ($meteredTotal - $meteredDone > 0)
+                <span class="kt-badge kt-badge-sm kt-badge-outline tabular-nums">{{ $meteredTotal - $meteredDone }}</span>
+            @endif
+        </a>
+    @endif
 
     @if ($subscribers->isEmpty())
         <div class="kt-card border-dashed">
@@ -59,6 +77,17 @@
                             <span class="truncate font-semibold text-mono">{{ $subscriber->name }}</span>
                             @if ($inactive)
                                 <span class="kt-badge kt-badge-xs kt-badge-outline shrink-0">{{ __('portal.inactive') }}</span>
+                            @elseif ($subscriber->isMetered())
+                                {{-- A metered street has to say at a glance who is left this
+                                     cycle — the balance below is a different question. --}}
+                                @if ($readings->has($subscriber->id))
+                                    <span class="kt-badge kt-badge-xs kt-badge-success shrink-0">
+                                        <i class="ki-filled ki-check"></i>
+                                        {{ __('portal.reading_done_chip') }}
+                                    </span>
+                                @else
+                                    <span class="kt-badge kt-badge-xs kt-badge-outline shrink-0">{{ __('portal.reading_pending_chip') }}</span>
+                                @endif
                             @endif
                         </span>
                         <span class="block truncate text-xs text-muted-foreground">
