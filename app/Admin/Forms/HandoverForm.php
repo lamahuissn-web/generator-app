@@ -85,6 +85,36 @@ class HandoverForm extends FormDefinition
         ];
     }
 
+    /**
+     * The amount is capped at the cash the collector is actually holding.
+     *
+     * The service refuses an over-handover too — that is the authoritative guard, and it covers
+     * every caller — but a rule puts the reason on the field the operator is typing into instead
+     * of at the top of the form. Both read the same figure and the same message, so they cannot
+     * drift apart.
+     */
+    public function rules(array $state, ?Model $record = null): array
+    {
+        $rules = parent::rules($state, $record);
+
+        if (empty($state['collector_id'])) {
+            return $rules;   // no collector chosen yet: nothing to compare against
+        }
+
+        $available = CashHandoverService::availableFor(
+            (int) $state['collector_id'],
+            $record instanceof CashHandover ? $record : null,
+        );
+
+        $rules['state.amount'][] = function (string $attribute, mixed $value, \Closure $fail) use ($available): void {
+            if (round((float) $value, 2) > $available) {
+                $fail(__('refuse.handover_exceeds_in_hand', ['amount' => money_ltr($available)]));
+            }
+        };
+
+        return $rules;
+    }
+
     public function save(array $state, ?Model $record): Model
     {
         $data = [

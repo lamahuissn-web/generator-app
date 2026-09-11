@@ -464,12 +464,69 @@ class AdminPagesTest extends TestCase
             ->set('handover.amount', '120')
             ->set('handover.handover_date', '2026-09-08')
             ->call('saveHandover')
-            ->assertHasNoErrors()
-            ->assertSet('handoverOpen', false);
+            ->assertHasNoErrors();
+
+        // No assertSet('handoverOpen') here on purpose: a redirect response carries no updated
+        // snapshot, and the page it lands on is a fresh render where the modal is closed by its
+        // own default. Asserting the property would only be testing the test.
+
+        // A flash alone is not feedback: the layout — the only thing that renders
+        // session('status') — is not re-rendered by a Livewire update, so the message was
+        // invisible here and then surfaced later on an unrelated page. The action redirects back
+        // to the same statement, collector and range included, so the confirmation is rendered
+        // and the operator keeps looking at what they were looking at.
+        $target = (string) ($component->effects['redirect'] ?? '');
+        $this->assertStringStartsWith(route('admin.collector-statement'), $target);
+        $this->assertStringContainsString('collector_id='.$this->collector->id, $target);
+        $this->assertStringContainsString('from='.$component->instance()->from()?->toDateString(), $target);
 
         $this->assertSame(1, CashHandover::count());
         $this->assertSame(80.0, round($component->instance()->inHand(), 2));
         $this->assertSame($this->admin->id, CashHandover::firstOrFail()->recorded_by);
+    }
+
+    /**
+     * The ledger must never be driven negative by a handover.
+     *
+     * The modal already states what the collector is holding; recording more than that is the
+     * one mistake an operator can make here, and it used to go through and leave the collector
+     * with a negative balance that no report can explain.
+     */
+    public function test_the_quick_handover_refuses_more_than_the_collector_holds(): void
+    {
+        $this->payment(200, '2026-09-05');
+
+        $component = Livewire::actingAs($this->admin)
+            ->test(CollectorStatement::class, ['filters' => ['collector_id' => $this->collector->id]])
+            ->call('openHandover')
+            ->set('handover.amount', '250')
+            ->set('handover.handover_date', '2026-09-08')
+            ->call('saveHandover')
+            ->assertHasErrors('handover.amount')
+            // The modal stays open with the operator's typing, so the figure can be corrected
+            // in place rather than being retyped from memory.
+            ->assertSet('handoverOpen', true)
+            ->assertSet('handover.amount', '250');
+
+        $this->assertSame(0, CashHandover::count(), 'A refused handover was written anyway.');
+        $this->assertSame(200.0, round($component->instance()->inHand(), 2), 'The ledger moved.');
+    }
+
+    /** The whole of it is still accepted — that is the ordinary end-of-day handover. */
+    public function test_the_quick_handover_accepts_exactly_what_the_collector_holds(): void
+    {
+        $this->payment(200, '2026-09-05');
+
+        $component = Livewire::actingAs($this->admin)
+            ->test(CollectorStatement::class, ['filters' => ['collector_id' => $this->collector->id]])
+            ->call('openHandover')
+            ->set('handover.amount', '200')
+            ->set('handover.handover_date', '2026-09-08')
+            ->call('saveHandover')
+            ->assertHasNoErrors();
+
+        $this->assertSame(1, CashHandover::count());
+        $this->assertSame(0.0, round($component->instance()->inHand(), 2));
     }
 
     public function test_a_handover_of_zero_is_refused(): void
@@ -530,7 +587,9 @@ class AdminPagesTest extends TestCase
             ->set('state.default_maintenance_fee', '30')
             ->set('state.company_phone', '03 123456')
             ->call('save')
-            ->assertHasNoErrors();
+            ->assertHasNoErrors()
+            // see the handover test: without a redirect the saved confirmation is never rendered
+            ->assertRedirect(route('admin.settings'));
 
         $this->assertSame('0.42', Setting::get('kwh_price'));
         $this->assertSame('30', Setting::get('default_maintenance_fee'));

@@ -1,4 +1,16 @@
 <form wire:submit="save" class="grid gap-5">
+    {{-- A refusal from the domain service ("a reading for this period already exists"): shown
+         here rather than thrown, so the operator reads the reason next to the form they filled.
+         The wording comes from the service, the same text the action modal shows. --}}
+    @error('save')
+        <div class="kt-alert kt-alert-light kt-alert-destructive" role="alert">
+            <div class="kt-alert-icon"><i class="ki-filled ki-information text-base"></i></div>
+            <div class="kt-alert-content">
+                <div class="kt-alert-title">{{ $message }}</div>
+            </div>
+        </div>
+    @enderror
+
     @foreach ($sections as $section)
         @php
             // Visibility is resolved HERE, in the Livewire component's scope: a Blade

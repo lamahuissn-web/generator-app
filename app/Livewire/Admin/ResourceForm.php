@@ -65,13 +65,27 @@ class ResourceForm extends Component
         $definition = $this->definition();
         $record = $this->recordModel();
 
+        $this->resetErrorBag();
+
         $this->validate(
             $definition->rules($this->state, $record),
             [],
             $definition->validationAttributes(),
         );
 
-        $saved = $definition->save($this->state, $record);
+        try {
+            $saved = $definition->save($this->state, $record);
+        } catch (\RuntimeException $e) {
+            // A refusal is a business rule, not a crash. The domain services refuse things a
+            // rule cannot express — "a reading for this period already exists", "this subscriber
+            // has no outstanding balance to collect" — and those messages are the operator's
+            // instructions. Uncaught, the screen answered 500 and the operator saw nothing at
+            // all (the action modal has always caught this; the screen did not). Keep the form
+            // filled in and show the reason.
+            $this->addError('save', $e->getMessage());
+
+            return null;
+        }
 
         session()->flash('status', $record ? __('t.updated_ok') : __('t.created_ok'));
 

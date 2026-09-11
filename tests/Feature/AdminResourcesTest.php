@@ -444,6 +444,197 @@ class AdminResourcesTest extends TestCase
         $this->assertSame(25.0, (float) \App\Models\Reading::where('period', '2026-10')->firstOrFail()->consumption);
     }
 
+    // ---- cash handovers ----------------------------------------------------
+
+    /** A payment, so the collector is actually holding cash to hand over. */
+    private function collected(float $amount): void
+    {
+        Payment::create([
+            'subscriber_id' => $this->subscriber->id,
+            'collector_id' => $this->collector->id,
+            'amount' => $amount,
+            'method' => Payment::METHOD_CASH_USD,
+        ]);
+    }
+
+    /**
+     * The handover form caps the amount at the cash in hand, and says so on the field.
+     *
+     * The service refuses it too (that is the authoritative guard, and it covers the quick
+     * action as well) — this asserts the operator gets the reason where they are typing.
+     */
+    public function test_the_handover_form_refuses_more_than_the_collector_holds(): void
+    {
+        $this->collected(75);
+
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => HandoverForm::class])
+            ->set('state.collector_id', $this->collector->id)
+            ->set('state.handover_date', '2026-09-08')
+            ->set('state.amount', '100')
+            ->call('save')
+            ->assertHasErrors('state.amount');
+
+        $this->assertSame(0, CashHandover::count(), 'A refused handover was written anyway.');
+    }
+
+    /** Exactly what the collector holds is accepted, and the ledger lands on zero. */
+    public function test_the_handover_form_accepts_exactly_what_the_collector_holds(): void
+    {
+        $this->collected(75);
+
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => HandoverForm::class])
+            ->set('state.collector_id', $this->collector->id)
+            ->set('state.handover_date', '2026-09-08')
+            ->set('state.amount', '75')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertSame(1, CashHandover::count());
+        $this->assertSame(0.0, \App\Services\CollectionService::inHand($this->collector->id));
+    }
+
+    /**
+     * When editing, the record's own amount counts as available again.
+     *
+     * A handover typed a digit short is the case this form is opened for: measuring against the
+     * already-reduced balance would make it impossible to correct upwards.
+     */
+    public function test_the_handover_form_lets_an_edit_raise_the_amount_back_up(): void
+    {
+        $this->collected(75);
+
+        $handover = CashHandover::create([
+            'collector_id' => $this->collector->id, 'amount' => 20,
+            'handover_date' => '2026-09-08', 'recorded_by' => $this->admin->id,
+        ]);   // created directly, bypassing the service: this is data as it is already stored
+
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => HandoverForm::class, 'record' => $handover->id])
+            ->set('state.amount', '75')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertSame(75.0, (float) $handover->fresh()->amount);
+        $this->assertSame(0.0, \App\Services\CollectionService::inHand($this->collector->id));
+
+        // one cent past the full in-hand figure is still refused
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => HandoverForm::class, 'record' => $handover->id])
+            ->set('state.amount', '75.01')
+            ->call('save')
+            ->assertHasErrors('state.amount');
+    }
+
+    // ---- refusals from the domain services ---------------------------------
+
+    /**
+     * A refused save shows the service's reason instead of crashing.
+     *
+     * The reading screen refuses a second reading for the same period. That is a business rule
+     * a validation rule cannot express, and the screen used to let the exception escape: the
+     * Livewire request answered 500 and the operator saw nothing at all. The action modal has
+     * always caught this — the screen has to behave the same way.
+     */
+    public function test_a_refused_save_shows_the_reason_instead_of_erroring(): void
+    {
+        \App\Models\Reading::create([
+            'subscriber_id' => $this->subscriber->id, 'period' => '2026-10',
+            'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 100,
+            'entered_by' => $this->admin->id,
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ReadingForm::class])
+            ->set('state.subscriber_id', $this->subscriber->id)
+            ->set('state.period', '2026-10')
+            ->set('state.reading_mode', \App\Services\ReadingService::MODE_NORMAL)
+            ->set('state.current_reading', '1500')
+            ->call('save')
+            ->assertHasErrors('save')
+            // The refusal must be VISIBLE, not just recorded in the error bag.
+            ->assertSee('already exists');
+
+        $this->assertSame(1, \App\Models\Reading::where('period', '2026-10')->count());
+    }
+
+    /** A refusal must not be silent either — the form stays put rather than redirecting away. */
+    public function test_a_refused_save_does_not_redirect(): void
+    {
+        \App\Models\Reading::create([
+            'subscriber_id' => $this->subscriber->id, 'period' => '2026-10',
+            'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 100,
+            'entered_by' => $this->admin->id,
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ReadingForm::class])
+            ->set('state.subscriber_id', $this->subscriber->id)
+            ->set('state.period', '2026-10')
+            ->set('state.current_reading', '1500')
+            ->call('save')
+            ->assertNoRedirect();
+    }
+
+    /**
+     * The refusal is read by an operator in an Arabic panel — it must not arrive in English.
+     *
+     * These messages used to be unreachable (the request answered 500 before they were shown),
+     * so nothing caught that they were hardcoded English in a Laravel panel whose screens,
+     * labels and receipts are Arabic.
+     */
+    public function test_the_refusal_is_shown_in_the_panel_language(): void
+    {
+        \App\Models\Reading::create([
+            'subscriber_id' => $this->subscriber->id, 'period' => '2026-10',
+            'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 100,
+            'entered_by' => $this->admin->id,
+        ]);
+
+        $refuse = function () {
+            return Livewire::actingAs($this->admin)
+                ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ReadingForm::class])
+                ->set('state.subscriber_id', $this->subscriber->id)
+                ->set('state.period', '2026-10')
+                ->set('state.current_reading', '1500')
+                ->call('save');
+        };
+
+        app()->setLocale('ar');
+        $refuse()->assertSee('في قراءة مسجّلة لهذا الشهر مسبقاً');
+
+        app()->setLocale('en');
+        $refuse()->assertSee('A reading for this period already exists.');
+
+        app()->setLocale('en');
+    }
+
+    /** Both language files carry every refusal, and its placeholders survive translation. */
+    public function test_every_refusal_has_a_translation_in_both_languages(): void
+    {
+        $ar = json_decode(file_get_contents(base_path('lang/ar.json')), true);
+        $en = json_decode(file_get_contents(base_path('lang/en.json')), true);
+
+        $keys = array_values(array_filter(array_keys($ar), fn ($key) => str_starts_with($key, 'refuse.')));
+
+        $this->assertGreaterThanOrEqual(20, count($keys), 'The refusal namespace looks truncated.');
+
+        foreach ($keys as $key) {
+            $this->assertArrayHasKey($key, $en, "$key is missing from en.json");
+            $this->assertNotSame('', trim($ar[$key]), "$key has no Arabic text");
+            $this->assertNotSame('', trim($en[$key]), "$key has no English text");
+
+            // A placeholder dropped in translation turns ":amount" into a literal in the sentence.
+            $placeholders = function (string $line): array {
+                preg_match_all('/:([a-z_]+)/', $line, $found);
+
+                return $found[1];
+            };
+            $this->assertSame($placeholders($en[$key]), $placeholders($ar[$key]), "Placeholders differ for $key");
+        }
+    }
+
     // ---- the redirect after an action --------------------------------------
 
     /**
@@ -822,10 +1013,13 @@ class AdminResourcesTest extends TestCase
 
     public function test_handover_group_shows_the_collectors_actual_collections(): void
     {
+        // collector_id is the column the ledger reads — `collected_by`/`recorded_by` are not
+        // columns on payments at all, so this payment used to be recorded with no collector and
+        // the collector's in-hand balance stayed at zero.
         \App\Models\Payment::create([
-            'subscriber_id' => $this->subscriber->id, 'bill_id' => null,
-            'amount' => 80, 'method' => 'cash', 'paid_at' => '2026-09-10',
-            'recorded_by' => $this->collector->id, 'collected_by' => $this->collector->id,
+            'subscriber_id' => $this->subscriber->id,
+            'collector_id' => $this->collector->id,
+            'amount' => 80, 'method' => 'cash',
         ]);
 
         Livewire::actingAs($this->admin)

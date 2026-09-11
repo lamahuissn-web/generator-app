@@ -195,13 +195,13 @@ class BillingService
         array $options = [],
     ): array {
         if (! preg_match(self::PERIOD_REGEX, $period)) {
-            throw new \RuntimeException("Invalid period format: {$period}");
+            throw new \RuntimeException(__('refuse.period_format', ['period' => $period]));
         }
         if (! $subscriber->isMetered()) {
-            throw new \RuntimeException('Flat-rate subscribers have no meter readings.');
+            throw new \RuntimeException(__('refuse.flat_has_no_readings'));
         }
         if ($subscriber->readingFor($period)) {
-            throw new \RuntimeException('A reading for this period already exists.');
+            throw new \RuntimeException(__('refuse.reading_exists'));
         }
 
         $estimated = (bool) ($options['estimated'] ?? false);
@@ -217,15 +217,15 @@ class BillingService
             $oldReading = (float) $swap['old_reading'];
             $newStart = (float) ($swap['new_start'] ?? 0);
             if ($oldReading < $prevValue) {
-                throw new \RuntimeException("The old meter's final reading cannot be lower than the previous reading.");
+                throw new \RuntimeException(__('refuse.old_meter_lower'));
             }
             if ($currentReading < $newStart) {
-                throw new \RuntimeException('The new meter reading cannot be lower than its starting value.');
+                throw new \RuntimeException(__('refuse.new_meter_lower_than_start'));
             }
             $consumption = round(($oldReading - $prevValue) + ($currentReading - $newStart), 2);
         } else {
             if ($currentReading < $prevValue) {
-                throw new \RuntimeException('The new reading cannot be lower than the previous one.');
+                throw new \RuntimeException(__('refuse.reading_lower'));
             }
             $consumption = round($currentReading - $prevValue, 2);
         }
@@ -343,7 +343,7 @@ class BillingService
         ?string $note = null,
     ): Reading {
         if ($subscriber->readingFor($period)) {
-            throw new \RuntimeException('A reading for this period already exists.');
+            throw new \RuntimeException(__('refuse.reading_exists'));
         }
 
         $reading = Reading::create([
@@ -385,7 +385,7 @@ class BillingService
     public static function periodRun(string $period, ?int $routeId = null, bool $commit = false, ?int $userId = null): array
     {
         if (! preg_match(self::PERIOD_REGEX, $period)) {
-            throw new \RuntimeException("Invalid period format: {$period}");
+            throw new \RuntimeException(__('refuse.period_format', ['period' => $period]));
         }
 
         $subscribers = Subscriber::query()
@@ -546,7 +546,7 @@ class BillingService
     public static function ensureFlatBill(Subscriber $subscriber, string $period): Bill
     {
         if (! $subscriber->isFlat()) {
-            throw new \RuntimeException('Flat bills only apply to flat-rate subscribers.');
+            throw new \RuntimeException(__('refuse.flat_bill_only_for_flat'));
         }
 
         // Special invoices are not the subscription bill: ignore them here, or one
@@ -612,7 +612,7 @@ class BillingService
         $excess = round($amount - $applied, 2);
 
         if ($applied <= 0) {
-            throw new \RuntimeException('This subscriber has no outstanding balance to collect.');
+            throw new \RuntimeException(__('refuse.nothing_to_collect'));
         }
 
         return DB::transaction(function () use ($subscriber, $collectorId, $applied, $note, $excess, $outstanding, $method) {
@@ -707,11 +707,11 @@ class BillingService
         $bill = Bill::where('reading_id', $reading->id)->first();
 
         if (! $bill) {
-            throw new \RuntimeException('No bill found for this reading.');
+            throw new \RuntimeException(__('refuse.no_bill_for_reading'));
         }
         if ((float) $bill->paid_amount > 0) {
             throw new \RuntimeException(
-                'This bill has been paid ('.money($bill->paid_amount).'). Reverse the related payments before deleting the reading.'
+                __('refuse.bill_paid_delete_reading', ['amount' => money_ltr((float) $bill->paid_amount)])
             );
         }
 
@@ -740,11 +740,11 @@ class BillingService
     public static function deleteFlatBill(Bill $bill): void
     {
         if ($bill->type !== Subscriber::TYPE_FLAT) {
-            throw new \RuntimeException('Metered bills are deleted through their reading.');
+            throw new \RuntimeException(__('refuse.metered_bill_delete_via_reading'));
         }
         if ((float) $bill->paid_amount > 0) {
             throw new \RuntimeException(
-                'This bill has been paid ('.money($bill->paid_amount).'). Reverse the related payments before deleting it.'
+                __('refuse.bill_paid_delete', ['amount' => money_ltr((float) $bill->paid_amount)])
             );
         }
 
@@ -784,7 +784,7 @@ class BillingService
     ): array {
         $period ??= self::currentPeriod();
         if (! preg_match(self::PERIOD_REGEX, $period)) {
-            throw new \RuntimeException("Invalid period format: {$period}");
+            throw new \RuntimeException(__('refuse.period_format', ['period' => $period]));
         }
 
         $clean = [];
@@ -797,10 +797,10 @@ class BillingService
                 continue;
             }
             if ($quantity <= 0) {
-                throw new \RuntimeException('An invoice line needs a quantity above zero.');
+                throw new \RuntimeException(__('refuse.line_quantity'));
             }
             if ($unitPrice < 0) {
-                throw new \RuntimeException('An invoice line cannot have a negative price.');
+                throw new \RuntimeException(__('refuse.line_price'));
             }
 
             $clean[] = [
@@ -812,12 +812,12 @@ class BillingService
         }
 
         if ($clean === []) {
-            throw new \RuntimeException('Add at least one line with a description and a price.');
+            throw new \RuntimeException(__('refuse.invoice_no_lines'));
         }
 
         $total = round(array_sum(array_column($clean, 'amount')), 2);
         if ($total <= 0) {
-            throw new \RuntimeException('The invoice total must be above zero.');
+            throw new \RuntimeException(__('refuse.invoice_total'));
         }
 
         $prevDebt = self::outstandingBefore($subscriber, $period);
@@ -882,11 +882,11 @@ class BillingService
     public static function deleteSpecialInvoice(Bill $bill): void
     {
         if (! $bill->isSpecial()) {
-            throw new \RuntimeException('Only special invoices are deleted this way.');
+            throw new \RuntimeException(__('refuse.only_special_invoices'));
         }
         if ((float) $bill->paid_amount > 0) {
             throw new \RuntimeException(
-                'This invoice has been paid ('.money($bill->paid_amount).'). Reverse the related payments before deleting it.'
+                __('refuse.invoice_paid_delete', ['amount' => money_ltr((float) $bill->paid_amount)])
             );
         }
 

@@ -167,7 +167,7 @@ class Subscriber extends Model
     public function convertToFlat(float $flatFee, string $reason, ?int $userId = null): void
     {
         if ($this->isFlat()) {
-            throw new \RuntimeException('This subscriber is already on a flat rate.');
+            throw new \RuntimeException(__('refuse.already_flat'));
         }
 
         $released = $this->meter_no;
@@ -205,7 +205,7 @@ class Subscriber extends Model
         ?int $userId = null,
     ): Reading {
         if ($this->isMetered()) {
-            throw new \RuntimeException('This subscriber already has a meter.');
+            throw new \RuntimeException(__('refuse.already_metered'));
         }
 
         $period ??= BillingService::currentPeriod();

@@ -64,7 +64,7 @@ class Settings extends Component
         ];
     }
 
-    public function save(): void
+    public function save()
     {
         $this->validate();
 
@@ -78,8 +78,14 @@ class Settings extends Component
             $this->state[$key] = (string) Setting::get($key);
         }
 
-        $this->dispatch('settings-saved');
+        // No livewire event here: nothing listened for it, and the redirect below reloads the
+        // page, so a browser event dispatched from this render could never be observed anyway.
         session()->flash('status', __('set.saved'));
+
+        // Redirect so the status is actually SEEN: the layout renders session('status'), and a
+        // Livewire update re-renders only this component — the flash was invisible here and then
+        // surfaced as a stale message on whatever page the operator opened next.
+        return $this->redirect(route('admin.settings'), navigate: false);
     }
 
     public function render()

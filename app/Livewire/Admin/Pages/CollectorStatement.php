@@ -170,7 +170,7 @@ class CollectorStatement extends Component
         $this->resetErrorBag();
     }
 
-    public function saveHandover(): void
+    public function saveHandover()
     {
         $collector = $this->collector();
         abort_if($collector === null, 404);
@@ -181,16 +181,35 @@ class CollectorStatement extends Component
             'handover.note' => ['nullable', 'string', 'max:200'],
         ]);
 
-        CashHandoverService::create([
-            'collector_id' => $collector->id,
-            'amount' => (float) $this->handover['amount'],
-            'handover_date' => $this->handover['handover_date'],
-            'note' => $this->handover['note'] ?: null,
-        ], auth()->id());
+        try {
+            CashHandoverService::create([
+                'collector_id' => $collector->id,
+                'amount' => (float) $this->handover['amount'],
+                'handover_date' => $this->handover['handover_date'],
+                'note' => $this->handover['note'] ?: null,
+            ], auth()->id());
+        } catch (\RuntimeException $e) {
+            // Cash the collector is not holding — a business rule, not a crash. Shown on the
+            // amount field and the modal stays open with the operator's typing intact.
+            $this->addError('handover.amount', $e->getMessage());
+
+            return null;
+        }
 
         $this->handoverOpen = false;
 
         session()->flash('status', __('col.quick_handover_done', ['amount' => money_ltr((float) $this->handover['amount'])]));
+
+        // Redirect back to this same statement — collector, range and the all-time toggle
+        // preserved — so the confirmation is rendered with the layout. Flashing without
+        // redirecting left the operator with no feedback and the message appearing later, on an
+        // unrelated page.
+        return $this->redirect(route('admin.collector-statement', array_filter([
+            'collector_id' => $this->collector()?->id,
+            'from' => $this->from()?->toDateString(),
+            'to' => $this->to()?->toDateString(),
+            'all_time' => $this->allTime ? 1 : null,
+        ], fn ($value) => $value !== null && $value !== '')), navigate: false);
     }
 
     public function render()

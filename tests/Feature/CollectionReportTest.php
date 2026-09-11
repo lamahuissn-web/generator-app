@@ -191,6 +191,84 @@ class CollectionReportTest extends TestCase
         $this->assertSame(1, AuditLog::where('action', 'handover.deleted')->count());
     }
 
+    /**
+     * A collector cannot hand over cash they are not holding.
+     *
+     * The in-hand figure is the number the operator reconciles the drawer against; letting a
+     * handover exceed it drives that balance negative, which is not a real position — it
+     * overstates what the collector still owes and corrupts every total built on it.
+     */
+    public function test_a_handover_larger_than_the_cash_in_hand_is_refused(): void
+    {
+        try {
+            CashHandoverService::create([
+                'collector_id' => $this->collectorA->id,
+                'amount' => 60.01,
+                'handover_date' => '2026-09-06',
+            ], $this->admin->id);
+
+            $this->fail('An over-handover was accepted.');
+        } catch (\RuntimeException $e) {
+            // The message carries the figure the operator can actually hand over.
+            $this->assertStringContainsString('60', $e->getMessage());
+        }
+
+        $this->assertDatabaseCount('cash_handovers', 0);
+        $this->assertSame(0, AuditLog::where('action', 'handover.created')->count(), 'A refused handover was audited as recorded.');
+        $this->assertSame(60.0, CollectionService::inHand($this->collectorA->id), 'The ledger moved.');
+    }
+
+    /** The whole of it is still allowed: that is the ordinary end-of-day handover. */
+    public function test_a_handover_of_exactly_the_cash_in_hand_is_allowed(): void
+    {
+        CashHandoverService::create([
+            'collector_id' => $this->collectorA->id,
+            'amount' => 60,
+            'handover_date' => '2026-09-06',
+        ], $this->admin->id);
+
+        $this->assertSame(0.0, CollectionService::inHand($this->collectorA->id));
+    }
+
+    /**
+     * Editing a handover measures against the balance with that record taken back out.
+     *
+     * The operator is REPLACING a record, not adding a second one — its current amount is what
+     * they got wrong, so it is available again. Measuring against the reduced balance would make
+     * a mistyped handover impossible to correct upwards, which is the exact case this form is
+     * opened for.
+     */
+    public function test_editing_a_handover_may_raise_it_back_to_the_full_in_hand(): void
+    {
+        $handover = CashHandoverService::create([
+            'collector_id' => $this->collectorA->id,
+            'amount' => 20,
+            'handover_date' => '2026-09-06',
+        ], $this->admin->id);
+
+        $this->assertSame(40.0, CollectionService::inHand($this->collectorA->id));
+
+        CashHandoverService::update($handover, [
+            'collector_id' => $this->collectorA->id,
+            'amount' => 60,
+            'handover_date' => '2026-09-06',
+            'note' => null,
+        ]);
+
+        $this->assertSame(0.0, CollectionService::inHand($this->collectorA->id), 'The correction was not applied.');
+
+        // …and one cent past what is available is still refused, so the correction path is not a
+        // hole straight through the guard.
+        $this->expectException(\RuntimeException::class);
+
+        CashHandoverService::update($handover->fresh(), [
+            'collector_id' => $this->collectorA->id,
+            'amount' => 60.01,
+            'handover_date' => '2026-09-06',
+            'note' => null,
+        ]);
+    }
+
     public function test_statement_lines_close_at_the_outstanding_balance(): void
     {
         $sub = $this->meteredSubscriber();
