@@ -444,6 +444,56 @@ class AdminResourcesTest extends TestCase
         $this->assertSame(25.0, (float) \App\Models\Reading::where('period', '2026-10')->firstOrFail()->consumption);
     }
 
+    // ---- layering ----------------------------------------------------------
+
+    /**
+     * The modal must sit above the panel's fixed chrome.
+     *
+     * KTUI lifts its modal to `z-index: 90` at RUNTIME; a modal rendered by Livewire is never
+     * initialised by that engine, so it keeps `z-index: auto` and paints in DOM order. The
+     * panel's fixed sidebar (z-30) and header (z-10) then show through, and — because the icon
+     * font sets `position: relative` on every glyph — so do the icons of anything later in the
+     * document. Measured before the fix: 535 of 2016 sampled points resolved to page elements
+     * instead of the modal.
+     *
+     * Asserted against the BUILT stylesheet, because that is what the browser loads: it proves
+     * the declaration survived Tailwind's build as well as the source. The floor is derived
+     * from the layout's own chrome rather than hard-coded, so raising the sidebar's z-index
+     * fails here instead of silently re-introducing the overlap.
+     */
+    public function test_the_modal_layer_sits_above_the_panels_fixed_chrome(): void
+    {
+        $layout = file_get_contents(resource_path('views/layouts/admin.blade.php'));
+
+        preg_match_all('/z-(\d+)\b/', $layout, $chrome);
+        $this->assertNotEmpty($chrome[1], 'No z-index utilities found in the layout — has the shell changed?');
+        $highestChrome = max(array_map('intval', $chrome[1]));
+        $this->assertGreaterThanOrEqual(30, $highestChrome, 'Expected the fixed sidebar to be a high layer.');
+
+        $sheet = glob(public_path('build/assets/app-*.css'));
+        $this->assertNotEmpty($sheet, 'No built stylesheet — run npm run build before the suite.');
+
+        $css = file_get_contents($sheet[0]);
+
+        // The rule under test: `.kt-modal{z-index:N}`.
+        preg_match_all('/\.kt-modal\{([^}]*)\}/', $css, $rules);
+
+        $found = null;
+        foreach ($rules[1] as $declarations) {
+            if (preg_match('/z-index:\s*(-?\d+)/', $declarations, $z)) {
+                $found = (int) $z[1];
+            }
+        }
+
+        $this->assertNotNull($found, 'The built CSS declares no z-index on .kt-modal: a statically rendered modal will paint under the sidebar.');
+
+        $this->assertGreaterThan(
+            $highestChrome,
+            $found,
+            sprintf('The modal layer (%d) does not clear the panel chrome (%d).', $found, $highestChrome),
+        );
+    }
+
     // ---- record actions ---------------------------------------------------
 
     public function test_collect_action_prefills_the_outstanding_amount_and_settles_the_bill(): void

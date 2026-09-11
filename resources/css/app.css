@@ -193,6 +193,21 @@
     display: flex;
 }
 
+/* KTUI's modal sets `z-index: 90` on itself at RUNTIME (its `_defaultConfig.zindex`), which
+   is the only reason a metronic modal covers the fixed chrome around it. Our modals are
+   rendered by Livewire and never initialised by that engine, so they sat at `z-index: auto`
+   and painted in DOM order — below the sidebar (z-30), which showed through over the dialog.
+   Restating the engine's own value here restores the layering it would have applied.
+   90 clears this layout's positioned layers: header 10, mobile scrim 20, sidebar 30.
+
+   The BACKDROP gets no z-index, deliberately: it is a child of the modal in our markup
+   (KTUI appends its own to <body>), so a positive value would lift it above the sibling
+   content wrapper — `position: relative` with z-index auto — and the dimming layer would
+   cover the dialog. It already paints below the dialog by DOM order. */
+.kt-modal {
+    z-index: 90;
+}
+
 /* Keenicons render from a webfont; the glyph box has to be sized explicitly
    when an icon sits inside a small badge or a dense meta row. */
 .ki-xs {
