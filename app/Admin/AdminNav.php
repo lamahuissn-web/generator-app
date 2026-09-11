@@ -56,6 +56,13 @@ class AdminNav
                         'match' => ['admin.readings.*'],
                     ],
                     [
+                        'label' => __('mdl.reading_entry'),
+                        'icon' => 'ki-notepad-edit',
+                        'route' => 'admin.readings-entry',
+                        'match' => ['admin.readings-entry'],
+                        'component' => \App\Livewire\Admin\Pages\ReadingEntry::class,
+                    ],
+                    [
                         'label' => __('mdl.reading_board'),
                         'icon' => 'ki-chart-simple',
                         'route' => 'admin.readings-board',

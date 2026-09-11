@@ -1,12 +1,13 @@
 <?php
 
-namespace App\Livewire\Collector;
+namespace App\Livewire;
 
 use App\Models\Bill;
 use App\Models\Reading;
 use App\Models\Route;
 use App\Models\Subscriber;
 use App\Services\BillingService;
+use App\Services\ReadingQuality;
 use Livewire\Component;
 
 /**
@@ -22,22 +23,52 @@ use Livewire\Component;
  *
  * A blank row is not an error: it is a house nobody answered. It stays pending, which is
  * exactly the state the route list shows for it afterwards.
+ *
+ * Shared by both portals: the collector's route screen (fixed to one area, this cycle) and the
+ * office's entry screen (any area, any cycle). One implementation, because a second one would
+ * drift — and the day it drifted the field and the office would be entering readings by different
+ * rules.
  */
-final class RouteReadings extends Component
+final class RouteReadingSheet extends Component
 {
-    /**
-     * A consumption this many times the subscriber's own average gets flagged.
-     *
-     * Not a refusal: a household that bought an AC reads far above last month's average
-     * and is still telling the truth. The collector sees the chip, the office sees it in
-     * the audit trail, and nobody is blocked in the street.
-     */
-    private const JUMP_FACTOR = 3.0;
-
     public Route $route;
 
-    /** The cycle being read: this month, always. A worklist is about now. */
-    public string $period;
+    /**
+     * The cycle being read: this month by default. A worklist is about now, but the office reads
+     * last month's paper slips in too, so the period is a property rather than a constant.
+     *
+     * Declared with a default because the office's screen passes it in while the field's does not —
+     * a typed property with no default is uninitialised when mount() reads it.
+     */
+    public string $period = '';
+
+    /**
+     * Who is filling this in, for the two links that leave the screen.
+     *
+     * The sheet is rendered to collectors and to the office, and they do not share a subscriber
+     * page (a collector in /admin is bounced back out by middleware, and vice versa). The links
+     * are resolved from the signed-in role rather than passed in, so a nested render cannot hand a
+     * collector a link that 302s them away from the row they were reading.
+     */
+    public function isOffice(): bool
+    {
+        return (bool) auth()->user()?->isAdmin();
+    }
+
+    public function subscriberUrl(int $subscriberId): string
+    {
+        return $this->isOffice()
+            ? route('admin.subscribers.show', $subscriberId)
+            : route('collector.subscriber.show', $subscriberId);
+    }
+
+    /** Where the back arrow goes: the screen that opened this worklist. */
+    public function backUrl(): string
+    {
+        return $this->isOffice()
+            ? route('admin.readings.index')
+            : route('collector.route.show', $this->route);
+    }
 
     /** @var array<int|string, string> subscriber id => what the collector typed */
     public array $values = [];
@@ -59,7 +90,12 @@ final class RouteReadings extends Component
     public function mount(Route $route): void
     {
         $this->route = $route;
-        $this->period = BillingService::currentPeriod();
+
+        // The period may arrive from the caller (the office reads any cycle); this month is only
+        // the default, not an assignment that would overwrite what the screen asked for.
+        if (! preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $this->period)) {
+            $this->period = BillingService::currentPeriod();
+        }
     }
 
     // ---- the worklist --------------------------------------------------------
@@ -202,7 +238,7 @@ final class RouteReadings extends Component
     public function typedCount(): int
     {
         return collect($this->roster()['rows'])
-            ->reject(fn (array $row): bool => $row['done'])
+            ->reject(fn (array $row): bool => $row['done'] || $row['broken'])
             ->filter(fn (array $row): bool => $this->typed((int) $row['id']) !== null)
             ->count();
     }
@@ -214,7 +250,7 @@ final class RouteReadings extends Component
         $total = 0.0;
 
         foreach ($this->roster()['rows'] as $row) {
-            if ($row['done']) {
+            if ($row['done'] || $row['broken']) {
                 continue;
             }
             if (($value = $this->typed((int) $row['id'])) !== null) {
@@ -243,7 +279,9 @@ final class RouteReadings extends Component
 
         $batch = [];
         foreach ($this->roster()['rows'] as $row) {
-            if ($row['done']) {
+            if ($row['done'] || $row['broken']) {
+                // A reported-dead meter is the office's case: the field neither types a value for
+                // it nor guesses one, and its input is not on the screen.
                 continue;
             }
             if (($value = $this->typed((int) $row['id'])) !== null) {
@@ -336,10 +374,10 @@ final class RouteReadings extends Component
      * What the row would bill if this value were the reading.
      *
      * The screen's own arithmetic, shown while the collector types; the authoritative
-     * figures are the ones BillingService writes on save. The warnings are the two the
-     * collector cannot see from the row alone: a value that repeats the last cycle, and one
-     * that runs far above this subscriber's own average — which is a query per subscriber,
-     * so it is only paid for on a row that actually carries a value.
+     * figures are the ones BillingService writes on save. The warnings come from
+     * ReadingQuality — the same rule the office's board uses on readings already billed, so
+     * "a jump" means one thing in this app. Both are non-blocking: the only value refused
+     * below is one that is lower than the last reading, which cannot be measured.
      *
      * @param  array<string, mixed>  $row
      * @return array{consumption: float, usage: float, total: float, due: float, warning: ?string, average: ?float}
@@ -353,15 +391,15 @@ final class RouteReadings extends Component
         $average = null;
 
         if ($consumption < 0) {
+            // Not a quality verdict but an impossible value: nothing was measured, and the
+            // save below will refuse it. Said here so the collector never walks away from a
+            // house carrying a reading that cannot be recorded.
             $warning = 'lower';
-        } elseif ($consumption === 0.0) {
-            $warning = 'zero';
         } else {
-            $suggested = BillingService::suggestedConsumption($row['subscriber'], $this->period);
-            $average = $suggested === null ? null : (float) $suggested['kwh'];
+            $warning = ReadingQuality::verdict($row['subscriber'], $this->period, $consumption);
 
-            if ($average !== null && $consumption > $average * self::JUMP_FACTOR) {
-                $warning = 'jump';
+            if ($warning === ReadingQuality::JUMP) {
+                $average = ReadingQuality::average($row['subscriber'], $this->period);
             }
         }
 
@@ -407,7 +445,7 @@ final class RouteReadings extends Component
     {
         $roster = $this->roster();
 
-        return view('livewire.collector.route-readings', [
+        return view('livewire.route-reading-sheet', [
             'rows' => $this->rows(),
             'progress' => $this->progress(),
             'typed' => $this->typedCount(),

@@ -50,6 +50,8 @@ class ResourceRegistry
                 'title' => __('mdl.readings'),
                 'singular' => __('mdl.reading'),
                 'description' => __('t.readings_sub'),
+                'header' => 'admin.resource.readings-header',
+                'actions_view' => 'admin.resource.readings-actions',
             ],
             'bills' => [
                 'table' => BillsTable::class,

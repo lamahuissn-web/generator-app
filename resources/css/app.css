@@ -148,6 +148,18 @@
     color: var(--color-red-500);
 }
 
+/* The one state that is neither good nor failed: something is waiting on a person.
+   Added rather than reusing tile-danger, because a screen that paints "3 readings missing"
+   the same red as "a meter burned out" teaches the operator to ignore both. */
+.tile-warning {
+    background-color: color-mix(in oklab, var(--color-yellow-400) 20%, transparent);
+    color: var(--color-amber-700);
+}
+
+.dark .tile-warning {
+    color: var(--color-amber-400);
+}
+
 .tile-muted {
     background-color: var(--muted);
     color: var(--secondary-foreground);

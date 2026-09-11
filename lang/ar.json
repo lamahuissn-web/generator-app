@@ -90,8 +90,6 @@
     "portal.reading_sum_total": "مجموع الفواتير",
     "portal.bulk_help": "اكتب رقم العدّاد — Enter ينقلك على السطر اللي بعده. السطر الفاضي بيضل بلا قراءة.",
     "portal.warn_lower": "أقل من السابقة",
-    "portal.warn_zero": "صفر استهلاك",
-    "portal.warn_jump": "أعلى من المعدّل بكثير (:avg kWh)",
     "portal.broken_undo": "تراجع عن البلاغ",
     "portal.broken_has_value": "في رقم مكتوب على هالسطر — امسحه أولاً إذا العدّاد معطّل.",
     "portal.err_reading_broken": "العدّاد مبلَّغ معطّل — المكتب بده يتصرّف قبل أي قراءة.",

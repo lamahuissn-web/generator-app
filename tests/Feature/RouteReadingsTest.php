@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Livewire\Collector\RouteReadings;
+use App\Livewire\RouteReadingSheet;
 use App\Models\Bill;
 use App\Models\Reading;
 use App\Models\Route;
@@ -131,7 +131,7 @@ class RouteReadingsTest extends TestCase
         $this->reading($this->third, $this->period, 2400, 296);
 
         $this->actingAs($this->collector);
-        $component = Livewire::test(RouteReadings::class, ['route' => $this->route]);
+        $component = Livewire::test(RouteReadingSheet::class, ['route' => $this->route]);
 
         $this->assertSame(['total' => 3, 'done' => 1, 'pending' => 2], $component->instance()->progress());
 
@@ -145,7 +145,7 @@ class RouteReadingsTest extends TestCase
         $this->subscriber('Stopped House', '9999', Subscriber::TYPE_METERED, Subscriber::STATUS_INACTIVE);
 
         $this->actingAs($this->collector);
-        $component = Livewire::test(RouteReadings::class, ['route' => $this->route]);
+        $component = Livewire::test(RouteReadingSheet::class, ['route' => $this->route]);
 
         // Only live meters are in the worklist…
         $this->assertSame(3, $component->instance()->progress()['total']);
@@ -162,7 +162,7 @@ class RouteReadingsTest extends TestCase
     {
         $this->actingAs($this->collector);
 
-        $component = Livewire::test(RouteReadings::class, ['route' => $this->route])
+        $component = Livewire::test(RouteReadingSheet::class, ['route' => $this->route])
             ->set("values.{$this->first->id}", 1496)
             ->set("values.{$this->second->id}", 1120);
 
@@ -192,7 +192,7 @@ class RouteReadingsTest extends TestCase
 
         $this->actingAs($this->collector);
 
-        $component = Livewire::test(RouteReadings::class, ['route' => $this->route])
+        $component = Livewire::test(RouteReadingSheet::class, ['route' => $this->route])
             ->set("values.{$this->first->id}", 1490)   // below the previous 1500: refused
             ->set("values.{$this->second->id}", 1120); // fine
 
@@ -219,7 +219,7 @@ class RouteReadingsTest extends TestCase
         $this->actingAs($this->collector);
 
         // A stale page can still post a value into an already-recorded row.
-        $component = Livewire::test(RouteReadings::class, ['route' => $this->route])
+        $component = Livewire::test(RouteReadingSheet::class, ['route' => $this->route])
             ->set("values.{$this->first->id}", 1999)
             ->set("values.{$this->second->id}", 1120);
 
@@ -234,12 +234,46 @@ class RouteReadingsTest extends TestCase
     {
         $this->actingAs($this->collector);
 
-        Livewire::test(RouteReadings::class, ['route' => $this->route])
+        Livewire::test(RouteReadingSheet::class, ['route' => $this->route])
             ->call('save')
             ->assertSet('savedCount', null)
             ->assertSee('Nothing typed yet');
 
         $this->assertSame(0, Reading::count());
+    }
+
+    /**
+     * The save button is never disabled by the server's own count.
+     *
+     * A field is bound with wire:model.blur, so while the collector is typing the server still sees
+     * zero typed rows. A `@disabled($typed === 0)` on the button therefore arrives at the browser as
+     * a disabled control, and the browser dispatches no click at all on a disabled button: the
+     * collector typed three meters, pressed Save, and nothing happened — no request, no message,
+     * nothing to see. The empty-save guard belongs in save(), which answers with a message.
+     */
+    public function test_the_save_button_is_never_disabled_while_values_are_still_only_in_the_browser(): void
+    {
+        $this->actingAs($this->collector);
+
+        $html = Livewire::test(RouteReadingSheet::class, ['route' => $this->route])->html();
+
+        $tag = null;
+        if (preg_match('/<button[^>]*wire:click="save"[^>]*>/', $html, $m) === 1) {
+            $tag = $m[0];
+        }
+
+        $this->assertNotNull($tag, 'The save button is the screen\'s whole point — it must be there.');
+
+        // A bare `disabled` attribute, not the loading guard's own wire:loading.attr="disabled".
+        $this->assertSame(
+            0,
+            preg_match('/(?<![\w=".])disabled(?![\w="-])/', $tag),
+            'A disabled attribute is set on the save button, so a click cannot reach it: '.$tag,
+        );
+
+        // The guard left in place watches save's own request and nothing else.
+        $this->assertStringContainsString('wire:loading.attr="disabled"', $tag);
+        $this->assertStringContainsString('wire:target="save"', $tag);
     }
 
     // ---- what the collector sees before saving --------------------------------
@@ -253,7 +287,7 @@ class RouteReadingsTest extends TestCase
 
         $this->actingAs($this->collector);
 
-        $component = Livewire::test(RouteReadings::class, ['route' => $this->route])
+        $component = Livewire::test(RouteReadingSheet::class, ['route' => $this->route])
             ->set("values.{$this->first->id}", 1600);
 
         $row = $this->row($component, $this->first);
@@ -274,7 +308,7 @@ class RouteReadingsTest extends TestCase
 
         $this->actingAs($this->collector);
 
-        $component = Livewire::test(RouteReadings::class, ['route' => $this->route])
+        $component = Livewire::test(RouteReadingSheet::class, ['route' => $this->route])
             ->set("values.{$this->second->id}", 880);
 
         $this->assertSame('zero', $this->row($component, $this->second)['preview']['warning']);
@@ -287,7 +321,7 @@ class RouteReadingsTest extends TestCase
 
         $this->actingAs($this->collector);
 
-        $component = Livewire::test(RouteReadings::class, ['route' => $this->route])
+        $component = Livewire::test(RouteReadingSheet::class, ['route' => $this->route])
             ->set("values.{$this->second->id}", 500);
 
         $row = $this->row($component, $this->second);
@@ -303,7 +337,7 @@ class RouteReadingsTest extends TestCase
 
         $this->actingAs($this->collector);
 
-        $component = Livewire::test(RouteReadings::class, ['route' => $this->route])
+        $component = Livewire::test(RouteReadingSheet::class, ['route' => $this->route])
             ->set("values.{$this->first->id}", 1200)  // 200 kWh
             ->set("values.{$this->second->id}", 800); // 300 kWh
 
@@ -319,7 +353,7 @@ class RouteReadingsTest extends TestCase
     {
         $this->actingAs($this->collector);
 
-        $component = Livewire::test(RouteReadings::class, ['route' => $this->route])
+        $component = Livewire::test(RouteReadingSheet::class, ['route' => $this->route])
             ->call('reportBroken', $this->third->id);
 
         $this->assertNotNull($this->third->fresh()->meter_broken_reported_at);
@@ -334,7 +368,7 @@ class RouteReadingsTest extends TestCase
     {
         $this->actingAs($this->collector);
 
-        Livewire::test(RouteReadings::class, ['route' => $this->route])
+        Livewire::test(RouteReadingSheet::class, ['route' => $this->route])
             ->set("values.{$this->third->id}", 2500)
             ->call('reportBroken', $this->third->id)
             ->assertSee('clear it first');

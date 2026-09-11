@@ -9,7 +9,7 @@
      * from BillingService when the field is left (wire:model.blur) and again on save.
      * Registered once per page, so no listener can pile up across Livewire renders.
      */
-    window.RouteReadings = {
+    window.ReadingSheet = {
         money: function (n) {
             return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         },
@@ -19,7 +19,7 @@
         refresh: function (input) {
             var row = input.closest('[data-reading-row]');
             var dash = function (name) {
-                var el = RouteReadings.cell(row, name);
+                var el = ReadingSheet.cell(row, name);
                 if (el) { el.textContent = '—'; }
             };
             var raw = input.value.trim();
@@ -39,7 +39,7 @@
             var usage = Math.round(consumption * price * 100) / 100;
             var due = Math.round((usage + maintenance + debt) * 100) / 100;
 
-            var delta = RouteReadings.cell(row, 'delta');
+            var delta = ReadingSheet.cell(row, 'delta');
             if (delta) {
                 delta.textContent = consumption.toLocaleString('en-US', { maximumFractionDigits: 0 });
                 // A reading below the last one is refused on save; say so in red now rather
@@ -48,11 +48,11 @@
                 delta.classList.toggle('text-mono', consumption >= 0);
             }
 
-            var usageCell = RouteReadings.cell(row, 'usage');
-            if (usageCell) { usageCell.textContent = RouteReadings.money(usage); }
+            var usageCell = ReadingSheet.cell(row, 'usage');
+            if (usageCell) { usageCell.textContent = ReadingSheet.money(usage); }
 
-            var dueCell = RouteReadings.cell(row, 'due');
-            if (dueCell) { dueCell.textContent = RouteReadings.money(due); }
+            var dueCell = ReadingSheet.cell(row, 'due');
+            if (dueCell) { dueCell.textContent = ReadingSheet.money(due); }
         },
         enter: function (input, event) {
             if (event.key !== 'Enter') { return; }
@@ -62,7 +62,15 @@
             var inputs = Array.prototype.slice.call(document.querySelectorAll('[data-reading-input]'));
             var next = inputs[inputs.indexOf(input) + 1];
 
-            if (next) { next.focus(); }
+            if (next) {
+                next.focus();
+            } else {
+                // The last row: nothing to jump to, so leave the field instead of doing nothing.
+                // The value is bound on blur, and a field that keeps focus while the collector
+                // reaches for Save has never reached the server — the reading is then silently
+                // missing from the save.
+                input.blur();
+            }
         },
     };
 </script>
@@ -72,7 +80,7 @@
     {{-- Heading: which route, which cycle, how much of it is done --}}
     <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div class="flex min-w-0 items-center gap-3">
-            <a href="{{ route('collector.route.show', $route) }}" class="kt-btn kt-btn-icon kt-btn-outline shrink-0">
+            <a href="{{ $this->backUrl() }}" class="kt-btn kt-btn-icon kt-btn-outline shrink-0">
                 <i class="ki-filled ki-arrow-left rtl:rotate-180"></i>
             </a>
             <div class="min-w-0">
@@ -122,7 +130,7 @@
             <div class="kt-card-content flex flex-col items-center gap-2 text-center">
                 <span class="tile tile-muted size-12 text-xl"><i class="ki-filled ki-bill"></i></span>
                 <span class="font-semibold text-mono">{{ __('portal.bulk_no_metered') }}</span>
-                <a href="{{ route('collector.route.show', $route) }}" class="kt-btn kt-btn-lg mt-1 justify-center">
+                <a href="{{ $this->backUrl() }}" class="kt-btn kt-btn-lg mt-1 justify-center">
                     {{ __('portal.back') }}
                 </a>
             </div>
@@ -200,11 +208,23 @@
                                     {{ __('portal.reading_estimated_badge') }}
                                 </span>
                             @endif
+                        @elseif ($row['broken'])
+                            {{-- A reported-dead meter has no value to type. The meter cannot answer,
+                                 so an input here invites a number that cannot exist — and the case is
+                                 the office's to close, not the collector's to fill in. The two ways
+                                 out are the meter working again (undo, below) or the office deciding. --}}
+                            <div class="mt-2.5 rounded-lg border border-yellow-400/40 bg-yellow-400/10 p-3">
+                                <div class="flex items-center gap-1.5 text-xs font-semibold text-yellow-700 dark:text-yellow-600">
+                                    <i class="ki-filled ki-information"></i>
+                                    {{ __('t.meter_broken_badge') }}
+                                </div>
+                                <p class="mt-1 text-sm text-secondary-foreground">{{ __('portal.broken_waiting_office') }}</p>
+                            </div>
                         @else
                             <input type="text" inputmode="numeric" enterkeyhint="next" autocomplete="off" dir="ltr"
                                    data-reading-input
-                                   oninput="RouteReadings.refresh(this)"
-                                   onkeydown="RouteReadings.enter(this, event)"
+                                   oninput="ReadingSheet.refresh(this)"
+                                   onkeydown="ReadingSheet.enter(this, event)"
                                    wire:model.blur="values.{{ $row['id'] }}"
                                    placeholder="{{ $row['previous'] > 0 ? number_format($row['previous'], 0) : __('portal.reading_ph') }}"
                                    class="kt-input mt-2 w-full py-3 text-center text-2xl font-semibold tabular-nums">
@@ -234,21 +254,22 @@
                             </div>
 
                             @if ($preview && $preview['warning'])
+                                {{-- The wording comes from ReadingQuality, the same source the
+                                     office's board reads: one phrasing for what "a zero" and
+                                     "a jump" mean in this app. --}}
                                 <div class="mt-2">
-                                    @if ($preview['warning'] === 'lower')
-                                        <span class="kt-badge kt-badge-sm kt-badge-destructive">
+                                    <span @class([
+                                        'kt-badge kt-badge-sm',
+                                        'kt-badge-destructive' => $preview['warning'] === 'lower',
+                                        'kt-badge-outline kt-badge-warning' => $preview['warning'] !== 'lower',
+                                    ])>
+                                        @if ($preview['warning'] === 'lower')
                                             <i class="ki-filled ki-information"></i>
                                             {{ __('portal.warn_lower') }}
-                                        </span>
-                                    @elseif ($preview['warning'] === 'zero')
-                                        <span class="kt-badge kt-badge-sm kt-badge-outline kt-badge-warning">
-                                            {{ __('portal.warn_zero') }}
-                                        </span>
-                                    @else
-                                        <span class="kt-badge kt-badge-sm kt-badge-outline kt-badge-warning">
-                                            {{ __('portal.warn_jump', ['avg' => number_format((float) $preview['average'], 0)]) }}
-                                        </span>
-                                    @endif
+                                        @else
+                                            {{ \App\Services\ReadingQuality::label($preview['warning'], $preview['average']) }}
+                                        @endif
+                                    </span>
                                 </div>
                             @endif
                         @endif
@@ -277,7 +298,7 @@
 
                             <span class="grow"></span>
 
-                            <a href="{{ route('collector.subscriber.show', $row['id']) }}"
+                            <a href="{{ $this->subscriberUrl($row['id']) }}"
                                class="kt-btn kt-btn-sm kt-btn-ghost">
                                 {{ __('portal.overview') }}
                             </a>
@@ -312,8 +333,14 @@
                         </div>
                     </div>
 
+                    {{-- Never disabled on the server's own count.
+                         The count is computed per render and the values arrive on blur
+                         (wire:model.blur), so while the collector is typing the server still sees
+                         zero — and a disabled button swallows the click that would have carried the
+                         new values. Measured in use: type three meters, press Save, nothing. The
+                         guard against an empty save is in save() itself, which says "nothing typed";
+                         the only disable left here watches save's own request. --}}
                     <button type="button" wire:click="save" wire:loading.attr="disabled" wire:target="save"
-                            @disabled($typed === 0)
                             class="kt-btn kt-btn-lg shrink-0">
                         <i class="ki-filled ki-check"></i>
                         {{ __('portal.save_readings') }}

@@ -42,6 +42,17 @@ class DataTable extends Component
     #[Url(except: [])]
     public array $filters = [];
 
+    /**
+     * A message about what just happened (a reading deleted, an export that has no columns).
+     *
+     * Component state rather than a session flash: this table renders INSIDE a page, so a flashed
+     * message was written to the session and only ever painted on the next full page load — the
+     * operator saw the row disappear with no word about why, and a refused action was silent.
+     */
+    public ?string $flash = null;
+
+    public string $flashType = 'success';
+
     public int $perPage = 25;
 
     public function mount(string $table, array $constraints = []): void
@@ -123,16 +134,16 @@ class DataTable extends Component
         $row = $this->baseQuery()->whereKey($id)->first();
 
         if (! $row || ! $this->definition()->canDelete($row)) {
-            session()->flash('error', __('t.delete_not_allowed'));
+            $this->flashMessage(__('t.delete_not_allowed'), 'error');
 
             return;
         }
 
         try {
             $this->definition()->deleteRecord($row);
-            session()->flash('status', __('t.deleted_ok'));
+            $this->flashMessage(__('t.deleted_ok'));
         } catch (\RuntimeException $e) {
-            session()->flash('error', $e->getMessage());
+            $this->flashMessage($e->getMessage(), 'error');
         }
 
         $this->resetPage();
@@ -149,12 +160,63 @@ class DataTable extends Component
 
         try {
             $result = $this->definition()->runAction($key, $row);
-            session()->flash($result['ok'] ? 'status' : 'error', $result['message']);
+            $this->flashMessage($result['message'], $result['ok'] ? 'success' : 'error');
         } catch (\RuntimeException $e) {
-            session()->flash('error', $e->getMessage());
+            $this->flashMessage($e->getMessage(), 'error');
         }
 
         $this->resetPage();
+    }
+
+    public function dismissFlash(): void
+    {
+        $this->flash = null;
+    }
+
+    /** Every outcome of an action goes through here, so one place decides how it is announced. */
+    protected function flashMessage(string $message, string $type = 'success'): void
+    {
+        $this->flash = $message;
+        $this->flashType = $type;
+    }
+
+    /**
+     * Stream the whole filtered list as CSV.
+     *
+     * The export runs the SAME query the table renders — search box, every filter and the
+     * current sort included — so what the operator downloaded is what they were looking at.
+     * Chunked rather than loaded: this is the one place in the panel that reads a list without
+     * a page limit, and a year of readings is not a small array.
+     */
+    public function exportCsv()
+    {
+        $definition = $this->definition();
+
+        if ($definition->csvHeader() === []) {
+            $this->flashMessage(__('t.export_unavailable'), 'error');
+
+            return null;
+        }
+
+        // The download happened; say so, because the browser gives no other sign on a phone.
+        $this->flashMessage(__('t.exported'));
+
+        return response()->streamDownload(function () use ($definition): void {
+            $handle = fopen('php://output', 'w');
+
+            // Excel opens a UTF-8 CSV as garbage without it; every export in this app carries it.
+            fwrite($handle, "\xEF\xBB\xBF");
+            fputcsv($handle, $definition->csvHeader());
+
+            $this->applySort($this->filteredQuery())
+                ->chunk(500, function ($rows) use ($handle, $definition): void {
+                    foreach ($rows as $row) {
+                        fputcsv($handle, $definition->csvRow($row));
+                    }
+                });
+
+            fclose($handle);
+        }, $definition->csvFilename(), ['Content-Type' => 'text/csv']);
     }
 
     // ---- query ---------------------------------------------------------------

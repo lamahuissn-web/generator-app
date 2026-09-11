@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Livewire\Admin\Pages\MeterCases;
+use App\Livewire\RouteReadingSheet;
 use App\Livewire\Collector\SubscriberShow;
 use App\Models\Bill;
 use App\Models\Reading;
@@ -320,6 +321,27 @@ class MeterCasesTest extends TestCase
     }
 
     // ---- the field's side of the same rule ------------------------------------
+
+    public function test_a_reported_dead_meter_has_no_input_on_the_route_worklist(): void
+    {
+        $this->subscriber->reportMeterBroken('معطّل', $this->collector->id);
+
+        $this->actingAs($this->collector);
+
+        $component = Livewire::test(RouteReadingSheet::class, ['route' => $this->route]);
+
+        $this->assertTrue($component->instance()->rows()[0]['broken']);
+
+        $component->assertSee('المكتب بيقرّر')
+            ->assertDontSee('data-reading-input');
+
+        // Nothing about a dead meter can reach a save, even from a stale page.
+        $component->set('values.'.$this->subscriber->id, 1400)->call('save');
+
+        $component->assertSet('savedCount', null);
+        $this->assertSame(0, Reading::where('period', now()->format('Y-m'))->count());
+        $this->assertSame(0, Bill::where('period', now()->format('Y-m'))->count());
+    }
 
     public function test_a_reported_dead_meter_cannot_be_read_from_the_house_screen_either(): void
     {

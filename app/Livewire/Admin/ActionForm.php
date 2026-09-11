@@ -36,6 +36,14 @@ class ActionForm extends Component
      */
     public string $returnTo = '';
 
+    /**
+     * Render the trigger as a bare icon button.
+     *
+     * A table row has room for an icon and a tooltip, not for a sentence; a profile header has room
+     * for the sentence. Same modal either way, so only the trigger changes.
+     */
+    public bool $iconOnly = false;
+
     public function mount(string $action, int $subjectId, ?string $returnTo = null): void
     {
         if (! is_subclass_of($action, ActionDefinition::class)) {

@@ -137,6 +137,38 @@ abstract class TableDefinition
         throw new \RuntimeException(__('t.action_not_allowed'));
     }
 
+    // ---- CSV export -----------------------------------------------------------
+
+    /**
+     * Column headings for this list's CSV export, or [] when the list has no export.
+     *
+     * Returning [] is what removes the export button, so a list that would export something
+     * useless (an audit log with a JSON payload) simply does not offer one.
+     *
+     * @return array<int, string>
+     */
+    public function csvHeader(): array
+    {
+        return [];
+    }
+
+    /** One CSV line for a row. Must return as many values as csvHeader() has headings. */
+    public function csvRow(Model $row): array
+    {
+        return [];
+    }
+
+    /**
+     * The download's file name.
+     *
+     * Screens that export a CYCLE override this to carry the period: two exports of different
+     * months must not land in the same file name, because the office keeps both.
+     */
+    public function csvFilename(): string
+    {
+        return str(class_basename(static::class))->kebab()->toString().'-'.now()->format('Y-m-d').'.csv';
+    }
+
     /** Runs before a row is deleted through the table. Throwing cancels the delete. */
     public function deleteRecord(Model $row): void
     {

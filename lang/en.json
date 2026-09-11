@@ -90,8 +90,6 @@
     "portal.reading_sum_total": "Bills total",
     "portal.bulk_help": "Type the meter value — Enter moves to the next row. A blank row stays pending.",
     "portal.warn_lower": "Below the previous reading",
-    "portal.warn_zero": "Zero consumption",
-    "portal.warn_jump": "Far above the average (:avg kWh)",
     "portal.broken_undo": "Undo the report",
     "portal.broken_has_value": "There is a value typed on this row — clear it first if the meter is dead.",
     "portal.err_reading_broken": "The meter is reported dead — the office has to act before a reading.",

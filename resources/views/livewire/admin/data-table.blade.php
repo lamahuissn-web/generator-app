@@ -31,6 +31,27 @@
      background the controls read as loose text, and Metronic's own lists put the search,
      filters and "new" action on the card's own surface with a divider under them. --}}
 <div class="kt-card">
+    @if ($flash)
+        {{-- An action's outcome, rendered where the action was taken. The layout's session alerts
+             only paint on a full page load, and this table acts in place. --}}
+        <div @class([
+                'kt-alert kt-alert-light m-4 mb-0',
+                'kt-alert-success' => $flashType === 'success',
+                'kt-alert-destructive' => $flashType === 'error',
+                'kt-alert-warning' => $flashType === 'warning',
+             ]) role="status">
+            <div class="kt-alert-icon"><i class="ki-filled ki-information text-base"></i></div>
+            <div class="kt-alert-content">
+                <div class="kt-alert-title">{{ $flash }}</div>
+            </div>
+            <div class="kt-alert-actions">
+                <button type="button" wire:click="dismissFlash" class="kt-btn kt-btn-icon kt-btn-sm kt-btn-ghost shrink-0">
+                    <i class="ki-filled ki-cross"></i>
+                </button>
+            </div>
+        </div>
+    @endif
+
     @if ($hasToolbar)
         <div class="kt-card-header flex-wrap gap-2.5 py-3">
             <div class="flex flex-wrap items-center gap-2.5">
@@ -70,17 +91,31 @@
             </div>
 
             @if ($actions !== [])
-                <div class="kt-card-toolbar">
+                <div class="kt-card-toolbar flex flex-wrap items-center gap-2">
                     @foreach ($actions as $action)
-                        @php $url = isset($action['url']) ? ($action['url'])(null) : null; @endphp
-                        <a href="{{ $url }}" @if ($action['new_tab'] ?? false) target="_blank" rel="noopener" @endif
-                           @class([
-                               'kt-btn kt-btn-sm',
-                               'kt-btn-outline' => ($action['variant'] ?? 'primary') !== 'primary',
-                           ])>
-                            @if (! empty($action['icon'])) <i class="ki-filled {{ $action['icon'] }}"></i> @endif
-                            {{ $action['label'] }}
-                        </a>
+                        {{-- An action is either a link (print, a related screen) or a call on this
+                             component (the CSV export, which has to run the table's own query). --}}
+                        @if (isset($action['method']))
+                            <button type="button" wire:click="{{ $action['method'] }}"
+                                    wire:loading.attr="disabled" wire:target="{{ $action['method'] }}"
+                                    @class([
+                                        'kt-btn kt-btn-sm',
+                                        'kt-btn-outline' => ($action['variant'] ?? 'primary') !== 'primary',
+                                    ])>
+                                @if (! empty($action['icon'])) <i class="ki-filled {{ $action['icon'] }}"></i> @endif
+                                {{ $action['label'] }}
+                            </button>
+                        @else
+                            @php $url = isset($action['url']) ? ($action['url'])(null) : null; @endphp
+                            <a href="{{ $url }}" @if ($action['new_tab'] ?? false) target="_blank" rel="noopener" @endif
+                               @class([
+                                   'kt-btn kt-btn-sm',
+                                   'kt-btn-outline' => ($action['variant'] ?? 'primary') !== 'primary',
+                               ])>
+                                @if (! empty($action['icon'])) <i class="ki-filled {{ $action['icon'] }}"></i> @endif
+                                {{ $action['label'] }}
+                            </a>
+                        @endif
                     @endforeach
                 </div>
             @endif
@@ -205,7 +240,19 @@
                                                 @continue
                                             @endif
 
-                                            @if (isset($action['action']))
+                                            @if (isset($action['action_form']))
+                                                {{-- A row action that needs more than one click: the
+                                                     definition names an ActionDefinition and the row
+                                                     gets the app's modal, exactly like a profile
+                                                     button. Used where a correction must be justified
+                                                     (a reading from a closed cycle). --}}
+                                                <livewire:admin.action-form
+                                                    :action="$action['action_form']"
+                                                    :subject-id="$row->getKey()"
+                                                    :return-to="request()->fullUrl()"
+                                                    :icon-only="true"
+                                                    :key="'row-'.$action['key'].'-'.$row->getKey()" />
+                                            @elseif (isset($action['action']))
                                                 <button type="button" wire:click="runAction('{{ $action['action'] }}', {{ $row->getKey() }})"
                                                         @if (! empty($action['confirm'])) wire:confirm="{{ $action['confirm'] }}" @endif
                                                         class="kt-btn kt-btn-icon kt-btn-sm kt-btn-ghost kt-btn-destructive"

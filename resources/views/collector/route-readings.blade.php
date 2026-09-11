@@ -3,5 +3,5 @@
 @section('title', __('portal.route_readings'))
 
 @section('content')
-    <livewire:collector.route-readings :route="$route" />
+    <livewire:route-reading-sheet :route="$route" />
 @endsection
