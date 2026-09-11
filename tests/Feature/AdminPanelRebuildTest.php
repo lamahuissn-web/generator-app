@@ -6,6 +6,7 @@ use App\Admin\Tables\SubscribersTable;
 use App\Livewire\Admin\DataTable;
 use App\Models\Bill;
 use App\Models\Route;
+use App\Admin\AdminNav;
 use App\Models\Subscriber;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -15,9 +16,8 @@ use Tests\TestCase;
 /**
  * The rebuilt panel (formerly Filament).
  *
- * Covers the shell, the door, the generic table and the screens built so far — the panels
- * that are not converted yet are asserted to be ABSENT from the nav rather than assumed,
- * so this file grows with the panel instead of silently passing over a missing screen.
+ * Covers the shell, the door, the generic table and the screens built so far. Every entry in
+ * the nav is asserted to resolve to a real route, so a screen cannot be silently missing.
  */
 class AdminPanelRebuildTest extends TestCase
 {
@@ -147,16 +147,36 @@ class AdminPanelRebuildTest extends TestCase
     }
 
     /**
-     * A screen that has no route yet must be shown as unbuilt, not linked. Rendering the
-     * nav with a route() call for a missing route 500s EVERY page in the panel.
+     * A screen that has no route yet must be shown as unbuilt, not linked: rendering the nav
+     * with a route() call for a missing route 500s EVERY page in the panel.
+     *
+     * Every screen now has a route, so the guard has flipped: nothing may be marked unbuilt,
+     * and every entry must be a real link. That is the condition for swapping /manage onto
+     * /admin — if this fails, the panel is not at parity and the swap would break the nav.
      */
-    public function test_unbuilt_screens_are_not_linked_from_the_nav(): void
+    public function test_every_nav_item_is_linked(): void
     {
-        $this->actingAs($this->admin)
-            ->get(route('admin.dashboard'))
-            ->assertOk()
-            ->assertSee('soon')
-            ->assertDontSee('href="'.url('/manage/bills').'"', false);
+        $items = collect(AdminNav::groups())->flatMap(fn (array $group) => $group['items']);
+
+        $this->assertNotEmpty($items);
+
+        $unbuilt = $items->reject(fn (array $item) => AdminNav::exists($item))->pluck('label');
+        $this->assertTrue(
+            $unbuilt->isEmpty(),
+            'Screens still have no route, so the nav renders them as unbuilt: '.$unbuilt->implode(', '),
+        );
+
+        $page = $this->actingAs($this->admin)->get(route('admin.dashboard'))->assertOk();
+
+        foreach ($items as $item) {
+            // Escaping ON: a label like "Profit & Loss" is rendered as `Profit &amp; Loss`,
+            // and searching the raw string would fail for the wrong reason.
+            $page->assertSee($item['label']);
+            $page->assertSee('href="'.route($item['route']).'"', false);
+        }
+
+        // …and nothing is advertised as unbuilt any more.
+        $page->assertDontSee('soon');
     }
 
     // ---- the generic table ------------------------------------------------

@@ -47,6 +47,7 @@ class AdminNav
                         'icon' => 'ki-plus-squared',
                         'route' => 'admin.generate-bills',
                         'match' => ['admin.generate-bills'],
+                        'component' => \App\Livewire\Admin\Pages\GenerateBills::class,
                     ],
                     [
                         'label' => __('mdl.readings'),
@@ -94,24 +95,28 @@ class AdminNav
                         'icon' => 'ki-note-2',
                         'route' => 'admin.collector-statement',
                         'match' => ['admin.collector-statement'],
+                        'component' => \App\Livewire\Admin\Pages\CollectorStatement::class,
                     ],
                     [
                         'label' => __('mdl.profit_loss'),
                         'icon' => 'ki-chart-pie-3',
                         'route' => 'admin.profit-loss',
                         'match' => ['admin.profit-loss'],
+                        'component' => \App\Livewire\Admin\Pages\ProfitLoss::class,
                     ],
                     [
                         'label' => __('mdl.overdue_report'),
                         'icon' => 'ki-information',
                         'route' => 'admin.overdue-report',
                         'match' => ['admin.overdue-report'],
+                        'component' => \App\Livewire\Admin\Pages\OverdueReport::class,
                     ],
                     [
                         'label' => __('col.title'),
                         'icon' => 'ki-percentage',
                         'route' => 'admin.collection-report',
                         'match' => ['admin.collection-report'],
+                        'component' => \App\Livewire\Admin\Pages\CollectionReport::class,
                     ],
                 ],
             ],
@@ -129,6 +134,7 @@ class AdminNav
                         'icon' => 'ki-setting-2',
                         'route' => 'admin.settings',
                         'match' => ['admin.settings'],
+                        'component' => \App\Livewire\Admin\Pages\Settings::class,
                     ],
                     [
                         'label' => __('mdl.audit_log'),
@@ -140,6 +146,31 @@ class AdminNav
                 'adminOnly' => true,
             ],
         ];
+    }
+
+    /**
+     * The screens backed by a Livewire page component.
+     *
+     * The nav already carries each screen's label, icon, group and ROUTE NAME; an item with
+     * a `component` is a page rather than a data-table resource, so routes/admin.php turns
+     * this list into routes. One description of a screen, not two that can disagree — and
+     * adding a screen stays a single array entry.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function pages(): array
+    {
+        return collect(self::groups())
+            ->flatMap(fn (array $group) => $group['items'])
+            ->filter(fn (array $item) => ! empty($item['component']) && ! empty($item['route']))
+            ->values()
+            ->all();
+    }
+
+    /** 'admin.profit-loss' -> 'profit-loss': the URL segment the route is mounted at. */
+    public static function slug(array $item): string
+    {
+        return str($item['route'])->after('admin.')->toString();
     }
 
     /** Sidebar for the signed-in user: non-admins never see the admin nav at all. */

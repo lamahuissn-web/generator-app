@@ -50,6 +50,12 @@ use Illuminate\Database\Eloquent\Model;
  */
 abstract class TableDefinition
 {
+    /** Named constructor, mirroring FormDefinition::make(). */
+    public static function make(): static
+    {
+        return new static;
+    }
+
     /** @return class-string<Model> */
     abstract public function model(): string;
 

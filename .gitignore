@@ -28,3 +28,7 @@ Thumbs.db
 
 # Static dumps of rendered screens used for local design review
 /public/_preview
+
+# Throwaway scripts used to render/inspect screens during development
+/tmp_*.php
+/tmp_*.sh

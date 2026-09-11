@@ -163,19 +163,6 @@ class SubscribersTable extends TableDefinition
         ];
     }
 
-    public function toolbar(): array
-    {
-        return [
-            [
-                'key' => 'create',
-                'label' => __('t.new_record'),
-                'icon' => 'ki-plus',
-                'variant' => 'primary',
-                'url' => fn () => route('admin.subscribers.create'),
-            ],
-        ];
-    }
-
     public function rowActions(): array
     {
         return [

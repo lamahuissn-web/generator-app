@@ -186,6 +186,13 @@
     }
 }
 
+/* Metronic's KTModal hides itself with `.kt-modal:not(.open)`. A modal rendered from
+   Livewire state (only in the DOM while `$open`) needs the opposite: the engine's own
+   JS never runs for it, so the visible state has to come from CSS. */
+.kt-modal.is-live {
+    display: flex;
+}
+
 /* Keenicons render from a webfont; the glyph box has to be sized explicitly
    when an icon sits inside a small badge or a dense meta row. */
 .ki-xs {

@@ -61,10 +61,40 @@
                     </div>
                 </div>
 
-                <div class="mt-4 flex flex-wrap gap-2">
+                {{-- The subscriber's own actions. Each is one nested component: a trigger
+                     button plus the Metronic modal it opens, so nothing is initialised until
+                     the operator reaches for it. --}}
+                <div class="mt-4 flex flex-wrap items-center gap-2">
+                    <livewire:admin.action-form
+                        :action="\App\Admin\Actions\CollectPayment::class"
+                        :subject-id="$subscriber->id"
+                        :key="'collect-'.$subscriber->id" />
+
+                    <livewire:admin.action-form
+                        :action="\App\Admin\Actions\SpecialInvoice::class"
+                        :subject-id="$subscriber->id"
+                        :key="'special-'.$subscriber->id" />
+
+                    @if ($subscriber->isMetered())
+                        <livewire:admin.action-form
+                            :action="\App\Admin\Actions\ConvertToFlat::class"
+                            :subject-id="$subscriber->id"
+                            :key="'toflat-'.$subscriber->id" />
+                    @else
+                        <livewire:admin.action-form
+                            :action="\App\Admin\Actions\ConvertToMetered::class"
+                            :subject-id="$subscriber->id"
+                            :key="'tometer-'.$subscriber->id" />
+                    @endif
+
                     <a href="{{ route('admin.subscribers.edit', $subscriber) }}" class="kt-btn kt-btn-sm kt-btn-outline">
                         <i class="ki-filled ki-pencil"></i>
                         {{ __('t.edit') }}
+                    </a>
+                    <a href="{{ route('print.statement', ['subscriber' => $subscriber->id, 'size' => 'a4']) }}"
+                       target="_blank" rel="noopener" class="kt-btn kt-btn-sm kt-btn-outline">
+                        <i class="ki-filled ki-printer"></i>
+                        {{ __('col.statement') }}
                     </a>
                     <a href="{{ route('admin.subscribers.index') }}" class="kt-btn kt-btn-sm kt-btn-ghost">
                         <i class="ki-filled ki-arrow-left rtl:rotate-180"></i>

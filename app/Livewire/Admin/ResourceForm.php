@@ -5,6 +5,7 @@ namespace App\Livewire\Admin;
 use App\Admin\FormDefinition;
 use Illuminate\Database\Eloquent\Model;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 /**
  * One form component for the whole panel, driven by a FormDefinition.
@@ -15,6 +16,10 @@ use Livewire\Component;
  */
 class ResourceForm extends Component
 {
+    // A receipt is photographed on site and uploaded through the form, so this component
+    // needs Livewire's temporary-upload handling (the '' case is a stored path).
+    use WithFileUploads;
+
     /** @var class-string<FormDefinition> */
     public string $form;
 

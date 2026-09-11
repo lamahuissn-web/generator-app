@@ -92,6 +92,20 @@ if (! function_exists('period_label')) {
     }
 }
 
+if (! function_exists('period_label_i18n')) {
+    /**
+     * A billing period in the reader's language.
+     *
+     * Both labels already exist ('Sep 2026' / 'أيلول 2026'); this picks between them so a
+     * picker built from period keys does not need to know which locale the panel is in.
+     * Digits stay Latin either way, as everywhere else in this app.
+     */
+    function period_label_i18n(string $ym): string
+    {
+        return app()->isLocale('ar') ? period_label_ar($ym) : period_label($ym);
+    }
+}
+
 if (! function_exists('period_label_ar')) {
     /** '2026-09' => 'أيلول 2026' (Lebanese month names, Latin digits) */
     function period_label_ar(string $ym): string

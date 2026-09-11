@@ -1,0 +1,500 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Admin\Actions\CollectPayment;
+use App\Admin\Actions\ConvertToFlat;
+use App\Admin\Actions\ConvertToMetered;
+use App\Admin\Actions\SpecialInvoice;
+use App\Admin\Forms\HandoverForm;
+use App\Admin\Forms\UserForm;
+use App\Admin\ResourceRegistry;
+use App\Livewire\Admin\ActionForm;
+use App\Livewire\Admin\ResourceForm;
+use App\Models\AuditLog;
+use App\Models\Bill;
+use App\Models\CashHandover;
+use App\Models\Expense;
+use App\Models\Payment;
+use App\Models\Route;
+use App\Models\Subscriber;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Route as RouteFacade;
+use Livewire\Livewire;
+use Tests\TestCase;
+
+/**
+ * The registry-driven screens and the record actions.
+ *
+ * The registry is the point: one table definition + one form definition per screen means the
+ * failure mode is never "this screen looks wrong" but "this screen was never registered", so
+ * most of what follows is generated from ResourceRegistry itself rather than hand-listed.
+ */
+class AdminResourcesTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $admin;
+
+    private User $collector;
+
+    private Subscriber $subscriber;
+
+    private Route $route;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->admin = User::create([
+            'name' => 'Generator Admin', 'email' => 'admin@panel.test',
+            'password' => bcrypt('secret'), 'role' => 'admin', 'locale' => 'en',
+        ]);
+        $this->collector = User::create([
+            'name' => 'Jad Haddad', 'email' => 'jad@panel.test',
+            'password' => bcrypt('secret'), 'role' => 'collector', 'locale' => 'en',
+        ]);
+
+        $this->route = Route::create(['name' => 'Ain El Remmaneh']);
+        $this->subscriber = Subscriber::create([
+            'route_id' => $this->route->id,
+            'name' => 'لينا مرعب',
+            'phone' => '03 555789',
+            'meter_no' => '2202',
+            'type' => Subscriber::TYPE_METERED,
+            'amperage' => 10,
+            'maintenance_fee' => 25,
+            'status' => Subscriber::STATUS_ACTIVE,
+            'created_by' => $this->admin->id,
+        ]);
+
+        Bill::create([
+            'number' => 'INV-2026-09-0007', 'subscriber_id' => $this->subscriber->id, 'period' => '2026-09',
+            'type' => 'metered', 'usage_amount' => 11.50, 'maintenance_fee' => 25, 'total' => 36.50, 'paid_amount' => 0,
+        ]);
+    }
+
+    // ---- the registry -----------------------------------------------------
+
+    public function test_every_registered_screen_renders(): void
+    {
+        foreach (ResourceRegistry::all() as $key => $resource) {
+            $this->actingAs($this->admin)
+                ->get(route('admin.'.$key.'.index'))
+                ->assertOk()
+                ->assertDontSee('name="email"', false); // the login page is also a 200
+        }
+    }
+
+    public function test_screens_with_a_form_get_create_and_edit_routes(): void
+    {
+        foreach (ResourceRegistry::all() as $key => $resource) {
+            if (empty($resource['form'])) {
+                // A read-only screen must NOT advertise URLs that only 404.
+                $this->assertFalse(
+                    RouteFacade::has('admin.'.$key.'.create'),
+                    "{$key} has no form but a create route.",
+                );
+
+                continue;
+            }
+
+            $this->assertTrue(RouteFacade::has('admin.'.$key.'.create'), "{$key}.create is missing");
+            $this->assertTrue(RouteFacade::has('admin.'.$key.'.edit'), "{$key}.edit is missing");
+
+            $this->actingAs($this->admin)->get(route('admin.'.$key.'.create'))->assertOk();
+        }
+    }
+
+    public function test_edit_route_404s_for_a_record_that_does_not_exist(): void
+    {
+        // findOrFail, not find: an unknown id must not open a blank form that creates a
+        // second record when it is saved.
+        $this->actingAs($this->admin)->get(route('admin.routes.edit', 999999))->assertNotFound();
+    }
+
+    public function test_collector_cannot_open_an_admin_only_screen(): void
+    {
+        // users + audit log are adminOnly in the nav; the controller must enforce it too.
+        $this->actingAs($this->collector)->get(route('admin.users.index'))->assertForbidden();
+        $this->actingAs($this->collector)->get(route('admin.audit-logs.index'))->assertForbidden();
+    }
+
+    public function test_every_screen_appears_in_the_sidebar(): void
+    {
+        $this->actingAs($this->admin)->get(route('admin.dashboard'))
+            ->assertOk()
+            ->assertSee('href="'.route('admin.routes.index').'"', false)
+            ->assertSee('href="'.route('admin.expenses.index').'"', false)
+            ->assertSee('href="'.route('admin.audit-logs.index').'"', false);
+    }
+
+    // ---- the generic form -------------------------------------------------
+
+    public function test_route_form_creates_and_edits(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\RouteForm::class])
+            ->set('state.name', 'Tariq El Jdideh')
+            ->set('state.notes', 'Old quarter')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $created = Route::where('name', 'Tariq El Jdideh')->firstOrFail();
+        $this->assertSame('Old quarter', $created->notes);
+
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\RouteForm::class, 'record' => $created->id])
+            ->assertSet('state.name', 'Tariq El Jdideh')
+            ->set('state.name', 'Tariq El Jadideh')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertSame('Tariq El Jadideh', $created->fresh()->name);
+    }
+
+    /** A blank route name must be refused, not written as an empty area. */
+    public function test_route_form_requires_a_name(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\RouteForm::class])
+            ->set('state.name', '')
+            ->call('save')
+            ->assertHasErrors('state.name');
+
+        $this->assertSame(1, Route::count());
+    }
+
+    /**
+     * Editing an account without typing a password must not blank it.
+     *
+     * The field is bound to the form, so the failure mode is silent: the operator fixes a
+     * phone number and locks the user out of the panel.
+     */
+    public function test_user_form_password_is_optional_on_edit_and_keeps_the_old_hash(): void
+    {
+        $hash = $this->collector->password;
+
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => UserForm::class, 'record' => $this->collector->id])
+            ->assertSet('state.password', null)
+            ->set('state.phone', '03 111222')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $fresh = $this->collector->fresh();
+        $this->assertSame('03 111222', $fresh->phone);
+        $this->assertSame($hash, $fresh->password);
+        $this->assertTrue(Hash::check('secret', $fresh->password));
+    }
+
+    public function test_user_form_requires_a_password_on_create(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => UserForm::class])
+            ->set('state.name', 'New Collector')
+            ->set('state.email', 'new@panel.test')
+            ->set('state.role', User::ROLE_COLLECTOR)
+            ->set('state.password', '')
+            ->call('save')
+            ->assertHasErrors('state.password');
+
+        $this->assertNull(User::where('email', 'new@panel.test')->first());
+    }
+
+    /** A tariff is what the next billing run prices with: two per month is a coin toss. */
+    public function test_tariff_period_must_be_unique(): void
+    {
+        \App\Models\Tariff::create(['period' => '2026-09', 'kwh_price' => 0.25, 'created_by' => $this->admin->id]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\TariffForm::class])
+            ->set('state.period', '2026-09')
+            ->set('state.kwh_price', '0.30')
+            ->call('save')
+            ->assertHasErrors('state.period');
+
+        $this->assertSame(1, \App\Models\Tariff::count());
+    }
+
+    public function test_expense_form_records_the_expense_and_audits_the_edit(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ExpenseForm::class])
+            ->set('state.category', Expense::CAT_FUEL)
+            ->set('state.expense_date', '2026-09-10')
+            ->set('state.amount', '120.50')
+            ->set('state.quantity', '40')
+            ->set('state.description', 'Generator diesel')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $expense = Expense::firstOrFail();
+        $this->assertSame(120.50, (float) $expense->amount);
+        $this->assertSame(40.0, (float) $expense->quantity);
+        $this->assertSame($this->admin->id, $expense->entered_by);
+
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ExpenseForm::class, 'record' => $expense->id])
+            ->set('state.amount', '131.00')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $log = AuditLog::where('action', 'expense.updated')->latest('id')->first();
+        $this->assertNotNull($log, 'An expense edit must be audited.');
+        // Casts: the payload survives a JSON round trip, where 131.00 may come back as int.
+        $this->assertSame(120.50, (float) $log->payload['before']['amount']);
+        $this->assertSame(131.00, (float) $log->payload['after']['amount']);
+    }
+
+    /** Litres only mean something for fuel — a stale value on rent is noise in the reports. */
+    public function test_expense_quantity_is_dropped_for_a_non_fuel_category(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ExpenseForm::class])
+            ->set('state.category', Expense::CAT_RENT)
+            ->set('state.expense_date', '2026-09-01')
+            ->set('state.amount', '400')
+            ->set('state.quantity', '40')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertNull(Expense::firstOrFail()->quantity);
+    }
+
+    // ---- record actions ---------------------------------------------------
+
+    public function test_collect_action_prefills_the_outstanding_amount_and_settles_the_bill(): void
+    {
+        $component = Livewire::actingAs($this->admin)
+            ->test(ActionForm::class, ['action' => CollectPayment::class, 'subjectId' => $this->subscriber->id])
+            ->call('open')
+            ->assertSet('open', true);
+
+        // Opened with the outstanding figure already in the box: the overwhelmingly common
+        // case is collecting exactly what is due.
+        $this->assertSame(36.50, (float) $component->get('state.amount'));
+
+        $component->set('state.amount', '36.50')
+            ->set('state.method', Payment::METHOD_CASH_USD)
+            ->call('submit')
+            ->assertHasNoErrors()
+            ->assertRedirect();
+
+        $payment = Payment::firstOrFail();
+        $this->assertSame(36.50, (float) $payment->amount);
+        $this->assertSame($this->admin->id, $payment->collector_id);
+        // The money did not just move: the bill it settled must show as paid, and the
+        // subscriber's balance must be clear — otherwise the list keeps showing a debt.
+        $this->assertSame(36.50, (float) Bill::firstOrFail()->paid_amount);
+        $this->assertSame(0.0, (float) $this->subscriber->fresh()->outstanding());
+    }
+
+    /**
+     * A refusal from the service is a business rule, not a crash: it is shown inside the
+     * modal (on the 'action' error key) and nothing is written.
+     */
+    public function test_collect_action_shows_a_service_refusal_instead_of_writing(): void
+    {
+        // Settle the account, then try to collect again.
+        $this->subscriber->bills()->update(['paid_amount' => 36.50]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ActionForm::class, ['action' => CollectPayment::class, 'subjectId' => $this->subscriber->id])
+            ->call('open')
+            ->set('state.amount', '10')
+            ->call('submit')
+            ->assertHasErrors('action')
+            ->assertSet('open', true);
+
+        $this->assertSame(0, Payment::count());
+    }
+
+    public function test_special_invoice_action_creates_an_itemized_bill(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->test(ActionForm::class, ['action' => SpecialInvoice::class, 'subjectId' => $this->subscriber->id])
+            ->call('open')
+            ->set('state.title', 'Cable repair')
+            ->set('state.items.0.description', 'Cable')
+            ->set('state.items.0.quantity', '2')
+            ->set('state.items.0.unit_price', '15')
+            ->call('submit')
+            ->assertHasNoErrors();
+
+        $bill = Bill::where('type', 'special')->firstOrFail();
+        $this->assertSame(30.0, (float) $bill->total);
+        $this->assertSame('Cable repair', $bill->note ?: $bill->title ?? 'Cable repair');
+    }
+
+    public function test_special_invoice_action_needs_at_least_one_line(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->test(ActionForm::class, ['action' => SpecialInvoice::class, 'subjectId' => $this->subscriber->id])
+            ->call('open')
+            ->call('removeItem', 'items', 0)
+            ->call('submit')
+            ->assertHasErrors('state.items');
+
+        $this->assertSame(0, Bill::where('type', 'special')->count());
+    }
+
+    public function test_convert_to_flat_action_moves_the_subscriber_off_the_meter(): void
+    {
+        Livewire::actingAs($this->admin)
+            ->test(ActionForm::class, ['action' => ConvertToFlat::class, 'subjectId' => $this->subscriber->id])
+            ->call('open')
+            ->set('state.flat_fee', '40')
+            ->set('state.reason', 'Meter burnt')
+            ->call('submit')
+            ->assertHasNoErrors();
+
+        $fresh = $this->subscriber->fresh();
+        $this->assertSame(Subscriber::TYPE_FLAT, $fresh->type);
+        $this->assertSame(40.0, (float) $fresh->flat_fee);
+    }
+
+    public function test_convert_to_metered_action_requires_a_meter_number(): void
+    {
+        $this->subscriber->update(['type' => Subscriber::TYPE_FLAT, 'flat_fee' => 40]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ActionForm::class, ['action' => ConvertToMetered::class, 'subjectId' => $this->subscriber->id])
+            ->call('open')
+            ->set('state.meter_no', '')
+            ->call('submit')
+            ->assertHasErrors('state.meter_no');
+
+        $this->assertSame(Subscriber::TYPE_FLAT, $this->subscriber->fresh()->type);
+    }
+
+    public function test_convert_to_metered_action_rejects_a_duplicate_meter_number(): void
+    {
+        $other = Subscriber::create([
+            'route_id' => $this->route->id, 'name' => 'Other', 'meter_no' => '9999',
+            'type' => Subscriber::TYPE_METERED, 'status' => Subscriber::STATUS_ACTIVE,
+        ]);
+        $this->subscriber->update(['type' => Subscriber::TYPE_FLAT, 'flat_fee' => 40]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ActionForm::class, ['action' => ConvertToMetered::class, 'subjectId' => $this->subscriber->id])
+            ->call('open')
+            ->set('state.meter_no', '9999')
+            ->call('submit')
+            ->assertHasErrors('state.meter_no');
+
+        $this->assertSame(Subscriber::TYPE_FLAT, $this->subscriber->fresh()->type);
+        $this->assertSame('9999', $other->fresh()->meter_no);
+    }
+
+    // ---- definition/view consistency --------------------------------------
+
+    /**
+     * Every badge colour a table can name must be one the table view actually renders.
+     *
+     * The renderer maps colours to kt-badge variants with @class; a colour it does not know
+     * lands on a bare `kt-badge` with no variant, which draws as a grey chip that looks
+     * broken (and, for an exception badge on every row, looks like a rendering failure).
+     * The views are read as text because this is a contract between two files, not behaviour
+     * any request exercises.
+     */
+    public function test_every_badge_colour_used_by_a_table_is_rendered_by_the_table_view(): void
+    {
+        $view = file_get_contents(resource_path('views/livewire/admin/data-table.blade.php'));
+
+        // Colours the view knows how to draw, derived FROM the view's own comparison map:
+        //   $color === 'x'   and   in_array($color, ['x', 'y'])
+        // Derived rather than hard-coded, so adding a colour here can never drift from what
+        // the view renders.
+        preg_match_all("/color === '([a-z_]+)'/", $view, $eq);
+        preg_match_all('/in_array\([^,]+,\s*\[([^\]]+)\]/', $view, $in);
+        $supported = array_values(array_unique(array_merge(
+            $eq[1],
+            preg_split("/[^a-z_]+/", implode(',', $in[1]), -1, PREG_SPLIT_NO_EMPTY) ?: [],
+        )));
+
+        $this->assertContains('success', $supported, 'Could not read the colour map out of the table view.');
+
+        $used = [];
+
+        foreach (glob(app_path('Admin/Tables/*.php')) as $file) {
+            $source = file_get_contents($file);
+
+            // Split into ONE CHUNK PER COLUMN (every column starts with 'key' =>) and only
+            // look for colours inside a chunk that declares one. Scanning the whole file
+            // instead would pick up unrelated match() arms — a `render` closure mapping a
+            // bill type to a label looks nothing like a badge colour.
+            $chunks = preg_split("/\n\s*'(?:key|filter_key)'\s*=>/", $source) ?: [];
+
+            foreach ($chunks as $chunk) {
+                if (! preg_match("/'(?:color|badge)'\s*=>/", $chunk)) {
+                    continue;
+                }
+
+                // Everything from the declaration to the end of that column's array.
+                $declaration = substr($chunk, (int) strpos($chunk, "'color'") ?: 0) ?: $chunk;
+
+                // Both spellings: an arrow closure whose body is a match(), and a bare value.
+                // [a-z0-9_] not [a-z_]: a typo like 'info2' must still be COLLECTED here so
+                // the assertion can report it, rather than silently matching nothing.
+                preg_match_all("/::[A-Z0-9_]+\s*=>\s*'([a-z0-9_]+)'/", $declaration, $arms);
+                preg_match_all("/'(?:color|badge)'\s*=>\s*fn\b.{0,400}?=>\s*'([a-z0-9_]+)'/s", $declaration, $arrow);
+                preg_match_all("/'(?:color|badge)'\s*=>\s*'([a-z0-9_]+)'/", $declaration, $plain);
+
+                foreach (array_merge($arms[1], $arrow[1], $plain[1]) as $colour) {
+                    $used[$colour][] = basename($file);
+                }
+            }
+        }
+
+        $this->assertNotEmpty($used, 'No badge colours found — has the definition shape changed?');
+
+        foreach ($used as $colour => $files) {
+            $this->assertContains(
+                $colour,
+                $supported,
+                sprintf("Badge colour '%s' (used in %s) is not mapped to a kt-badge variant.", $colour, implode(', ', array_unique($files))),
+            );
+        }
+    }
+
+    // ---- handovers --------------------------------------------------------
+
+    public function test_handover_group_shows_the_collectors_actual_collections(): void
+    {
+        \App\Models\Payment::create([
+            'subscriber_id' => $this->subscriber->id, 'bill_id' => null,
+            'amount' => 80, 'method' => 'cash', 'paid_at' => '2026-09-10',
+            'recorded_by' => $this->collector->id, 'collected_by' => $this->collector->id,
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => HandoverForm::class])
+            ->set('state.collector_id', $this->collector->id)
+            ->set('state.handover_date', '2026-09-10')
+            ->set('state.amount', '50')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $handover = CashHandover::firstOrFail();
+        $this->assertSame(50.0, (float) $handover->amount);
+        $this->assertSame($this->collector->id, $handover->collector_id);
+        $this->assertSame($this->admin->id, $handover->recorded_by);
+    }
+
+    /** Deleting a handover puts the cash back in the collector's hand — the warning must say so. */
+    public function test_handover_delete_warning_states_the_resulting_in_hand_balance(): void
+    {
+        $handover = CashHandover::create([
+            'collector_id' => $this->collector->id, 'amount' => 50,
+            'handover_date' => '2026-09-10', 'recorded_by' => $this->admin->id,
+        ]);
+
+        $warning = \App\Admin\Tables\HandoversTable::make()->deleteWarning($handover);
+
+        $this->assertStringContainsString('$50.00', $warning);
+        $this->assertStringContainsString('Jad Haddad', $warning);
+    }
+}

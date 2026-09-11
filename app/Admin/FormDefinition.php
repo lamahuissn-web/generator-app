@@ -28,6 +28,12 @@ use Illuminate\Database\Eloquent\Model;
  */
 abstract class FormDefinition
 {
+    /** Named constructor so callers never write `new X` and can chain off a string class name. */
+    public static function make(): static
+    {
+        return new static;
+    }
+
     /** @return class-string<Model> */
     abstract public function model(): string;
 
@@ -41,8 +47,16 @@ abstract class FormDefinition
     /** Persist. Returns the saved record so the caller can redirect to it. */
     abstract public function save(array $state, ?Model $record): Model;
 
-    /** @return array<string, mixed> initial state for a new record */
-    public function defaults(): array
+    /**
+     * Initial state for a new record, or — for an action — for the record it runs against.
+     *
+     * $subject is why this signature is not empty: collecting a payment should arrive with
+     * the subscriber's full balance already in the box, because that is the amount a
+     * collector takes in the overwhelming majority of visits.
+     *
+     * @return array<string, mixed>
+     */
+    public function defaults(?Model $subject = null): array
     {
         $state = [];
 

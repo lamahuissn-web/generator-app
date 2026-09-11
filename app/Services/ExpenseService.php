@@ -21,6 +21,39 @@ class ExpenseService
     }
 
     /** Delete an expense with audit trail. */
+    /**
+     * Edit an expense, audited like its creation.
+     *
+     * The old values go into the audit payload: without them "who changed the fuel price"
+     * is unanswerable, and an expense edit is exactly the kind of change that gets questioned
+     * at month end.
+     */
+    public static function update(Expense $expense, array $data): Expense
+    {
+        $before = [
+            'category' => $expense->category,
+            'amount' => (float) $expense->amount,
+            'expense_date' => $expense->expense_date->toDateString(),
+            'quantity' => $expense->quantity,
+            'description' => $expense->description,
+        ];
+
+        $expense->fill($data)->save();
+
+        Audit::log('expense.updated', $expense, [
+            'before' => $before,
+            'after' => [
+                'category' => $expense->category,
+                'amount' => (float) $expense->amount,
+                'expense_date' => $expense->expense_date->toDateString(),
+                'quantity' => $expense->quantity,
+                'description' => $expense->description,
+            ],
+        ]);
+
+        return $expense;
+    }
+
     public static function delete(Expense $expense): void
     {
         $snapshot = [

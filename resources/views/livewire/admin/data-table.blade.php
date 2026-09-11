@@ -12,7 +12,12 @@
         return match ($column['type'] ?? 'text') {
             'money' => money($value),
             'number' => number_format((float) $value, (int) ($column['decimals'] ?? 0), '.', ','),
-            'date' => $value ? \Illuminate\Support\Carbon::parse($value)->format($column['format'] ?? 'Y-m-d') : '—',
+            // ltr_isolate on dates: a timestamp is digits plus neutral separators, so inside
+            // an Arabic sentence the time renders BEFORE the date (the cell reads
+            // "16:15:04 2026-09-10") unless it is isolated.
+            'date' => $value
+                ? ltr_isolate(\Illuminate\Support\Carbon::parse($value)->format($column['format'] ?? 'Y-m-d'))
+                : '—',
             default => $value,
         };
     };
@@ -136,9 +141,13 @@
                                     $type = $column['type'] ?? 'text';
                                     $align = ($column['align'] ?? 'start') === 'end';
                                 @endphp
+                                {{-- 'wrap' lets a cell break: a long unbroken value (a JSON
+                                     payload, a note) has no break opportunity, so it overflows
+                                     the column instead of using a second line. --}}
                                 <td @class([
                                         'px-4 py-3 text-sm align-middle',
                                         'text-end' => $align,
+                                        'whitespace-normal break-words' => ! empty($column['wrap']),
                                         'hidden sm:table-cell' => ($column['on_mobile'] ?? true) === false,
                                     ])>
                                     @if ($type === 'badge')
@@ -147,13 +156,17 @@
                                              estimate). Emitting the pill for an empty value paints a blank
                                              coloured chip on every ordinary row. --}}
                                         @if (trim((string) $value) !== '')
+                                            {{-- Every colour a table can name must be listed here: an
+                                                 unmapped one lands on a plain `kt-badge` with no variant,
+                                                 which renders as a grey chip that looks broken. --}}
                                             <span @class([
                                                 'kt-badge kt-badge-sm',
                                                 'kt-badge-success' => $color === 'success',
                                                 'kt-badge-warning kt-badge-outline' => $color === 'warning',
-                                                'kt-badge-destructive' => $color === 'danger',
+                                                'kt-badge-destructive' => in_array($color, ['danger', 'destructive'], true),
                                                 'kt-badge-info kt-badge-outline' => $color === 'info',
-                                                'kt-badge-outline' => $color === 'muted',
+                                                'kt-badge-primary kt-badge-outline' => $color === 'primary',
+                                                'kt-badge-outline' => in_array($color, ['muted', 'outline'], true),
                                             ])>{{ $value }}</span>
                                         @else
                                             <span class="text-muted-foreground/40">—</span>
