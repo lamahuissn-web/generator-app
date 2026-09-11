@@ -572,6 +572,83 @@ class AdminResourcesTest extends TestCase
     // ---- definition/view consistency --------------------------------------
 
     /**
+     * No icon may be used for two different things on the subscriber profile.
+     *
+     * That screen puts four action buttons directly above a three-tab switcher, so a glyph
+     * shared between them reads as the same control twice — which is exactly what happened:
+     * "تحصيل" and the "الدفعات" tab both wore ki-wallet, and "تسجيل قراءة" and the "القراءات"
+     * tab both wore ki-bill.
+     *
+     * Scope is CONTROLS: the action buttons and the tabs. The inline meta glyphs in the
+     * identity row (the small meter and amperage marks) are deliberately excluded — they are
+     * data labels at caption size, not controls, and a label sharing a glyph with a button is
+     * not the confusion this guards against.
+     *
+     * Both lists are read from SOURCE, from the same file the page renders: the tab icons are
+     * declared as data in the blade, and the action icons come from the ActionDefinition
+     * classes the blade mounts. Nothing has to be kept in sync by hand, so a new action with a
+     * borrowed glyph fails here instead of shipping.
+     */
+    public function test_no_icon_is_used_for_two_things_on_the_subscriber_profile(): void
+    {
+        $blade = file_get_contents(resource_path('views/admin/subscribers/show.blade.php'));
+
+        $glyphs = [];
+
+        // The tab switcher's icons, declared as data.
+        preg_match_all("/'icon'\s*=>\s*'(ki-[a-z0-9-]+)'/", $blade, $tabs);
+        foreach ($tabs[1] as $icon) {
+            $glyphs[$icon][] = 'a profile tab';
+        }
+
+        // The action modals the blade mounts. Matched by SHORT name and resolved against the
+        // actions namespace, so this needs no backslashes in a pattern — a literal-namespace
+        // regex here is a escaping accident waiting to happen (a wrong backslash count makes
+        // it match nothing, and the test then passes over an empty list).
+        // Actions live one level BELOW the base class: App\Admin\ActionDefinition, but
+        // App\Admin\Actions\CollectPayment. The namespace is assembled from the base class
+        // plus the directory name, with the separator from its codepoint, so no hand-written
+        // namespace literal has to survive an escaping layer.
+        $separator = chr(92);
+        $namespace = (new \ReflectionClass(\App\Admin\ActionDefinition::class))->getNamespaceName()
+            .$separator.basename(app_path('Admin/Actions'));
+
+        preg_match_all('/([A-Za-z_][A-Za-z0-9_]*)::class/', $blade, $mounts);
+
+        $classes = [];
+        foreach (array_unique($mounts[1]) as $short) {
+            $class = $namespace.$separator.$short;
+
+            // The blade also mounts table definitions; keep only the actions.
+            if (class_exists($class) && is_subclass_of($class, \App\Admin\ActionDefinition::class)) {
+                $classes[] = $class;
+            }
+        }
+
+        $this->assertGreaterThanOrEqual(4, count($classes), 'No action classes were found in the profile blade.');
+
+        foreach ($classes as $class) {
+            $this->assertTrue(class_exists($class), $class.' does not exist.');
+
+            if ($icon = $class::make()->icon()) {
+                $glyphs[$icon][] = class_basename($class);
+            }
+        }
+
+        $duplicated = array_filter($glyphs, fn (array $uses): bool => count($uses) > 1);
+
+        $report = [];
+        foreach ($duplicated as $icon => $uses) {
+            $report[] = $icon.' is used by '.implode(' and ', $uses);
+        }
+
+        // Guard the guard: the same (broken) reading must not come back as an empty list.
+        $this->assertNotEmpty($glyphs, 'No icons were collected — the parsing has drifted.');
+
+        $this->assertSame([], $report, "The same icon is used for two controls on one screen:\n  ".implode("\n  ", $report));
+    }
+
+    /**
      * Every badge colour a table can name must be one the table view actually renders.
      *
      * The renderer maps colours to kt-badge variants with @class; a colour it does not know

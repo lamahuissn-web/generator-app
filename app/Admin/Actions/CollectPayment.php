@@ -26,9 +26,15 @@ class CollectPayment extends ActionDefinition
         return __('a.collect');
     }
 
+    /**
+     * ki-dollar, NOT ki-wallet: the payments TAB on the same screen carries ki-wallet (as does
+     * the sidebar's payments item), so a wallet here painted the same glyph twice, 70px apart,
+     * meaning "take money" and "list of money taken". The tab keeps ki-wallet to stay identical
+     * to the sidebar; the action takes the glyph that reads as money coming in.
+     */
     public function icon(): ?string
     {
-        return 'ki-wallet';
+        return 'ki-dollar';
     }
 
     public function triggerClass(): string

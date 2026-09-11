@@ -27,9 +27,14 @@ class RecordReading extends ActionDefinition
         return __('a.record_reading');
     }
 
+    /**
+     * ki-notepad-edit, NOT ki-bill: the readings TAB (and the sidebar's readings item) both use
+     * ki-bill, so this button wore the same glyph as the list it writes into. Writing a number
+     * down is a notepad; reading the meter is the bill.
+     */
     public function icon(): ?string
     {
-        return 'ki-bill';
+        return 'ki-notepad-edit';
     }
 
     public function modalHeading(Model $subject): string
