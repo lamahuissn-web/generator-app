@@ -26,6 +26,9 @@ class BrokenMeterTest extends TestCase
 
     private User $admin;
 
+    /** The field side of every case: who reported the meter. */
+    private User $collector;
+
     private Subscriber $subscriber;
 
     protected function setUp(): void
@@ -35,6 +38,10 @@ class BrokenMeterTest extends TestCase
         $this->admin = User::create([
             'name' => 'Admin', 'email' => 'admin@x.com', 'password' => 'x',
             'role' => 'admin', 'locale' => 'en',
+        ]);
+        $this->collector = User::create([
+            'name' => 'Jad', 'email' => 'field@x.com', 'password' => 'x',
+            'role' => 'collector', 'phone' => '03 111222', 'locale' => 'ar',
         ]);
         $route = Route::create(['name' => 'Corniche']);
 
@@ -205,17 +212,162 @@ class BrokenMeterTest extends TestCase
         $this->assertSame(0, Reading::where('period', '2026-10')->count());
     }
 
-    public function test_a_recorded_cycle_clears_the_broken_meter_report(): void
+    public function test_a_real_reading_closes_the_broken_meter_case(): void
     {
         $this->billThreeCycles();
         $this->subscriber->reportMeterBroken('العدّاد بيطفي ويشعل', $this->admin->id);
         $this->assertTrue($this->subscriber->fresh()->hasBrokenMeterReport());
 
-        BillingService::enterEstimatedReading($this->subscriber->fresh(), '2026-10', 50, 'Meter dead', $this->admin->id);
+        // The meter works after all: a REAL value is evidence about the device, so the case closes.
+        BillingService::enterMeteredReading($this->subscriber->fresh(), '2026-10', 1200, $this->admin->id);
 
         $fresh = $this->subscriber->fresh();
         $this->assertFalse($fresh->hasBrokenMeterReport());
         $this->assertNull($fresh->meter_broken_note);
+        $this->assertSame(0, $fresh->brokenEstimatesUsed());
+    }
+
+    public function test_a_meter_replacement_closes_the_case_with_the_new_device(): void
+    {
+        $this->billThreeCycles();
+        $this->subscriber->reportMeterBroken('محروق', $this->admin->id);
+
+        BillingService::enterMeteredReading($this->subscriber->fresh(), '2026-10', 5, $this->admin->id, null, [
+            'swap' => ['old_meter_no' => '1123', 'old_reading' => 1170, 'new_meter_no' => '4478', 'new_start' => 0],
+        ]);
+
+        $fresh = $this->subscriber->fresh();
+        $this->assertFalse($fresh->hasBrokenMeterReport(), 'the case is about the dead device; a new device ends it');
+        $this->assertSame('4478', $fresh->meter_no);
+    }
+
+    // ---- the one-estimate policy ----------------------------------------------
+
+    public function test_an_estimate_answers_the_cycle_but_leaves_the_case_open(): void
+    {
+        $this->billThreeCycles();
+        $this->subscriber->reportMeterBroken('العدّاد معطّل', $this->collector->id);
+
+        BillingService::enterEstimatedReading($this->subscriber->fresh(), '2026-10', 50, 'العدّاد معطّل', $this->admin->id);
+
+        $fresh = $this->subscriber->fresh();
+
+        // The cycle is billed — the monthly run is not blocked by a dead meter…
+        $this->assertSame(1, Bill::where('period', '2026-10')->count());
+        $this->assertSame(0, BillingService::readingProgress('2026-10')['pending']);
+
+        // …but the meter is still dead, and that is now visible everywhere.
+        $this->assertTrue($fresh->hasBrokenMeterReport(), 'an estimate answers the cycle, not the meter');
+        $this->assertSame(1, $fresh->brokenEstimatesUsed());
+        $this->assertFalse($fresh->mayEstimateAgain());
+        $this->assertSame('العدّاد معطّل', $fresh->meter_broken_note);
+    }
+
+    public function test_a_second_estimate_for_the_same_dead_meter_is_refused(): void
+    {
+        $this->billThreeCycles();
+        $this->subscriber->reportMeterBroken('العدّاد معطّل', $this->admin->id);
+        BillingService::enterEstimatedReading($this->subscriber->fresh(), '2026-10', 50, 'العدّاد معطّل', $this->admin->id);
+
+        try {
+            BillingService::enterEstimatedReading($this->subscriber->fresh(), '2026-11', 50, 'العدّاد معطّل', $this->admin->id);
+            $this->fail('A second estimated month on one dead meter must be refused.');
+        } catch (\RuntimeException $e) {
+            // The refusal names the policy and the cycle the case opened in — the two facts the
+            // person reading it needs to act.
+            $this->assertStringContainsString('One estimate is allowed', $e->getMessage());
+            $this->assertStringContainsString(period_label('2026-09'), $e->getMessage());
+        }
+
+        // The office reads the same refusal in Arabic.
+        app()->setLocale('ar');
+        try {
+            BillingService::enterEstimatedReading($this->subscriber->fresh(), '2026-11', 50, 'العدّاد معطّل', $this->admin->id);
+            $this->fail('The policy must hold in every locale.');
+        } catch (\RuntimeException $e) {
+            $this->assertStringContainsString('تقديرية وحدة', $e->getMessage());
+        }
+
+        $this->assertSame(0, Bill::where('period', '2026-11')->count());
+        $this->assertSame(1, $this->subscriber->fresh()->brokenEstimatesUsed());
+    }
+
+    /** The office's deliberate exception: a second estimated month, logged with its reason. */
+    public function test_the_extension_bills_the_second_estimate_and_records_it_as_an_exception(): void
+    {
+        $this->billThreeCycles();
+        $this->subscriber->reportMeterBroken('العدّاد بالورشة', $this->admin->id);
+        BillingService::enterEstimatedReading($this->subscriber->fresh(), '2026-10', 50, 'العدّاد معطّل', $this->admin->id);
+
+        BillingService::enterEstimatedReading(
+            $this->subscriber->fresh(), '2026-11', 45, 'التصليح متأخّر', $this->admin->id, true,
+        );
+
+        $fresh = $this->subscriber->fresh();
+        $this->assertSame(2, $fresh->brokenEstimatesUsed());
+        $this->assertTrue($fresh->hasBrokenMeterReport(), 'extending does not fix anything, so the case stays open');
+        $this->assertSame(11.25, (float) Bill::where('period', '2026-11')->firstOrFail()->usage_amount);   // 45 × $0.25
+
+        $log = AuditLog::where('action', 'reading.created')->latest('id')->first();
+        $this->assertTrue($log->payload['estimate_extension']);
+        $this->assertSame(2, $log->payload['estimates_used']);
+        $this->assertStringContainsString('التصليح متأخّر', (string) $log->payload['estimate_reason']);
+    }
+
+    /**
+     * The policy is about a dead meter, not about estimates in general: a locked gate or a house
+     * nobody answered is an ordinary administrative estimate and must not be rationed.
+     */
+    public function test_estimates_without_an_open_case_are_not_rationed(): void
+    {
+        $this->billThreeCycles();
+
+        BillingService::enterEstimatedReading($this->subscriber, '2026-10', 50, 'ما حدا فتح البيت', $this->admin->id);
+        BillingService::enterEstimatedReading($this->subscriber->fresh(), '2026-11', 50, 'ما حدا فتح البيت', $this->admin->id);
+
+        $this->assertSame(2, Reading::where('is_estimated', true)->count());
+        $this->assertFalse($this->subscriber->fresh()->hasBrokenMeterReport());
+    }
+
+    /** A closed case starts clean: the counter belongs to the device that died, not the subscriber. */
+    public function test_a_new_report_after_a_closed_case_starts_with_a_fresh_allowance(): void
+    {
+        $this->billThreeCycles();
+        $this->subscriber->reportMeterBroken('أول عدّاد', $this->admin->id);
+        BillingService::enterEstimatedReading($this->subscriber->fresh(), '2026-10', 50, 'x', $this->admin->id);
+
+        // The meter is replaced, so the case closes and the count goes back to zero.
+        BillingService::enterMeteredReading($this->subscriber->fresh(), '2026-11', 5, $this->admin->id, null, [
+            'swap' => ['old_meter_no' => '1123', 'old_reading' => 1225, 'new_meter_no' => '4478', 'new_start' => 0],
+        ]);
+
+        $this->assertSame(0, $this->subscriber->fresh()->brokenEstimatesUsed());
+
+        // The new meter dies too: the office gets its one estimate again.
+        $this->subscriber->fresh()->reportMeterBroken('العدّاد الجديد معطّل', $this->admin->id);
+        BillingService::enterEstimatedReading($this->subscriber->fresh(), '2026-12', 40, 'معطّل', $this->admin->id);
+
+        $fresh = $this->subscriber->fresh();
+        $this->assertSame(1, $fresh->brokenEstimatesUsed());
+        $this->assertTrue($fresh->hasBrokenMeterReport());
+    }
+
+    /** Re-reporting a live case refreshes the note without making it look brand new. */
+    public function test_reporting_the_same_meter_twice_keeps_the_original_date_and_count(): void
+    {
+        $this->billThreeCycles();
+        $this->subscriber->reportMeterBroken('أول بلاغ', $this->admin->id);
+        BillingService::enterEstimatedReading($this->subscriber->fresh(), '2026-10', 50, 'x', $this->admin->id);
+
+        $before = $this->subscriber->fresh();
+        $reportedAt = $before->meter_broken_reported_at;
+
+        $before->reportMeterBroken('لسا معطّل', $this->collector->id);
+
+        $after = $this->subscriber->fresh();
+        $this->assertSame(1, $after->brokenEstimatesUsed());
+        $this->assertTrue($reportedAt->equalTo($after->meter_broken_reported_at));
+        $this->assertSame('لسا معطّل', $after->meter_broken_note);
     }
 
     // ---- conversions ----------------------------------------------------------

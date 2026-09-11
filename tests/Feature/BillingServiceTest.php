@@ -200,9 +200,11 @@ class BillingServiceTest extends TestCase
 
     public function test_unpaid_reading_can_be_deleted_with_its_bill(): void
     {
+        // The cycle being worked, so this is about a bill that is unpaid and nothing else: a CLOSED
+        // cycle needs a written reason before anything is removed (see ClosedCycleTest).
         $sub = $this->meteredSub(15);
-        $this->baseline($sub, '2026-06', 1000);
-        $result = BillingService::enterMeteredReading($sub, '2026-07', 1040, $this->admin->id);
+        $this->baseline($sub, now()->startOfMonth()->subMonth()->format('Y-m'), 1000);
+        $result = BillingService::enterMeteredReading($sub, now()->format('Y-m'), 1040, $this->admin->id);
         $this->assertSame(25.0, $sub->outstanding());
 
         BillingService::deleteReadingAndBill($result['reading']);

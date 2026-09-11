@@ -64,6 +64,10 @@ final class ReadingService
                 (float) $data['estimated_kwh'],
                 ($data['estimate_reason'] ?? null) ?: null,
                 $userId,
+                // The reading screen may state the extension explicitly (the office's action on a
+                // dead-meter case); the plain estimate mode never does, so the one-estimate policy
+                // holds on every screen that offers it.
+                (bool) ($data['estimate_extension'] ?? false),
             ),
 
             self::MODE_SWAP => BillingService::enterMeteredReading(
@@ -214,7 +218,21 @@ final class ReadingService
             'label' => __('t.estimated_kwh'),
             'type' => 'number',
             'min' => 0,
-            'helper' => __('t.estimated_kwh_hint'),
+            // The one-estimate policy is stated where the number is typed: the refusal below
+            // would arrive after the admin had already decided the amount, and the useful
+            // moment to say "this case needs a decision" is before that.
+            'helper_from' => function (array $state) use ($subscriber): ?string {
+                $subject = $subscriber ?? Subscriber::find($state['subscriber_id'] ?? null);
+
+                if (! $subject?->hasBrokenMeterReport() || $subject->mayEstimateAgain()) {
+                    return __('t.estimated_kwh_hint');
+                }
+
+                return __('t.estimate_policy_hint', [
+                    'since' => period_label_i18n($subject->meter_broken_reported_at->format('Y-m')),
+                    'used' => $subject->brokenEstimatesUsed(),
+                ]);
+            },
             'visible_when' => fn (array $state): bool => ($state['reading_mode'] ?? null) === self::MODE_ESTIMATED,
             'required_when' => fn (array $state): bool => ($state['reading_mode'] ?? null) === self::MODE_ESTIMATED,
             'rules' => ['nullable', 'numeric', 'min:0'],

@@ -180,7 +180,7 @@ class BillingService
     /**
      * Record a meter reading for the period and create the matching bill.
      *
-     * @param  array{estimated?: bool, estimate_reason?: ?string, swap?: array{old_meter_no?: ?string, old_reading: float, new_meter_no: string, new_start?: float}}  $options
+     * @param  array{estimated?: bool, estimate_reason?: ?string, estimate_extension?: bool, swap?: array{old_meter_no?: ?string, old_reading: float, new_meter_no: string, new_start?: float}}  $options
      * @return array{reading: Reading, bill: Bill}
      *
      * @throws \RuntimeException when a reading/bill already exists for that period
@@ -206,7 +206,21 @@ class BillingService
 
         $estimated = (bool) ($options['estimated'] ?? false);
         $estimateReason = $options['estimate_reason'] ?? null;
+        $extension = (bool) ($options['estimate_extension'] ?? false);
         $swap = $options['swap'] ?? null;
+
+        // The dead-meter policy: one estimated cycle per report.
+        //
+        // Refused here rather than only in the form, because the estimate is reachable from
+        // three screens and a rule that lives in one of them is a rule the others break.
+        $caseOpen = $subscriber->hasBrokenMeterReport();
+
+        if ($estimated && $caseOpen && ! $subscriber->mayEstimateAgain() && ! $extension) {
+            throw new \RuntimeException(__('refuse.estimate_policy', [
+                'since' => period_label_i18n($subscriber->meter_broken_reported_at->format('Y-m')),
+                'used' => $subscriber->brokenEstimatesUsed(),
+            ]));
+        }
 
         $previous = self::latestReadingBefore($subscriber, $period);
         $prevValue = (float) ($previous?->current_reading ?? 0);
@@ -239,7 +253,7 @@ class BillingService
         return DB::transaction(function () use (
             $subscriber, $period, $currentReading, $prevValue, $consumption,
             $userId, $note, $price, $usage, $maintenance, $prevDebt, $total,
-            $estimated, $estimateReason, $swap,
+            $estimated, $estimateReason, $swap, $caseOpen, $extension,
         ) {
             $reading = Reading::create([
                 'subscriber_id' => $subscriber->id,
@@ -262,8 +276,14 @@ class BillingService
                 $subscriber->forceFill(['meter_no' => $swap['new_meter_no']])->save();
             }
 
-            // A recorded cycle answers the field report, estimated or not.
-            if ($subscriber->meter_broken_reported_at) {
+            if ($estimated) {
+                // The estimate answers this cycle, not the meter: the case stays open and the
+                // count of estimated months climbs until somebody decides about the device.
+                $subscriber->recordBrokenEstimate();
+            } elseif ($swap || $subscriber->hasBrokenMeterReport()) {
+                // A replaced device, or a real reading that shows the meter working, is what
+                // closes a dead-meter case — the two things that are evidence about the meter
+                // itself rather than about one month of it.
                 $subscriber->clearMeterReport();
             }
 
@@ -292,6 +312,11 @@ class BillingService
                 'prev_debt' => $prevDebt,
                 'estimated' => $estimated,
                 'estimate_reason' => $estimated ? $estimateReason : null,
+                // What the office did about a dead meter, and under which policy: a second
+                // estimated month is the thing this trail exists to be able to explain.
+                'meter_case_open' => $caseOpen,
+                'estimate_extension' => $estimated && $extension,
+                'estimates_used' => $estimated ? $subscriber->fresh()->brokenEstimatesUsed() : null,
                 'meter_swap' => $swap ? [
                     'old_meter_no' => $swap['old_meter_no'] ?? null,
                     'old_reading' => (float) $swap['old_reading'],
@@ -309,6 +334,10 @@ class BillingService
      * kWh (0 = maintenance only); the stored meter value becomes previous + kWh, and
      * there is NO catch-up later — the estimate becomes the new baseline.
      *
+     * $extension is the office's deliberate exception to the one-estimate-per-case policy: it is
+     * refused by enterMeteredReading unless stated explicitly, so a second estimated month can
+     * only ever be a decision somebody made and the audit trail can point at.
+     *
      * @return array{reading: Reading, bill: Bill}
      */
     public static function enterEstimatedReading(
@@ -317,6 +346,7 @@ class BillingService
         float $kwh,
         ?string $reason = null,
         ?int $userId = null,
+        bool $extension = false,
     ): array {
         $kwh = round(max(0, $kwh), 2);
 
@@ -326,7 +356,7 @@ class BillingService
             round(self::previousValue($subscriber, $period) + $kwh, 2),
             $userId,
             $reason,
-            ['estimated' => true, 'estimate_reason' => $reason],
+            ['estimated' => true, 'estimate_reason' => $reason, 'estimate_extension' => $extension],
         );
     }
 
@@ -696,13 +726,17 @@ class BillingService
     }
 
     /**
-     * Correction: delete a mistaken meter reading and its bill. Only allowed
-     * while the generated bill has NOT been (partially) paid — otherwise the
-     * collector/admin must reverse the related payments first.
+     * Correction: remove a reading and the bill it produced.
      *
-     * @throws \RuntimeException when the reading has no bill, or its bill was paid
+     * $reason is required for a CLOSED cycle (see CycleLock): the reading being removed is part of a
+     * month that was already invoiced and collected against, and "why" is the whole difference
+     * between a correction and a loss. An open cycle needs no ceremony — it is the operator's own
+     * day's work.
+     *
+     * @throws \RuntimeException when the bill is paid, when the cycle is closed and the correction
+     *                           is not covered by an admin's written reason, or when there is no bill
      */
-    public static function deleteReadingAndBill(Reading $reading): void
+    public static function deleteReadingAndBill(Reading $reading, ?string $reason = null): void
     {
         $bill = Bill::where('reading_id', $reading->id)->first();
 
@@ -715,6 +749,12 @@ class BillingService
             );
         }
 
+        // The closed-cycle gate. Last line of defence: the screens ask for the reason, but a
+        // correction must not be reachable by any path that forgets to.
+        if ($refusal = CycleLock::refusal($reading->period, $reason, auth()->user())) {
+            throw new \RuntimeException($refusal);
+        }
+
         $snapshot = [
             'subscriber_id' => $reading->subscriber_id,
             'period' => $reading->period,
@@ -722,6 +762,9 @@ class BillingService
             'consumption' => $reading->consumption,
             'bill_id' => $bill->id,
             'bill_total' => $bill->total,
+            // Why a month that was already closed was opened again, and by whom.
+            'cycle_closed' => CycleLock::isClosed($reading->period),
+            'reason' => $reason,
         ];
 
         DB::transaction(function () use ($reading, $bill, $snapshot) {

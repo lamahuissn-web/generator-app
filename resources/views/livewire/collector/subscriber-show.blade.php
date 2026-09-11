@@ -405,9 +405,22 @@
                     </p>
 
                     <div class="mt-4">
-                        <input type="text" inputmode="decimal" wire:model.live.debounce.350ms="readingInput"
-                               placeholder="{{ __('portal.reading_ph') }}"
-                               class="kt-input h-auto py-3 text-center text-2xl font-semibold tabular-nums">
+                        @if ($sub->hasBrokenMeterReport())
+                            {{-- The meter is reported dead: there is no value to type and nothing to
+                                 preview. Forward is the office's decision, or the collector finding
+                                 the meter working (the undo sits in the banner above). --}}
+                            <div class="rounded-lg border border-yellow-400/40 bg-yellow-400/10 p-3.5">
+                                <div class="flex items-center gap-1.5 text-xs font-semibold text-yellow-700 dark:text-yellow-600">
+                                    <i class="ki-filled ki-information"></i>
+                                    {{ __('t.meter_broken_badge') }}
+                                </div>
+                                <p class="mt-1 text-sm text-secondary-foreground">{{ __('portal.broken_waiting_office') }}</p>
+                            </div>
+                        @else
+                            <input type="text" inputmode="decimal" wire:model.live.debounce.350ms="readingInput"
+                                   placeholder="{{ __('portal.reading_ph') }}"
+                                   class="kt-input h-auto py-3 text-center text-2xl font-semibold tabular-nums">
+                        @endif
                         @error('readingInput') <p class="mt-1.5 text-sm font-medium text-destructive">{{ $message }}</p> @enderror
                         @error('reading') <p class="mt-1.5 text-sm font-medium text-destructive">{{ $message }}</p> @enderror
                     </div>

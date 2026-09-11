@@ -56,6 +56,20 @@ class AdminNav
                         'match' => ['admin.readings.*'],
                     ],
                     [
+                        'label' => __('mdl.reading_board'),
+                        'icon' => 'ki-chart-simple',
+                        'route' => 'admin.readings-board',
+                        'match' => ['admin.readings-board'],
+                        'component' => \App\Livewire\Admin\Pages\ReadingBoard::class,
+                    ],
+                    [
+                        'label' => __('mdl.meter_cases'),
+                        'icon' => 'ki-shield-cross',
+                        'route' => 'admin.meter-cases',
+                        'match' => ['admin.meter-cases'],
+                        'component' => \App\Livewire\Admin\Pages\MeterCases::class,
+                    ],
+                    [
                         'label' => __('mdl.bills'),
                         'icon' => 'ki-receipt-square',
                         'route' => 'admin.bills.index',

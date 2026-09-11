@@ -120,3 +120,36 @@ if (! function_exists('period_label_ar')) {
         return $months[(int) $d->format('n')].' '.$d->format('Y');
     }
 }
+
+if (! function_exists('period_options')) {
+    /**
+     * 'Y-m' => label for the cycles an operator picks from: this month, 17 back, 3 forward.
+     *
+     * The window is deliberately lopsided. Everything the panel does — readings, bills,
+     * payments, reports — happens on the cycle that just started or one of the recent ones; a
+     * few months forward are there for pre-entering a reading the office already has on paper.
+     * Further back than a year and a half is archaeology, and a picker nobody scrolls to the
+     * end of is a picker that costs a scroll on every use.
+     *
+     * Shared by every screen with a cycle picker so adding one cannot quietly offer a
+     * different range than the screen next to it.
+     *
+     * @return array<string, string>
+     */
+    function period_options(): array
+    {
+        $options = [now()->format('Y-m') => period_label_i18n(now()->format('Y-m'))];
+
+        for ($i = 1; $i <= 17; $i++) {
+            $key = now()->startOfMonth()->subMonths($i)->format('Y-m');
+            $options[$key] = period_label_i18n($key);
+        }
+
+        for ($i = 1; $i <= 3; $i++) {
+            $key = now()->startOfMonth()->addMonths($i)->format('Y-m');
+            $options[$key] = period_label_i18n($key);
+        }
+
+        return $options;
+    }
+}

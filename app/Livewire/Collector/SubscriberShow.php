@@ -117,6 +117,11 @@ class SubscriberShow extends Component
         if ($this->currentReadingDone() || ! $this->subscriber->isMetered()) {
             return null;
         }
+        // A reported-dead meter has no bill to preview: whatever is in the box cannot be billed,
+        // and showing a figure next to a Save button would invite one.
+        if ($this->subscriber->hasBrokenMeterReport()) {
+            return null;
+        }
         $input = trim((string) $this->readingInput);
         if ($input === '' || ! is_numeric($input)) {
             return null;
@@ -165,6 +170,15 @@ class SubscriberShow extends Component
         }
         if ($this->subscriber->status !== Subscriber::STATUS_ACTIVE) {
             $this->addError('reading', __('portal.err_reading_inactive'));
+
+            return;
+        }
+        if ($this->subscriber->hasBrokenMeterReport()) {
+            // A reported-dead meter cannot be read: the office decides (estimate, replacement or a
+            // flat rate), or the collector says the meter is working after all and closes the
+            // report. Measured in the street: an input that accepts a number here is how a dead
+            // meter gets read anyway, and the case then never looks open again.
+            $this->addError('reading', __('portal.err_reading_broken'));
 
             return;
         }

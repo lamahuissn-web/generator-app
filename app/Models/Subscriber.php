@@ -28,7 +28,7 @@ class Subscriber extends Model
     protected $fillable = [
         'route_id', 'name', 'phone', 'address', 'meter_no', 'type',
         'amperage', 'maintenance_fee', 'maintenance_mode', 'flat_fee', 'status', 'notes', 'created_by',
-        'meter_broken_reported_at', 'meter_broken_note',
+        'meter_broken_reported_at', 'meter_broken_note', 'meter_broken_estimates', 'meter_broken_reported_by',
     ];
 
     protected function casts(): array
@@ -66,6 +66,12 @@ class Subscriber extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** Who reported the dead meter from the field (the case's other side). */
+    public function meterBrokenReportedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'meter_broken_reported_by');
     }
 
     public function scopeActive(Builder $q): Builder
@@ -144,20 +150,73 @@ class Subscriber extends Model
         return $this->meter_broken_reported_at !== null;
     }
 
-    /** Field report from the collector: the meter is dead. The admin decides what next. */
+    /**
+     * Field report from the collector: the meter is dead. The admin decides what next.
+     *
+     * Idempotent on purpose. A second report on a live case refreshes the note but keeps the
+     * original date and the estimates already billed against it: the count is what tells the
+     * office this case has been running for months, and resetting it by re-reporting would be
+     * the easiest way for a stuck case to look brand new again.
+     */
     public function reportMeterBroken(?string $note = null, ?int $userId = null): void
     {
+        $alreadyOpen = $this->hasBrokenMeterReport();
+
         $this->forceFill([
-            'meter_broken_reported_at' => now(),
+            'meter_broken_reported_at' => $alreadyOpen ? $this->meter_broken_reported_at : now(),
             'meter_broken_note' => $note,
+            'meter_broken_reported_by' => $userId,
         ])->save();
 
-        Audit::log('subscriber.meter_reported_broken', $this, ['note' => $note, 'by' => $userId]);
+        Audit::log('subscriber.meter_reported_broken', $this, [
+            'note' => $note,
+            'by' => $userId,
+            'already_open' => $alreadyOpen,
+            'estimates_already_billed' => (int) $this->meter_broken_estimates,
+        ]);
     }
 
+    /** How many estimated cycles have been billed while this meter has been dead. */
+    public function brokenEstimatesUsed(): int
+    {
+        return (int) $this->meter_broken_estimates;
+    }
+
+    /**
+     * May one more estimated cycle be billed against this case?
+     *
+     * The policy is one estimate per dead meter: it answers the cycle the report arrived in,
+     * and a second estimated month means nobody has decided anything about the device. True when
+     * no case is open at all — an estimate for a meter that is fine (nobody home, locked gate)
+     * is an ordinary administrative choice, not this policy's business.
+     */
+    public function mayEstimateAgain(): bool
+    {
+        return ! $this->hasBrokenMeterReport() || $this->brokenEstimatesUsed() === 0;
+    }
+
+    /** One more estimated cycle has been billed against the open case. */
+    public function recordBrokenEstimate(): void
+    {
+        if (! $this->hasBrokenMeterReport()) {
+            return;
+        }
+
+        $this->forceFill(['meter_broken_estimates' => $this->brokenEstimatesUsed() + 1])->save();
+    }
+
+    /**
+     * The case is closed: the meter was replaced, read while working, or the subscriber moved
+     * to a flat rate. Clearing the counter is what lets the NEXT dead meter start clean.
+     */
     public function clearMeterReport(): void
     {
-        $this->forceFill(['meter_broken_reported_at' => null, 'meter_broken_note' => null])->save();
+        $this->forceFill([
+            'meter_broken_reported_at' => null,
+            'meter_broken_note' => null,
+            'meter_broken_estimates' => 0,
+            'meter_broken_reported_by' => null,
+        ])->save();
     }
 
     /**
@@ -181,6 +240,8 @@ class Subscriber extends Model
             'maintenance_mode' => self::MAINT_CUSTOM,
             'meter_broken_reported_at' => null,
             'meter_broken_note' => null,
+            'meter_broken_estimates' => 0,
+            'meter_broken_reported_by' => null,
         ])->save();
 
         Audit::log('subscriber.converted_to_flat', $this, [
@@ -219,6 +280,8 @@ class Subscriber extends Model
             'maintenance_mode' => $maintenanceFee === null ? self::MAINT_AUTO : self::MAINT_CUSTOM,
             'meter_broken_reported_at' => null,
             'meter_broken_note' => null,
+            'meter_broken_estimates' => 0,
+            'meter_broken_reported_by' => null,
         ])->save();
 
         $reading = BillingService::recordBaselineReading($this, $period, $initialReading, $userId);

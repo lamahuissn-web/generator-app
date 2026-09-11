@@ -71,19 +71,7 @@ class GenerateBills extends Component
     /** @return array<string, string> this month, then 17 back and 3 forward, labelled */
     public function monthOptions(): array
     {
-        $options = [now()->format('Y-m') => period_label_i18n(now()->format('Y-m'))];
-
-        for ($i = 1; $i <= 17; $i++) {
-            $key = now()->startOfMonth()->subMonths($i)->format('Y-m');
-            $options[$key] = period_label_i18n($key);
-        }
-
-        for ($i = 1; $i <= 3; $i++) {
-            $key = now()->startOfMonth()->addMonths($i)->format('Y-m');
-            $options[$key] = period_label_i18n($key);
-        }
-
-        return $options;
+        return period_options();
     }
 
     public function period(): string
