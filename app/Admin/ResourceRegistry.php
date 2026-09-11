@@ -4,6 +4,7 @@ namespace App\Admin;
 
 use App\Admin\Forms\ExpenseForm;
 use App\Admin\Forms\HandoverForm;
+use App\Admin\Forms\ReadingForm;
 use App\Admin\Forms\RouteForm;
 use App\Admin\Forms\TariffForm;
 use App\Admin\Forms\UserForm;
@@ -41,7 +42,11 @@ class ResourceRegistry
             ],
             'readings' => [
                 'table' => ReadingsTable::class,
-                'form' => null,
+                'form' => ReadingForm::class,
+                // Create-only: a reading is a measurement of a moment. Correcting one means
+                // deleting it (and the bill it produced) and recording it again, so an edit
+                // screen would invite an edit that left the old bill behind.
+                'create_only' => true,
                 'title' => __('mdl.readings'),
                 'singular' => __('mdl.reading'),
                 'description' => __('t.readings_sub'),

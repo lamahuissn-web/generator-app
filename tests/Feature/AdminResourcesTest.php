@@ -102,9 +102,20 @@ class AdminResourcesTest extends TestCase
             }
 
             $this->assertTrue(RouteFacade::has('admin.'.$key.'.create'), "{$key}.create is missing");
-            $this->assertTrue(RouteFacade::has('admin.'.$key.'.edit'), "{$key}.edit is missing");
-
             $this->actingAs($this->admin)->get(route('admin.'.$key.'.create'))->assertOk();
+
+            if (! empty($resource['create_only'])) {
+                // A measurement of a moment: correcting one means deleting it (and the bill it
+                // produced) and recording it again, so there is no edit route at all.
+                $this->assertFalse(
+                    RouteFacade::has('admin.'.$key.'.edit'),
+                    "{$key} is create-only but has an edit route.",
+                );
+
+                continue;
+            }
+
+            $this->assertTrue(RouteFacade::has('admin.'.$key.'.edit'), "{$key}.edit is missing");
         }
     }
 
@@ -262,6 +273,175 @@ class AdminResourcesTest extends TestCase
             ->assertHasNoErrors();
 
         $this->assertNull(Expense::firstOrFail()->quantity);
+    }
+
+    // ---- recording a reading (the daily operation) -------------------------
+
+    /**
+     * These tests all record into 2026-10: the suite's setUp already owns a 2026-09 bill, and
+     * recording into that period would find the fixture's bill instead of the one produced.
+     */
+    private function readingForm()
+    {
+        return Livewire::actingAs($this->admin)
+            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ReadingForm::class]);
+    }
+
+    public function test_the_reading_screen_records_a_normal_read_and_bills_it(): void
+    {
+        \App\Models\Reading::create([
+            'subscriber_id' => $this->subscriber->id, 'period' => '2026-08',
+            'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 0,
+            'entered_by' => $this->admin->id,
+        ]);
+
+        $this->readingForm()
+            ->set('state.subscriber_id', $this->subscriber->id)
+            ->set('state.period', '2026-10')
+            ->set('state.reading_mode', \App\Services\ReadingService::MODE_NORMAL)
+            ->set('state.current_reading', '1140')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $reading = \App\Models\Reading::where('period', '2026-10')->firstOrFail();
+        $this->assertSame(40.0, (float) $reading->consumption);
+
+        // The bill is the point of the visit: 40 kWh + the maintenance fee.
+        $bill = $this->subscriber->bills()->where('period', '2026-10')->firstOrFail();
+        $this->assertSame(35.0, (float) $bill->total);
+    }
+
+    /** A dead meter: the estimate is what gets billed, and it becomes the new baseline. */
+    public function test_the_reading_screen_records_an_estimate(): void
+    {
+        \App\Models\Reading::create([
+            'subscriber_id' => $this->subscriber->id, 'period' => '2026-08',
+            'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 0,
+            'entered_by' => $this->admin->id,
+        ]);
+
+        $this->readingForm()
+            ->set('state.subscriber_id', $this->subscriber->id)
+            ->set('state.period', '2026-10')
+            ->set('state.reading_mode', \App\Services\ReadingService::MODE_ESTIMATED)
+            ->set('state.estimated_kwh', '48')
+            ->set('state.estimate_reason', 'العدّاد معطّل')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $reading = \App\Models\Reading::where('period', '2026-10')->firstOrFail();
+        $this->assertTrue($reading->is_estimated);
+        $this->assertSame(48.0, (float) $reading->consumption);
+        $this->assertSame('العدّاد معطّل', $reading->estimate_reason);
+    }
+
+    /**
+     * The meter-swap read: the old meter is closed at its final number, the subscriber moves
+     * to the new meter, and the new meter's counter is never subtracted from the old one.
+     */
+    public function test_the_reading_screen_records_a_meter_replacement(): void
+    {
+        \App\Models\Reading::create([
+            'subscriber_id' => $this->subscriber->id, 'period' => '2026-08',
+            'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 0,
+            'entered_by' => $this->admin->id,
+        ]);
+
+        $this->readingForm()
+            ->set('state.subscriber_id', $this->subscriber->id)
+            ->set('state.period', '2026-10')
+            ->set('state.reading_mode', \App\Services\ReadingService::MODE_SWAP)
+            ->set('state.current_reading', '12')
+            ->set('state.old_meter_no', '2202')
+            ->set('state.old_meter_reading', '1100')
+            ->set('state.new_meter_no', '4478')
+            ->set('state.new_meter_start', '0')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $reading = \App\Models\Reading::where('period', '2026-10')->firstOrFail();
+        $this->assertTrue($reading->hasMeterSwap());
+        $this->assertSame(12.0, (float) $reading->consumption);
+        $this->assertSame('4478', $this->subscriber->fresh()->meter_no);
+    }
+
+    /** Each mode shows only its own fields — a swap form must not ask for an estimate. */
+    public function test_the_reading_screen_shows_only_the_fields_of_the_chosen_mode(): void
+    {
+        $normal = $this->readingForm()
+            ->set('state.reading_mode', \App\Services\ReadingService::MODE_NORMAL)
+            ->assertSee(__('t.cur_meter_reading'))
+            ->assertDontSee(__('t.estimated_kwh'))
+            ->assertDontSee(__('t.new_meter_no'));
+
+        $normal->set('state.reading_mode', \App\Services\ReadingService::MODE_ESTIMATED)
+            ->assertSee(__('t.estimated_kwh'))
+            ->assertSee(__('t.estimate_reason'))
+            ->assertDontSee(__('t.cur_meter_reading'));
+
+        $normal->set('state.reading_mode', \App\Services\ReadingService::MODE_SWAP)
+            ->assertSee(__('t.new_meter_no'))
+            ->assertSee(__('t.old_meter_final'))
+            ->assertDontSee(__('t.estimated_kwh'));
+    }
+
+    /** A reading with no value is refused rather than written as a zero the bill would ignore. */
+    public function test_the_reading_screen_requires_the_value_of_the_chosen_mode(): void
+    {
+        $this->readingForm()
+            ->set('state.subscriber_id', $this->subscriber->id)
+            ->set('state.period', '2026-10')
+            ->set('state.reading_mode', \App\Services\ReadingService::MODE_NORMAL)
+            ->set('state.current_reading', '')
+            ->call('save')
+            ->assertHasErrors('state.current_reading');
+
+        $this->assertSame(0, \App\Models\Reading::where('period', '2026-10')->count());
+    }
+
+    /** The search box narrows the picker, and the chosen subscriber survives the filter. */
+    public function test_the_reading_screen_filters_the_subscriber_picker(): void
+    {
+        $other = Subscriber::create([
+            'route_id' => $this->route->id, 'name' => 'Ali Hassan', 'meter_no' => '9999',
+            'type' => Subscriber::TYPE_METERED, 'status' => Subscriber::STATUS_ACTIVE,
+            'created_by' => $this->admin->id,
+        ]);
+
+        $component = $this->readingForm()
+            ->set('state.subscriber_id', $this->subscriber->id)
+            ->assertSee('لينا مرعب')
+            ->set('state.subscriber_search', 'Ali')
+            ->assertSee('Ali Hassan')
+            // The selected subscriber stays in the list: a value that vanishes from its own
+            // options resets to blank on the next save.
+            ->assertSee('لينا مرعب');
+
+        $this->assertSame($this->subscriber->id, (int) $component->get('state.subscriber_id'));
+    }
+
+    /** The same three modes are reachable from the subscriber's own profile. */
+    public function test_the_profile_records_a_reading_through_the_action_modal(): void
+    {
+        \App\Models\Reading::create([
+            'subscriber_id' => $this->subscriber->id, 'period' => '2026-08',
+            'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 0,
+            'entered_by' => $this->admin->id,
+        ]);
+
+        Livewire::actingAs($this->admin)
+            ->test(ActionForm::class, [
+                'action' => \App\Admin\Actions\RecordReading::class,
+                'subjectId' => $this->subscriber->id,
+            ])
+            ->call('open')
+            ->assertSet('state.period', now()->format('Y-m'))
+            ->set('state.period', '2026-10')
+            ->set('state.current_reading', '1125')
+            ->call('submit')
+            ->assertHasNoErrors();
+
+        $this->assertSame(25.0, (float) \App\Models\Reading::where('period', '2026-10')->firstOrFail()->consumption);
     }
 
     // ---- record actions ---------------------------------------------------

@@ -9,7 +9,7 @@ use Illuminate\Support\Collection;
 /**
  * Who owes what, aged into buckets.
  *
- * Ported out of the Filament page: the bucketing rule ("two months or more behind = red")
+ * The bucketing rule ("two months or more behind = red")
  * is the report's whole meaning, and it does not belong in a view.
  *
  * The dues are aggregated in ONE query and joined to subscribers in PHP rather than

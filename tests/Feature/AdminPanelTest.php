@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Expense;
 use App\Models\Payment;
 use App\Models\Reading;
 use App\Models\Route;
@@ -11,6 +12,14 @@ use App\Services\BillingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
+/**
+ * The panel as a whole: the shell, the figures, the language, and the one arithmetic
+ * invariant the whole product rests on.
+ *
+ * The per-screen renders are covered by AdminPanelRebuildTest / AdminResourcesTest /
+ * AdminPagesTest, which derive their screen list from the nav and the registry. What stays
+ * here is what no single screen owns.
+ */
 class AdminPanelTest extends TestCase
 {
     use RefreshDatabase;
@@ -20,6 +29,7 @@ class AdminPanelTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
         $this->admin = User::create(['name' => 'Admin', 'email' => 'admin@x.com', 'password' => 'x', 'role' => 'admin', 'locale' => 'en']);
 
         // Minimal network so lists and widgets have data to aggregate.
@@ -46,9 +56,9 @@ class AdminPanelTest extends TestCase
         BillingService::enterMeteredReading($sub, now()->format('Y-m'), 130, $this->admin->id);
         BillingService::collect($sub, 10, $this->admin->id, null, now()->format('Y-m'));
 
-        // Expense data so Finance pages render their populated (non-empty) state.
-        \App\Models\Expense::create([
-            'category' => \App\Models\Expense::CAT_FUEL,
+        // Expense data so the finance screens render their populated (non-empty) state.
+        Expense::create([
+            'category' => Expense::CAT_FUEL,
             'amount' => 40,
             'quantity' => 100,
             'expense_date' => now()->toDateString(),
@@ -65,71 +75,54 @@ class AdminPanelTest extends TestCase
             ->assertSee('Invoiced');
     }
 
-    public function test_admin_resources_render(): void
-    {
-        $sub = Subscriber::first();
-        $paths = [
-            '/admin/subscribers',
-            '/admin/subscribers/create',
-            '/admin/subscribers/'.$sub->id,          // interactive profile (infolist + relation managers)
-            '/admin/routes',
-            '/admin/routes/create',
-            '/admin/readings',
-            '/admin/readings/create',
-            '/admin/bills',
-            '/admin/payments',
-            '/admin/expenses',
-            '/admin/expenses/create',
-            '/admin/profit-loss',
-            '/admin/overdue-report',
-            '/admin/generate-bills',
-            '/admin/collection-report',
-            '/admin/cash-handovers',
-            '/admin/cash-handovers/create',
-            '/admin/users',
-            '/admin/users/create',
-            '/admin/settings',
-            '/admin/audit-logs',
-        ];
-
-        foreach ($paths as $path) {
-            $this->actingAs($this->admin)->get($path)->assertOk($path.' failed to render');
-        }
-    }
-
+    /**
+     * Whatever is billed minus whatever was collected is what is still owed.
+     *
+     * This is the product's whole arithmetic. If it ever fails, every figure in every report
+     * is suspect — so it is asserted on the model the reports are all derived from.
+     */
     public function test_fresh_data_leaves_audit_consistency(): void
     {
         $sub = Subscriber::first();
         $sumBills = (float) $sub->bills()->sum('total');
         $sumPayments = (float) Payment::where('subscriber_id', $sub->id)->sum('amount');
 
-        // outstanding() == billed - paid always
         $this->assertEqualsWithDelta($sumBills - $sumPayments, $sub->outstanding(), 0.01);
     }
 
-    public function test_admin_panel_chrome_renders_in_arabic(): void
+    /**
+     * The panel follows the signed-in user's language.
+     *
+     * The layout's AR/EN button writes that preference and the 'locale' middleware reads it
+     * back; without the middleware the panel sits on config('app.locale') and the button is
+     * decorative.
+     */
+    public function test_the_panel_speaks_the_language_the_account_asks_for(): void
     {
-        $arAdmin = User::create(['name' => 'مدير', 'email' => 'ar@x.com', 'password' => 'x', 'role' => 'admin', 'locale' => 'ar']);
+        $english = User::create(['name' => 'English', 'email' => 'en@x.com', 'password' => 'x', 'role' => 'admin', 'locale' => 'en']);
+        $arabic = User::create(['name' => 'مدير', 'email' => 'ar@x.com', 'password' => 'x', 'role' => 'admin', 'locale' => 'ar']);
 
-        $this->actingAs($arAdmin)
-            ->get('/admin/subscribers')
-            ->assertOk()
-            ->assertSee('المشتركون');
+        // A label that differs between the two files, so the assertion cannot pass by accident.
+        $this->assertNotSame(__('mdl.subscribers', [], 'en'), __('mdl.subscribers', [], 'ar'));
 
-        $this->actingAs($arAdmin)
-            ->get('/admin/profit-loss')
-            ->assertOk()
-            ->assertSee('صافي الربح');
+        $this->actingAs($english)->get('/admin/subscribers')->assertOk()->assertSee(__('mdl.subscribers', [], 'en'));
+        $this->actingAs($arabic)->get('/admin/subscribers')->assertOk()->assertSee(__('mdl.subscribers', [], 'ar'));
+    }
 
-        // Table headers follow the locale too (not just chrome).
-        $this->actingAs($arAdmin)
+    /**
+     * Numbers stay Western (0-9) even when the UI is Arabic.
+     *
+     * A product rule, not a preference: Arabic-Indic digits would break receipts, meter
+     * numbers and the money columns the operator reads out over the phone.
+     */
+    public function test_arabic_ui_still_uses_western_digits(): void
+    {
+        $arabic = User::create(['name' => 'مدير', 'email' => 'ar2@x.com', 'password' => 'x', 'role' => 'admin', 'locale' => 'ar']);
+
+        $this->actingAs($arabic)
             ->get('/admin/bills')
             ->assertOk()
-            ->assertSee('المشترك')
-            ->assertSee('الفترة')
-            ->assertSee('المدفوع')
-            // Numbers stay Western (0-9) even when the UI is Arabic.
-            ->assertSee('32.50')
-            ->assertDontSee('٣٢'); // Arabic-Indic digits must never appear
+            ->assertSee('32.50')                 // 30 kWh × $0.25 + $25 maintenance
+            ->assertDontSee('٢٥');                 // Arabic-Indic digits must never appear
     }
 }

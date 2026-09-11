@@ -40,7 +40,13 @@ class BillsTable extends TableDefinition
                 'label' => __('t.bill_no'),
                 'searchable' => true,
                 'sortable' => true,
+                // Two lines: the number, then the subject. An ad-hoc invoice's subject is the
+                // only thing that says WHAT it was for, but it is empty on every subscription
+                // bill — so it rides under the number instead of occupying a column that is
+                // blank on almost every row.
+                'type' => 'two-line',
                 'render' => fn (Bill $r): string => $r->number ? ltr_isolate($r->number) : '—',
+                'sub' => fn (Bill $r): ?string => $r->title ?: null,
             ],
             [
                 'key' => 'subscriber.name',
@@ -65,13 +71,6 @@ class BillsTable extends TableDefinition
                     Subscriber::TYPE_FLAT => __('t.type_flat'),
                     default => __('t.type_metered'),
                 },
-            ],
-            [
-                'key' => 'title',
-                'label' => __('t.invoice_subject'),
-                'hidden' => true,
-                'on_mobile' => false,
-                'render' => fn (Bill $r): string => $r->title ?: '—',
             ],
             [
                 'key' => 'consumption',

@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Pages\GenerateBills;
+use App\Livewire\Admin\Pages\GenerateBills;
 use App\Livewire\Collector\SubscriberShow;
 use App\Models\Bill;
 use App\Models\Payment;
@@ -217,8 +217,8 @@ class PrintTest extends TestCase
         // The metered subscriber is already billed for 2026-07 and the flat one is not.
         Livewire::actingAs($this->admin)
             ->test(GenerateBills::class)
-            ->set('data.period', '2026-07')
-            ->set('data.route_id', $this->route->id)
+            ->set('filters.period', '2026-07')
+            ->set('filters.route_id', $this->route->id)
             ->assertOk()
             ->assertSee('Flat Customer')
             ->call('generate')

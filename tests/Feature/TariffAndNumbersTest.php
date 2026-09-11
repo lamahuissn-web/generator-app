@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Pages\GenerateBills;
+use App\Livewire\Admin\Pages\GenerateBills;
 use App\Models\Bill;
 use App\Models\Payment;
 use App\Models\Reading;
@@ -158,14 +158,13 @@ class TariffAndNumbersTest extends TestCase
 
         $component = Livewire::actingAs($this->admin)
             ->test(GenerateBills::class)
-            ->set('data.period', '2026-09')
+            ->set('filters.period', '2026-09')
             ->assertOk()
-            ->assertSee('Cycle meter-reading coverage')
-            ->assertSee('1 readings missing')          // the amber gate
-            ->assertSee('1 of 2 recorded')
-            ->assertSee('0.54')                        // cycle tariff chip
-            ->assertSee('cycle tariff')
-            ->assertSee('1,000 → 1,100');              // reading span column
+            ->assertSee(__('gen.coverage'))            // the amber gate
+            ->assertSee('1'.' / '.'2')                 // 1 of 2 readings recorded
+            ->assertSee('0.54')                        // cycle tariff, not the global price
+            ->assertSee(__('gen.tariff_from'))
+            ->assertSee('1,000 → 1,100');              // reading span column, so a wrong read shows
 
         $this->assertSame(1, $component->instance()->progress()['pending']);
         $this->assertFalse($component->instance()->tariff()['from_tariff'] === false);

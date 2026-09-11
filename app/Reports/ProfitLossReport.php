@@ -11,9 +11,8 @@ use Illuminate\Support\Collection;
 /**
  * One month of money in and money out.
  *
- * Ported out of the Filament page so the query lives in one place: the panel is being
- * rebuilt on Metronic and the old page will be deleted, but the definition of "profit" must
- * not change with the markup.
+ * The query lives here, not in the screen, so the definition of "profit" does not depend on
+ * which markup is displaying it.
  *
  * Two deliberate choices, both carried over unchanged:
  *  - money IN is cash actually collected in the window (Payment.created_at), not what was

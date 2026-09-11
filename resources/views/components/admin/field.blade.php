@@ -19,8 +19,15 @@
     $type = $field['type'] ?? 'text';
     $path = $model.'.'.$key;
     $value = $values[$key] ?? null;
-    $required = in_array('required', $field['rules'] ?? [], true);
-    $options = $field['options'] ?? (isset($field['options_from']) ? ($field['options_from'])() : []);
+    // A conditional field is required only in the state that shows it, so the marker has to
+    // ask the same closure the rules do — otherwise the form asks for a field without saying so.
+    $required = in_array('required', $field['rules'] ?? [], true)
+        || (isset($field['required_when']) && ($field['required_when'])($values));
+    // options_from receives the state so a picker can be filtered by what the operator typed.
+    $options = $field['options'] ?? (isset($field['options_from']) ? ($field['options_from'])($values) : []);
+    // Helper text is sometimes derived from the state ("continues from 1,270"): computed here
+    // so the field does not have to re-declare which part of the state it depends on.
+    $helper = isset($field['helper_from']) ? ($field['helper_from'])($values) : ($field['helper'] ?? null);
     $full = ($span ?? $field['span'] ?? 1) === 'full';
 
     // A checkbox draws its own box beside a caption, so it does not get the stacked label
@@ -97,6 +104,15 @@
         <textarea id="{{ $idPrefix }}-{{ $key }}" wire:model="{{ $path }}" rows="{{ $compact ? 2 : $rows }}"
                   class="kt-textarea w-full"></textarea>
 
+    @elseif ($type === 'search')
+        {{-- Drives the picker next to it, so it renders live: waiting for a submit would mean
+             typing a name and seeing nothing happen. --}}
+        <div class="kt-input w-full">
+            <i class="ki-filled ki-magnifier"></i>
+            <input id="{{ $idPrefix }}-{{ $key }}" type="search" wire:model.live.debounce.300ms="{{ $path }}"
+                   @if (! empty($field['placeholder'])) placeholder="{{ $field['placeholder'] }}" @endif>
+        </div>
+
     @elseif ($type === 'checkbox')
         <label class="flex items-center gap-2 text-sm text-secondary-foreground">
             <input id="{{ $idPrefix }}-{{ $key }}" type="checkbox" wire:model="{{ $path }}" class="kt-checkbox">
@@ -156,8 +172,8 @@
                wire:model="{{ $path }}" class="kt-input w-full">
     @endif
 
-    @if (! empty($field['helper']))
-        <span class="text-xs text-muted-foreground">{{ $field['helper'] }}</span>
+    @if (! empty($helper))
+        <span class="text-xs text-muted-foreground">{{ $helper }}</span>
     @endif
 
     @error($path)

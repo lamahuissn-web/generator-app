@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Pages\CollectorStatement;
+use App\Livewire\Admin\Pages\CollectorStatement;
 use App\Models\AuditLog;
 use App\Models\CashHandover;
 use App\Models\Payment;
@@ -139,7 +139,7 @@ class CollectorLedgerTest extends TestCase
         $this->bill('2026-08', 1040);
         $this->collect(25, '2026-08-28', '2026-08');
 
-        $url = CollectorStatement::getUrl([
+        $url = route('admin.collector-statement', [
             'collector_id' => $this->collector->id,
             'from' => '2026-08-01',
             'to' => '2026-08-31',
@@ -156,7 +156,7 @@ class CollectorLedgerTest extends TestCase
 
         // All-time view of the same ledger.
         $this->actingAs($this->admin)
-            ->get(CollectorStatement::getUrl(['collector_id' => $this->collector->id, 'all_time' => 1]))
+            ->get(route('admin.collector-statement', ['collector_id' => $this->collector->id, 'all_time' => 1]))
             ->assertOk()
             ->assertSee('Jad Haddad');
     }
@@ -164,10 +164,10 @@ class CollectorLedgerTest extends TestCase
     public function test_page_renders_without_a_collector_and_is_admin_only(): void
     {
         $this->actingAs($this->admin)
-            ->get(CollectorStatement::getUrl(['collector_id' => null]))
+            ->get(route('admin.collector-statement', ['collector_id' => null]))
             ->assertOk();
 
-        $this->actingAs($this->collector)->get(CollectorStatement::getUrl())->assertForbidden();
+        $this->actingAs($this->collector)->get(route('admin.collector-statement'))->assertForbidden();
     }
 
     public function test_quick_handover_action_records_cash_for_the_shown_collector(): void
@@ -176,17 +176,16 @@ class CollectorLedgerTest extends TestCase
         $this->collect(40, '2026-08-28', '2026-08');
 
         Livewire::actingAs($this->admin)
-            ->test(CollectorStatement::class, ['collector_id' => $this->collector->id])
-            ->set('data.collector_id', $this->collector->id)
-            ->set('data.from', '2026-08-01')
-            ->set('data.to', '2026-08-31')
+            ->test(CollectorStatement::class, ['filters' => ['collector_id' => $this->collector->id]])
+            ->set('filters.from', '2026-08-01')
+            ->set('filters.to', '2026-08-31')
             ->assertOk()
-            ->assertActionExists('handover')
-            ->callAction('handover', [
-                'amount' => 15,
-                'handover_date' => '2026-08-31',
-                'note' => 'quick settlement',
-            ])
+            ->call('openHandover')
+            ->assertSet('handoverOpen', true)
+            ->set('handover.amount', '15')
+            ->set('handover.handover_date', '2026-08-31')
+            ->set('handover.note', 'quick settlement')
+            ->call('saveHandover')
             ->assertHasNoErrors();
 
         $handover = CashHandover::where('collector_id', $this->collector->id)->first();

@@ -13,7 +13,7 @@ use Illuminate\View\View;
 /**
  * The operator's landing screen.
  *
- * Every figure here is the same expression the Filament dashboard widget used, so the two
+ * Every figure here is the same expression the old dashboard widget used, so the two
  * admins cannot disagree about the month while both are reachable.
  */
 class DashboardController extends Controller

@@ -10,11 +10,11 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
         then: function () {
-            // The rebuilt panel. It lives at /manage while the Filament panel still owns
-            // /admin; the prefix flips to 'admin' when the two reach parity. Names keep the
-            // `admin.` prefix throughout so only this line changes.
+            // The panel. It was built at /manage while Filament still owned /admin, and
+            // moved onto /admin once every screen was rebuilt — the route NAMES never
+            // changed (`admin.`), so nothing but this prefix had to move with it.
             Route::middleware('web')
-                ->prefix('manage')
+                ->prefix('admin')
                 ->name('admin.')
                 ->group(base_path('routes/admin.php'));
         },
@@ -23,7 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Two portals share the `auth` middleware, and Laravel's default guest redirect is
         // route('login') — which is the COLLECTOR sign-in. An unauthenticated visitor to the
         // panel must be sent to the panel's own door.
-        $middleware->redirectGuestsTo(fn (\Illuminate\Http\Request $request): string => $request->is('manage', 'manage/*')
+        $middleware->redirectGuestsTo(fn (\Illuminate\Http\Request $request): string => $request->is('admin', 'admin/*')
             ? route('admin.login')
             : route('login'));
 

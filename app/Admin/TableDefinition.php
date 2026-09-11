@@ -127,7 +127,7 @@ abstract class TableDefinition
      * A named action on one row, e.g. reversing a payment or deleting a reading.
      *
      * Table actions go through here rather than straight to a model write so every
-     * correction runs the same domain service (and the same guard) the Filament panel
+     * correction runs the same domain service (and the same guard) the form screens
      * used. Return the flash message; throw to report a refusal.
      *
      * @return array{ok: bool, message: string}

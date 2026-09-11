@@ -12,8 +12,8 @@ use App\Models\User;
  * and adding a screen is one array entry instead of a Blade edit.
  *
  * `match` holds the ROUTE NAME patterns that light the item up. Route names rather than
- * paths: the panel is being built at /manage and will move to /admin once it reaches
- * parity, and a path-based match would silently stop highlighting anything on the day of
+ * paths: the panel was built at /manage and moved to /admin once every screen was rebuilt,
+ * and a path-based match would have silently stopped highlighting everything on the day of
  * the swap. `admin.subscribers.*` covers the detail and edit pages too.
  */
 class AdminNav

@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Resources\ReadingResource;
+use App\Services\ReadingService;
 use App\Livewire\Collector\SubscriberShow;
 use App\Models\AuditLog;
 use App\Models\Bill;
@@ -321,11 +321,11 @@ class BrokenMeterTest extends TestCase
         $data = [
             'subscriber_id' => $this->subscriber->id,
             'period' => '2026-10',
-            'reading_mode' => ReadingResource::MODE_ESTIMATED,
+            'reading_mode' => ReadingService::MODE_ESTIMATED,
             'estimated_kwh' => '48',
             'estimate_reason' => 'العدّاد معطّل',
         ];
-        $result = ReadingResource::record($this->subscriber, $data, $this->admin->id);
+        $result = ReadingService::record($this->subscriber, $data, $this->admin->id);
         $this->assertTrue($result['reading']->is_estimated);
         $this->assertSame(48.0, (float) $result['reading']->consumption);
 
@@ -333,14 +333,14 @@ class BrokenMeterTest extends TestCase
         $data = [
             'subscriber_id' => $this->subscriber->id,
             'period' => '2026-11',
-            'reading_mode' => ReadingResource::MODE_SWAP,
+            'reading_mode' => ReadingService::MODE_SWAP,
             'current_reading' => '9',
             'old_meter_no' => '1123',
             'old_meter_reading' => '1198',
             'new_meter_no' => '4478',
             'new_meter_start' => '0',
         ];
-        $result = ReadingResource::record($this->subscriber->fresh(), $data, $this->admin->id);
+        $result = ReadingService::record($this->subscriber->fresh(), $data, $this->admin->id);
         $this->assertTrue($result['reading']->hasMeterSwap());
         $this->assertSame(9.0, (float) $result['reading']->consumption);   // 1198 - 1198 (estimate bump) + 9
         $this->assertSame('4478', $this->subscriber->fresh()->meter_no);
@@ -349,10 +349,10 @@ class BrokenMeterTest extends TestCase
         $data = [
             'subscriber_id' => $this->subscriber->id,
             'period' => '2026-12',
-            'reading_mode' => ReadingResource::MODE_NORMAL,
+            'reading_mode' => ReadingService::MODE_NORMAL,
             'current_reading' => '30',
         ];
-        $result = ReadingResource::record($this->subscriber->fresh(), $data, $this->admin->id);
+        $result = ReadingService::record($this->subscriber->fresh(), $data, $this->admin->id);
         $this->assertFalse($result['reading']->is_estimated);
         $this->assertFalse($result['reading']->hasMeterSwap());
         $this->assertSame(21.0, (float) $result['reading']->consumption);   // 30 - 9

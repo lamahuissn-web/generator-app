@@ -15,7 +15,8 @@ use App\Models\User;
 use App\Services\BillingService;
 use Database\Seeders\CleanSeeder;
 use Database\Seeders\DemoSeeder;
-use Filament\Auth\Pages\Login;
+use App\Admin\AdminNav;
+use App\Admin\ResourceRegistry;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
@@ -75,12 +76,32 @@ class CleanSlateTest extends TestCase
     {
         $this->seed(CleanSeeder::class);
 
-        Livewire::test(Login::class)
-            ->fillForm(['email' => 'admin@example.com', 'password' => 'admin123'])
-            ->call('authenticate')
-            ->assertHasNoFormErrors();
+        // The door, through HTTP: the form posts to the panel's own login route.
+        $this->post('/admin/login', [
+            'email' => 'admin@example.com',
+            'password' => 'admin123',
+        ])->assertRedirect(route('admin.dashboard'))->assertSessionHasNoErrors();
 
         $this->assertAuthenticatedAs(User::firstOrFail());
+    }
+
+    /** The door also refuses the wrong password, and a collector's account. */
+    public function test_the_panel_login_refuses_bad_credentials(): void
+    {
+        $this->seed(CleanSeeder::class);
+
+        User::create([
+            'name' => 'Collector', 'email' => 'c@example.com',
+            'password' => 'collector123', 'role' => User::ROLE_COLLECTOR, 'locale' => 'ar',
+        ]);
+
+        $this->post('/admin/login', ['email' => 'admin@example.com', 'password' => 'wrong'])
+            ->assertSessionHasErrors('email');
+        $this->assertGuest();
+
+        $this->post('/admin/login', ['email' => 'c@example.com', 'password' => 'collector123'])
+            ->assertSessionHasErrors('email');
+        $this->assertGuest();
     }
 
     public function test_every_admin_page_renders_on_an_empty_database(): void
@@ -88,28 +109,27 @@ class CleanSlateTest extends TestCase
         $this->seed(CleanSeeder::class);
         $this->actingAs(User::firstOrFail());
 
-        $pages = [
-            '/admin',
-            '/admin/subscribers', '/admin/subscribers/create',
-            '/admin/readings', '/admin/readings/create',
-            '/admin/bills',
-            '/admin/payments',
-            '/admin/expenses', '/admin/expenses/create',
-            '/admin/routes', '/admin/routes/create',
-            '/admin/tariffs', '/admin/tariffs/create',
-            '/admin/cash-handovers', '/admin/cash-handovers/create',
-            '/admin/users', '/admin/users/create',
-            '/admin/audit-logs',
-            '/admin/settings',
-            '/admin/generate-bills',
-            '/admin/collection-report',
-            '/admin/collector-statement',
-            '/admin/overdue-report',
-            '/admin/profit-loss',
-        ];
+        // Every screen the panel advertises, derived from the nav and the registry rather
+        // than hand-listed: a screen added later is covered without touching this test, and
+        // one that is listed but unbuildable cannot be quietly skipped.
+        $pages = ['/admin'];
+
+        foreach (AdminNav::pages() as $page) {
+            $pages[] = route($page['route']);
+        }
+
+        foreach (ResourceRegistry::all() as $key => $resource) {
+            $pages[] = route('admin.'.$key.'.index');
+
+            if (! empty($resource['form'])) {
+                $pages[] = route('admin.'.$key.'.create');
+            }
+        }
+
+        $this->assertGreaterThan(20, count($pages), 'The derived screen list looks too small.');
 
         foreach ($pages as $page) {
-            $this->get($page)->assertOk();
+            $this->get($page)->assertOk($page.' failed to render on an empty database');
         }
 
         // The collector portal still stands up with no collectors seeded; a logged-in

@@ -70,6 +70,13 @@
                         :subject-id="$subscriber->id"
                         :key="'collect-'.$subscriber->id" />
 
+                    {{-- Recording the reading is the visit; it belongs next to collecting,
+                         since a collector does both in one stop. --}}
+                    <livewire:admin.action-form
+                        :action="\App\Admin\Actions\RecordReading::class"
+                        :subject-id="$subscriber->id"
+                        :key="'reading-'.$subscriber->id" />
+
                     <livewire:admin.action-form
                         :action="\App\Admin\Actions\SpecialInvoice::class"
                         :subject-id="$subscriber->id"

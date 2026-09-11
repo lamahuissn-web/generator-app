@@ -2,8 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Resources\SubscriberResource\Pages\ViewSubscriber;
-use App\Filament\Resources\SubscriberResource\RelationManagers\PaymentsRelationManager;
 use App\Livewire\Collector\SubscriberShow;
 use App\Models\AuditLog;
 use App\Models\Payment;
@@ -263,15 +261,10 @@ class PaymentTransparencyTest extends TestCase
             ->assertSee('Whish Money')
             ->assertSee($july->number);
 
-        // Subscriber profile: the payments tab renders its own table (Filament only
-        // boots the active relation manager tab, so test the manager itself).
-        $this->actingAs($this->admin)->get('/admin/subscribers/'.$this->subscriber->id)->assertOk();
-
-        Livewire::actingAs($this->admin)
-            ->test(PaymentsRelationManager::class, [
-                'ownerRecord' => $this->subscriber,
-                'pageClass' => ViewSubscriber::class,
-            ])
+        // The subscriber profile's payments tab, which is the same table component the list
+        // page uses, handed a subscriber constraint.
+        $this->actingAs($this->admin)
+            ->get('/admin/subscribers/'.$this->subscriber->id.'?tab=payments')
             ->assertOk()
             ->assertSee('Whish Money')
             ->assertSee($july->number)

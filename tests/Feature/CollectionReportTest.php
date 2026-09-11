@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Pages\CollectionReport;
+use App\Livewire\Admin\Pages\CollectionReport;
 use App\Models\AuditLog;
 use App\Models\CashHandover;
 use App\Models\Payment;
@@ -272,19 +272,20 @@ class CollectionReportTest extends TestCase
 
         $component = Livewire::actingAs($this->admin)
             ->test(CollectionReport::class)
-            ->set('data.from', '2026-09-01')
-            ->set('data.to', '2026-09-30')
+            ->set('filters.from', '2026-09-01')
+            ->set('filters.to', '2026-09-30')
             ->assertOk()
             ->assertSee('Collector A')
             ->assertSee('Collector B')
-            ->assertActionExists('export')
-            ->assertActionExists('pdf');
+            // The CSV and the print/PDF links are on the screen; the PDF itself is asserted
+            // below through its route, which is what actually has to work.
+            ->assertSee(__('col.export'));
 
         $this->assertSame(100.0, $component->instance()->totals()['collected']);
         $this->assertCount(2, $component->instance()->collectors());
 
         // Scoping by collector narrows the reconciliation table to one row.
-        $component->set('data.collector_id', $this->collectorA->id);
+        $component->set('filters.collector_id', $this->collectorA->id);
         $this->assertCount(1, $component->instance()->collectors());
         $this->assertSame('Collector A', $component->instance()->collectors()->first()['name']);
         $this->assertSame(60.0, $component->instance()->totals()['collected']);
@@ -307,9 +308,9 @@ class CollectionReportTest extends TestCase
         ]);
 
         foreach ([
-            '/admin/cash-handovers',
-            '/admin/cash-handovers/create',
-            '/admin/cash-handovers/'.$handover->id.'/edit',
+            '/admin/handovers',
+            '/admin/handovers/create',
+            '/admin/handovers/'.$handover->id.'/edit',
         ] as $path) {
             $this->actingAs($this->admin)->get($path)->assertOk($path.' failed to render');
         }

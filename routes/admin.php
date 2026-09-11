@@ -9,17 +9,20 @@ use App\Http\Controllers\Admin\SubscriberController;
 use Illuminate\Support\Facades\Route;
 
 /*
- | The panel. Built at /manage while the Filament panel still owns /admin; when this
- | reaches parity the prefix becomes 'admin' and the Filament provider is dropped.
- | Route names keep the `admin.` prefix either way, so nothing else has to change.
+ | The panel, hand-built on Metronic. It was developed at /manage and moved onto /admin once
+ | every screen was rebuilt; the route names kept the `admin.` prefix throughout, so only the
+ | prefix in bootstrap/app.php had to change with it.
  */
 
-Route::middleware('guest')->group(function () {
+Route::middleware(['guest', 'locale'])->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
     Route::post('/login', [AuthController::class, 'login'])->name('login.attempt');
 });
 
-Route::middleware(['auth', 'role:admin'])->group(function () {
+// 'locale' is load-bearing: the layout's AR/EN button writes the preference and this
+// middleware is the only thing that reads it back. Without it the panel is stuck on
+// config('app.locale') and the button does nothing.
+Route::middleware(['auth', 'role:admin', 'locale'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     Route::get('/', DashboardController::class)->name('dashboard');
@@ -57,7 +60,12 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
             // read-only screen (bills, the audit log) leaves dead URLs that 404.
             if (! empty($resource['form'])) {
                 Route::get('/create', [ResourceController::class, 'create'])->name('create')->defaults('resource', $key);
-                Route::get('/{record}/edit', [ResourceController::class, 'edit'])->name('edit')->defaults('resource', $key);
+
+                // A create-only screen (a reading, a measurement of a moment) gets no edit
+                // route at all, rather than an edit route that always 404s.
+                if (empty($resource['create_only'])) {
+                    Route::get('/{record}/edit', [ResourceController::class, 'edit'])->name('edit')->defaults('resource', $key);
+                }
             }
         });
     }

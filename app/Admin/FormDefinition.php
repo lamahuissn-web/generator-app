@@ -17,10 +17,13 @@ use Illuminate\Database\Eloquent\Model;
  *   type         string   text|email|tel|number|money|select|textarea|date|password|checkbox
  *   rules        array    Laravel validation rules, e.g. ['required','max:150']
  *   options      array    value => label            (type=select)
- *   options_from Closure  fn(): array               (type=select, resolved per render)
+ *   options_from Closure  fn(array $state): array   (type=select, resolved per render)
  *   helper       string   small text under the field
  *   default      mixed    value for a new record
  *   visible_when Closure  fn(array $state): bool — hides the field AND drops its rules
+ *   required_when Closure fn(array $state): bool — field is required only in that state
+ *   helper_from  Closure  fn(array $state): ?string — helper text computed from the state
+ *   live         bool     re-render on every keystroke (a field that drives the others)
  *   span         int      grid columns to span, 1-3, or 'full'
  *   months       bool     type=date with a month picker
  *   placeholder  string
@@ -107,6 +110,16 @@ abstract class FormDefinition
             }
 
             $fieldRules = $field['rules'] ?? [];
+
+            // A rule that is conditional is written as required_when rather than a hand-rolled
+            // closure in each definition: the field is required only in the state where it is
+            // shown, so switching mode cannot leave a rule nobody can satisfy.
+            if (isset($field['required_when'])) {
+                // The declared rules must not also say required/nullable: which of the two wins
+                // is a validator implementation detail, so the conditional replaces them.
+                $fieldRules = array_values(array_diff($fieldRules, ['required', 'nullable']));
+                $fieldRules[] = ($field['required_when'])($state) ? 'required' : 'nullable';
+            }
 
             // A field declared `unique` becomes a uniqueness rule that ignores the record
             // being edited — otherwise re-saving an unchanged form reports a clash with

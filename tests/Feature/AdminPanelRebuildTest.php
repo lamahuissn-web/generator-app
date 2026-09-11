@@ -14,7 +14,7 @@ use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
- * The rebuilt panel (formerly Filament).
+ * The rebuilt panel — the only panel; the Filament one it replaced was deleted with it.
  *
  * Covers the shell, the door, the generic table and the screens built so far. Every entry in
  * the nav is asserted to resolve to a real route, so a screen cannot be silently missing.
@@ -151,8 +151,8 @@ class AdminPanelRebuildTest extends TestCase
      * with a route() call for a missing route 500s EVERY page in the panel.
      *
      * Every screen now has a route, so the guard has flipped: nothing may be marked unbuilt,
-     * and every entry must be a real link. That is the condition for swapping /manage onto
-     * /admin — if this fails, the panel is not at parity and the swap would break the nav.
+     * and every entry must be a real link. This was the condition for moving /manage onto
+     * /admin; now that the swap is done it guards against a screen losing its route.
      */
     public function test_every_nav_item_is_linked(): void
     {

@@ -67,7 +67,7 @@ class ResourceController extends Controller
         $resource = \App\Admin\ResourceRegistry::get($key);
         $this->authorize($resource);
 
-        abort_if(empty($resource['form']), 404);
+        abort_if(empty($resource['form']) || ! empty($resource['create_only']), 404);
 
         $model = $resource['form']::make()->model();
 

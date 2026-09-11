@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
-use App\Filament\Pages\OverdueReport;
-use App\Filament\Resources\SubscriberResource;
+use App\Admin\Actions\ConvertToFlat;
+use App\Admin\Actions\ConvertToMetered;
+use App\Admin\Actions\SpecialInvoice;
+use App\Reports\OverdueReport;
 use App\Livewire\Collector\SubscriberShow;
 use App\Models\AuditLog;
 use App\Models\Bill;
@@ -314,10 +316,7 @@ class SpecialInvoiceTest extends TestCase
         ], null, null, '2026-08', $this->admin->id);
 
         $this->actingAs($this->admin);
-        $rows = Livewire::test(OverdueReport::class)
-            ->call('$refresh')
-            ->instance()
-            ->rows();
+        $rows = OverdueReport::make()->rows();
 
         $this->assertCount(1, $rows);
         $this->assertSame(55.0, (float) $rows[0]['due']);
@@ -452,12 +451,35 @@ class SpecialInvoiceTest extends TestCase
             ->assertSee($bill->number);
     }
 
-    public function test_the_subscriber_special_invoice_action_exists_on_both_screens(): void
+    /**
+     * Both doors to a special invoice exist: the profile screen's action modal, and the
+     * subscriber's own meter controls (the same pair the collector sees on the portal).
+     *
+     * Asserted on the action CLASSES rather than on a rendered button, so a button that loses
+     * its action is caught here and the wiring is caught by the render tests.
+     */
+    public function test_the_subscriber_actions_exist_for_a_special_invoice_and_a_meter_change(): void
     {
         $this->billAugust();
 
-        $actions = collect(SubscriberResource::meterActions())->pluck('name');
-        $this->assertTrue($actions->isNotEmpty());
-        $this->assertTrue(method_exists(SubscriberResource::class, 'specialInvoiceAction'));
+        foreach ([SpecialInvoice::class, ConvertToFlat::class, ConvertToMetered::class] as $action) {
+            $definition = $action::make();
+
+            $this->assertNotSame('', $definition->label());
+            $this->assertNotEmpty($definition->sections(), $action.' has no fields to fill in.');
+        }
+
+        // A special invoice is issued from the profile, and the two meter conversions are
+        // offered one at a time — a metered subscriber is not offered "convert to metered".
+        $this->assertTrue(SpecialInvoice::make()->visible($this->subscriber));
+        $this->assertFalse(ConvertToMetered::make()->visible($this->subscriber), 'A metered subscriber was offered a metered conversion.');
+        $this->assertTrue(ConvertToFlat::make()->visible($this->subscriber));
+
+        $flat = Subscriber::create([
+            'route_id' => $this->subscriber->route_id, 'name' => 'Flat Guy', 'type' => Subscriber::TYPE_FLAT,
+            'flat_fee' => 60, 'status' => Subscriber::STATUS_ACTIVE, 'created_by' => $this->admin->id,
+        ]);
+        $this->assertTrue(ConvertToMetered::make()->visible($flat));
+        $this->assertFalse(ConvertToFlat::make()->visible($flat), 'A flat subscriber was offered a flat conversion.');
     }
 }
