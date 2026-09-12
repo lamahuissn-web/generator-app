@@ -173,6 +173,15 @@ class AdminNav
                         'component' => \App\Livewire\Admin\Pages\Settings::class,
                     ],
                     [
+                        // Beside the settings and the audit log: this is the screen an operator opens
+                        // when they want to know whether the books are being copied at all.
+                        'label' => __('mdl.backups'),
+                        'icon' => 'ki-cloud-change',
+                        'route' => 'admin.backup',
+                        'match' => ['admin.backup'],
+                        'component' => \App\Livewire\Admin\Pages\Backup::class,
+                    ],
+                    [
                         'label' => __('mdl.audit_log'),
                         'icon' => 'ki-shield-tick',
                         'route' => 'admin.audit-logs.index',
