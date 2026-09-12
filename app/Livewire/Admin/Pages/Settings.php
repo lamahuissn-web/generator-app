@@ -3,6 +3,8 @@
 namespace App\Livewire\Admin\Pages;
 
 use App\Models\Setting;
+use App\Services\BillingService;
+use Illuminate\Validation\Rule;
 use Livewire\Component;
 
 /**
@@ -35,7 +37,11 @@ class Settings extends Component
     /** The defaults a fresh install behaves as if the row is missing. */
     private static function fallback(): array
     {
-        return ['kwh_price' => '0.25', 'default_maintenance_fee' => '0'];
+        return [
+            'kwh_price' => '0.25',
+            'default_maintenance_fee' => '0',
+            'bill_rounding' => BillingService::ROUND_NONE,
+        ];
     }
 
     /** Validation for the numeric keys: a negative kWh price would silently zero every bill. */
@@ -44,6 +50,9 @@ class Settings extends Component
         return [
             'state.kwh_price' => ['required', 'numeric', 'min:0'],
             'state.default_maintenance_fee' => ['required', 'numeric', 'min:0'],
+            // Only the two rules the billing service knows how to apply: a stored third option
+            // would be a setting the panel silently ignores.
+            'state.bill_rounding' => ['required', Rule::in([BillingService::ROUND_NONE, BillingService::ROUND_CEIL_DOLLAR])],
             'state.company_name' => ['nullable', 'string', 'max:120'],
             'state.company_phone' => ['nullable', 'string', 'max:40'],
             'state.company_address' => ['nullable', 'string', 'max:180'],
@@ -57,6 +66,17 @@ class Settings extends Component
         return [
             'kwh_price' => ['key' => 'kwh_price', 'label' => __('set.kwh_label'), 'type' => 'money', 'helper' => __('set.kwh_helper'), 'rules' => ['required']],
             'default_maintenance_fee' => ['key' => 'default_maintenance_fee', 'label' => __('set.maint_label'), 'type' => 'money', 'helper' => __('set.maint_helper'), 'rules' => ['required']],
+            'bill_rounding' => [
+                'key' => 'bill_rounding',
+                'label' => __('set.rounding_label'),
+                'type' => 'select',
+                'options' => [
+                    BillingService::ROUND_NONE => __('set.round_none'),
+                    BillingService::ROUND_CEIL_DOLLAR => __('set.round_ceil_dollar'),
+                ],
+                'helper' => __('set.rounding_helper'),
+                'rules' => ['required'],
+            ],
             'company_name' => ['key' => 'company_name', 'label' => __('set.company_name'), 'placeholder' => __('prt.company_default'), 'rules' => ['nullable']],
             'company_phone' => ['key' => 'company_phone', 'label' => __('set.company_phone'), 'type' => 'tel', 'rules' => ['nullable']],
             'company_address' => ['key' => 'company_address', 'label' => __('set.company_address'), 'rules' => ['nullable']],

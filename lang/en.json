@@ -937,5 +937,9 @@
     "file.empty_bills": "No bills in the selected range.",
     "file.empty_readings": "No readings in the selected range.",
     "file.empty_payments": "No receipts in the selected range.",
-    "file.other_cycles_due": "including :amount from other cycles"
+    "file.other_cycles_due": "including :amount from other cycles",
+    "set.rounding_label": "Invoice total rounding",
+    "set.rounding_helper": "Applies to NEW subscription invoices only (metered and flat). Invoices already issued never change, and special invoices (parts, labour) are never rounded.",
+    "set.round_none": "No rounding — exact cents",
+    "set.round_ceil_dollar": "Up to the whole dollar"
 }

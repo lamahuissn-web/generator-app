@@ -2,7 +2,7 @@
     {{-- The kWh price matters more than the rest: with no monthly tariff row, every invoice
          prices from here, so the helper text under the field says so. --}}
     <x-admin.card :title="__('set.billing_section')" content-class="sm:grid-cols-2">
-        @foreach (['kwh_price', 'default_maintenance_fee'] as $key)
+        @foreach (['kwh_price', 'default_maintenance_fee', 'bill_rounding'] as $key)
             <x-admin.field :field="$this->keys()[$key]" model="state" :values="$state" id-prefix="set" />
         @endforeach
     </x-admin.card>

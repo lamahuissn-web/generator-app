@@ -18,6 +18,13 @@ class BillingService
 {
     public const PERIOD_REGEX = '/^\d{4}-(0[1-9]|1[0-2])$/';
 
+    /** Setting key: 'none' (exact cents) or 'ceil_dollar' (up to the whole dollar). */
+    public const ROUNDING_KEY = 'bill_rounding';
+
+    public const ROUND_NONE = 'none';
+
+    public const ROUND_CEIL_DOLLAR = 'ceil_dollar';
+
     /** Billing-run outcomes. */
     public const RUN_CREATE = 'create';
 
@@ -248,7 +255,14 @@ class BillingService
         $usage = round($consumption * $price, 2);
         $maintenance = $subscriber->effectiveMaintenanceFee();
         $prevDebt = self::outstandingBefore($subscriber, $period);
-        $total = round($usage + $maintenance, 2);
+        $total = self::roundedTotal($usage + $maintenance);
+
+        // The rounding is CARRIED BY THE CHARGE, not by a line of its own: the printed invoice has
+        // to add up on its own terms (usage + fees = total), and the office asked for no mention of
+        // rounding anywhere on the paper. What was measured does not move: the readings and the
+        // consumption above stay exactly what the meter said — the money line is where the office's
+        // rule lands.
+        $usage = round($total - $maintenance, 2);
 
         return DB::transaction(function () use (
             $subscriber, $period, $currentReading, $prevValue, $consumption,
@@ -521,16 +535,32 @@ class BillingService
         }
 
         $flat = $subscriber->isFlat() ? (float) ($subscriber->flat_fee ?? 0) : 0.0;
+
+        // The charge as the meter and the tariff produced it: what "is there anything to bill here"
+        // must be answered on (a rounded-up $0.30 is still a charge of 30 cents, not a real invoice).
+        $charged = round($usage + $maintenance + $flat, 2);
+        $total = self::roundedTotal($charged);
+
+        // …and the rounding lands on the line that carries the charge — consumption for a metered
+        // house, the agreed fee for a flat one — so the invoice's own addition still comes out:
+        // usage + maintenance + flat = the total, on the paper and in the books.
+        $absorbed = round($total - $charged, 2);
+        if ($subscriber->isMetered()) {
+            $usage = round($usage + $absorbed, 2);
+        } else {
+            $flat = round($flat + $absorbed, 2);
+        }
+
         $row['consumption'] = $consumption;
         $row['usage'] = $usage;
         $row['maintenance'] = $maintenance;
         $row['flat'] = $flat;
-        $row['total'] = round($usage + $maintenance + $flat, 2);
+        $row['total'] = $total;
 
         $state = match (true) {
             $subscriber->status !== Subscriber::STATUS_ACTIVE => self::RUN_INACTIVE,
             $subscriber->isMetered() && $reading === null => self::RUN_NO_READING,
-            $row['total'] <= 0 => self::RUN_ZERO,
+            $charged <= 0 => self::RUN_ZERO,
             default => self::RUN_CREATE,
         };
 
@@ -592,7 +622,11 @@ class BillingService
         $flatFee = (float) ($subscriber->flat_fee ?? 0);
         $prevDebt = self::outstandingBefore($subscriber, $period);
 
-        return DB::transaction(function () use ($subscriber, $period, $flatFee, $prevDebt) {
+        // The agreed fee carries the office's rounding, so the printed line and the total below it
+        // are the same figure: an invoice whose lines do not add up is an argument at the door.
+        $total = self::roundedTotal($flatFee);
+
+        return DB::transaction(function () use ($subscriber, $period, $total, $prevDebt) {
             return Bill::create([
                 'number' => self::billNumber($period, $subscriber->id),
                 'subscriber_id' => $subscriber->id,
@@ -603,12 +637,34 @@ class BillingService
                 'kwh_price' => null,
                 'usage_amount' => 0,
                 'maintenance_fee' => 0,
-                'flat_amount' => $flatFee,
+                'flat_amount' => $total,
                 'prev_debt' => $prevDebt,
-                'total' => $flatFee,
+                'total' => $total,
                 'paid_amount' => 0,
             ]);
         });
+    }
+
+    /**
+     * The office's rounding rule, applied to an invoice's total.
+     *
+     * Prices multiply into cents (105 kWh × $0.25 = $26.25) and $26.25 is change nobody can make at
+     * the door, so the office rounds the total UP to the whole dollar. It is set in Settings and
+     * applies only to invoices generated after it was set — an invoice already issued never moves
+     * underneath the money taken against it.
+     *
+     * The figure returned is the TOTAL. Callers put the difference into the line that carries the
+     * charge (see enterMeteredReading, previewRunRow, ensureFlatBill), so the invoice's own addition
+     * still comes out. The paper must add up on its own terms: the office asked for no rounding to
+     * be named anywhere on it.
+     */
+    public static function roundedTotal(float $total): float
+    {
+        $total = round($total, 2);
+
+        return Setting::get(self::ROUNDING_KEY, self::ROUND_NONE) === self::ROUND_CEIL_DOLLAR
+            ? ceil($total)
+            : $total;
     }
 
     /**

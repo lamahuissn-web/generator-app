@@ -937,5 +937,9 @@
     "file.empty_bills": "ما في فواتير بالمدى المختار.",
     "file.empty_readings": "ما في قراءات بالمدى المختار.",
     "file.empty_payments": "ما في سندات قبض بالمدى المختار.",
-    "file.other_cycles_due": "منها :amount من دورات تانية"
+    "file.other_cycles_due": "منها :amount من دورات تانية",
+    "set.rounding_label": "تقريب إجمالي الفاتورة",
+    "set.rounding_helper": "على فواتير الاشتراك الجديدة فقط (عدّاد واشتراك ثابت). الفواتير الصادرة ما بتتغيّر، والفواتير الخاصة (قطع وييد عاملة) بلا تقريب.",
+    "set.round_none": "بلا تقريب — بالقريش",
+    "set.round_ceil_dollar": "لأعلى للدولار الصحيح"
 }

@@ -122,10 +122,20 @@
                 </tr>
             @endforeach
         @elseif ($bill->type === \App\Models\Subscriber::TYPE_METERED)
+            @php
+                // The tariff is printed only when multiplying it actually gives the amount on this
+                // line. With the office's rounding the consumption line carries the rounding, and
+                // "105 kWh × $0.25" printed beside $27.00 is a multiplication that does not hold:
+                // the paper has to add up on its own terms.
+                $listPrice = (float) ($bill->kwh_price ?? \App\Services\BillingService::kwhPrice($bill->period));
+                $showsRate = round((float) $bill->consumption * $listPrice, 2) === round((float) $bill->usage_amount, 2);
+            @endphp
             <tr>
                 <td>
                     {{ __('prt.usage_short') }}
-                    <span class="ltr">({{ number_format((float) $bill->consumption, 1) }} kWh × {{ money($bill->kwh_price ?? \App\Services\BillingService::kwhPrice($bill->period)) }})</span>
+                    @if ($showsRate)
+                        <span class="ltr">({{ number_format((float) $bill->consumption, 1) }} kWh × {{ money($listPrice) }})</span>
+                    @endif
                     @if ($bill->reading && ! $bill->reading->is_estimated && ! $bill->reading->hasMeterSwap())
                         {{-- LRM-wrapped LTR block: inside RTL text bidi reorders the two numbers
                              and mirrors the arrow, so the span must live in its own LTR line. --}}
