@@ -30,7 +30,34 @@ class Payment extends Model
         self::METHOD_OTHER => 'Other',
     ];
 
-    protected $fillable = ['number', 'subscriber_id', 'collector_id', 'amount', 'method', 'note'];
+    protected $fillable = ['number', 'subscriber_id', 'collector_id', 'amount', 'method', 'note', 'lbp_amount', 'lbp_rate'];
+
+    protected function casts(): array
+    {
+        return [
+            'lbp_amount' => 'float',
+            'lbp_rate' => 'float',
+        ];
+    }
+
+    /**
+     * Was this money handed over in lira?
+     *
+     * Null (a dollar collection) and 0 are different: only the first is true of a receipt taken
+     * in cash USD, and a stored 0 would make the lira column of a report read as real money.
+     */
+    public function isLira(): bool
+    {
+        return $this->lbp_amount !== null;
+    }
+
+    /** 'LBP 5,000,000' exactly as it was handed over — never re-converted at today's rate. */
+    public function liraLabel(): ?string
+    {
+        return $this->isLira()
+            ? 'LBP '.number_format((float) $this->lbp_amount, 0, '.', ',')
+            : null;
+    }
 
     public function subscriber(): BelongsTo
     {

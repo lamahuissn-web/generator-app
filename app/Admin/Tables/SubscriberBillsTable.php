@@ -3,6 +3,7 @@
 namespace App\Admin\Tables;
 
 use App\Models\Bill;
+use App\Services\Currency;
 
 /**
  * The bills log inside a subscriber's file.
@@ -29,6 +30,20 @@ class SubscriberBillsTable extends BillsTable
             }
 
             $columns[] = $column;
+
+            if ($column['key'] === 'total' && Currency::isConfigured()) {
+                $columns[] = [
+                    'key' => 'total_lbp',
+                    'label' => __('file.lbp_today'),
+                    'align' => 'end',
+                    'on_mobile' => false,
+                    // The lira figure TODAY, not the lira of the day the invoice was issued: the
+                    // street quotes a standing debt in today's money, and the label says so.
+                    // The column only exists while a rate does — a heading over a column of blank
+                    // cells is a promise the panel is not keeping.
+                    'render' => fn (Bill $bill): ?string => lbp($bill->total),
+                ];
+            }
 
             if ($column['key'] === 'period') {
                 $columns[] = [

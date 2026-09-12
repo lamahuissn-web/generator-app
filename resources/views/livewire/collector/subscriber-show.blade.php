@@ -527,6 +527,19 @@
                         <span class="kt-badge kt-badge-sm bg-white/20 text-white">{{ $receipt['method_label'] }}</span>
                     </div>
                     <p class="amount-cell mt-1.5 text-3xl font-semibold">{{ money($receipt['applied']) }}</p>
+                    @if (! empty($receipt['lbp_applied']))
+                        {{-- Both figures, because both are true: the lira the subscriber handed over
+                             and the dollars it settled — plus the rate, so the receipt can be checked. --}}
+                        <p class="amount-cell mt-1 text-sm text-green-50" dir="ltr">
+                            LBP {{ number_format((float) $receipt['lbp_applied'], 0, '.', ',') }}
+                            · {{ __('portal.rate_used', ['rate' => number_format((float) $receipt['lbp_rate'], 0, '.', ',')]) }}
+                        </p>
+                        @if ((float) $receipt['lbp_change'] > 0)
+                            <p class="amount-cell text-xs text-green-50" dir="ltr">
+                                {{ __('portal.change_back', ['change' => 'LBP '.number_format((float) $receipt['lbp_change'], 0, '.', ',')]) }}
+                            </p>
+                        @endif
+                    @endif
                     @if ($receipt['excess'] > 0)
                         <p class="text-xs text-green-50">{{ __('portal.excess_msg', ['amount' => money_ltr($receipt['excess'])]) }}</p>
                     @endif
@@ -608,22 +621,74 @@
                         </p>
                     @endif
 
+                    {{-- Which currency is in his hand. Not a nicety: money handed over in lira used
+                         to be converted in the collector's head, and the lira figure was lost. --}}
                     <div class="flex flex-col gap-1.5">
-                        <label class="kt-form-label font-normal text-mono">{{ __('portal.amount_received') }}</label>
-                        <div class="kt-input kt-input-lg amount-cell font-semibold">
-                            <span class="text-lg text-muted-foreground">$</span>
-                            <input type="text" inputmode="decimal" wire:model="paymentAmount" placeholder="0.00"
-                                   class="text-xl font-semibold">
+                        <label class="kt-form-label font-normal text-mono">{{ __('portal.pay_unit') }}</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button type="button" wire:click="setPaymentUnit('usd')"
+                                    class="kt-btn kt-btn-sm w-full justify-center {{ $paymentUnit === 'usd' ? '' : 'kt-btn-outline' }}">
+                                <i class="ki-filled ki-dollar"></i>
+                                {{ __('portal.pay_unit_usd') }}
+                            </button>
+                            <button type="button" wire:click="setPaymentUnit('lbp')"
+                                    class="kt-btn kt-btn-sm w-full justify-center {{ $paymentUnit === 'lbp' ? '' : 'kt-btn-outline' }}">
+                                <i class="ki-filled ki-bill"></i>
+                                {{ __('portal.pay_unit_lbp') }}
+                            </button>
                         </div>
-                        @error('paymentAmount') <p class="text-sm font-medium text-destructive">{{ $message }}</p> @enderror
                     </div>
 
-                    <div class="flex flex-wrap gap-2">
-                        <button wire:click="setFullAmount" class="kt-btn kt-btn-sm kt-btn-mono">
-                            <i class="ki-filled ki-dollar"></i>
-                            {{ __('portal.full_balance', ['amount' => money_ltr($outstanding)]) }}
-                        </button>
-                    </div>
+                    @if ($paymentUnit === 'lbp')
+                        {{-- He types what is in his hand. The conversion is the panel's job. --}}
+                        <div class="flex flex-col gap-1.5">
+                            <label class="kt-form-label font-normal text-mono">{{ __('portal.amount_lbp') }}</label>
+                            <div class="kt-input kt-input-lg amount-cell font-semibold">
+                                <span class="text-lg text-muted-foreground">LBP</span>
+                                <input type="text" inputmode="numeric" wire:model.live.debounce.400ms="paymentLbp"
+                                       placeholder="0" class="text-xl font-semibold">
+                            </div>
+                            @error('paymentLbp') <p class="text-sm font-medium text-destructive">{{ $message }}</p> @enderror
+                        </div>
+
+                        <div class="flex flex-col gap-1.5">
+                            <label class="kt-form-label font-normal text-mono">{{ __('portal.rate_label') }}</label>
+                            <input type="text" inputmode="decimal" wire:model.live.debounce.400ms="paymentRate"
+                                   placeholder="89500" class="kt-input">
+                            @error('paymentRate') <p class="text-sm font-medium text-destructive">{{ $message }}</p> @enderror
+                        </div>
+
+                        @if ($equivalent = $this->liraEquivalent())
+                            {{-- Shown BEFORE saving: what the cash in his hand does to the ledger. --}}
+                            <p class="amount-cell rounded-lg bg-muted px-3.5 py-2.5 text-sm font-semibold text-mono">
+                                {{ __('portal.equiv_line', ['amount' => money_ltr($equivalent)]) }}
+                            </p>
+                        @endif
+
+                        <div class="flex flex-wrap gap-2">
+                            <button wire:click="setFullAmountLbp" class="kt-btn kt-btn-sm kt-btn-mono">
+                                <i class="ki-filled ki-dollar"></i>
+                                {{ __('portal.full_balance_lbp', ['amount' => lbp_ltr($outstanding) ?? '—']) }}
+                            </button>
+                        </div>
+                    @else
+                        <div class="flex flex-col gap-1.5">
+                            <label class="kt-form-label font-normal text-mono">{{ __('portal.amount_received') }}</label>
+                            <div class="kt-input kt-input-lg amount-cell font-semibold">
+                                <span class="text-lg text-muted-foreground">$</span>
+                                <input type="text" inputmode="decimal" wire:model="paymentAmount" placeholder="0.00"
+                                       class="text-xl font-semibold">
+                            </div>
+                            @error('paymentAmount') <p class="text-sm font-medium text-destructive">{{ $message }}</p> @enderror
+                        </div>
+
+                        <div class="flex flex-wrap gap-2">
+                            <button wire:click="setFullAmount" class="kt-btn kt-btn-sm kt-btn-mono">
+                                <i class="ki-filled ki-dollar"></i>
+                                {{ __('portal.full_balance', ['amount' => money_ltr($outstanding)]) }}
+                            </button>
+                        </div>
+                    @endif
 
                     <div class="flex flex-col gap-1.5">
                         <label class="kt-form-label font-normal text-mono">{{ __('portal.method') }}</label>

@@ -668,6 +668,68 @@ class BillingService
     }
 
     /**
+     * Take money that was handed over in LIRA.
+     *
+     * The collector in the street is handed lira and has no calculator; he should type the amount
+     * he is holding, not a dollar figure he worked out himself. This records both facts on the
+     * receipt — the lira that changed hands and the rate it was converted at — so a report can add
+     * up the lira and a printed receipt from August still carries August's rate.
+     *
+     * The ledger stays dollars: the amount is converted here, once, and allocated FIFO by the same
+     * service the dollar path uses, so a lira collection and a dollar collection land in the books
+     * identically. What is stored as lbp_amount is the lira that SETTLED bills; anything above the
+     * balance is change handed back, and change is not money received.
+     *
+     * @return array{payment: Payment, applied: float, excess: float, remaining: float, bill: ?Bill, lbp_given: float, lbp_applied: float, lbp_change: float, lbp_rate: float}
+     *
+     * @throws \RuntimeException when no rate is set, or the amount is nothing
+     */
+    public static function collectInLira(
+        Subscriber $subscriber,
+        float $lbp,
+        ?float $rate = null,
+        ?int $collectorId = null,
+        ?string $note = null,
+        ?string $period = null,
+        string $method = Payment::METHOD_CASH_LBP,
+    ): array {
+        $rate = round($rate ?: Currency::rate(), 2);
+        $lbp = round($lbp, 0);
+
+        if ($rate <= 0) {
+            throw new \RuntimeException(__('refuse.no_lbp_rate'));
+        }
+
+        if ($lbp <= 0) {
+            throw new \RuntimeException(__('refuse.lbp_amount_required'));
+        }
+
+        // US cents are the ledger's smallest unit, so the conversion lands on them and the lira is
+        // what is exact. The two can differ by less than a cent, and the lira is the truth.
+        $usd = round($lbp / $rate, 2);
+
+        $result = DB::transaction(function () use ($subscriber, $usd, $collectorId, $note, $period, $method, $lbp, $rate): array {
+            $result = self::collect($subscriber, $usd, $collectorId, $note, $period, $method);
+
+            $appliedLbp = round($result['applied'] * $rate, 0);
+
+            $result['payment']->forceFill([
+                'lbp_amount' => $appliedLbp,
+                'lbp_rate' => $rate,
+            ])->save();
+
+            return $result + [
+                'lbp_given' => $lbp,
+                'lbp_applied' => $appliedLbp,
+                'lbp_change' => round($lbp - $appliedLbp, 0),
+                'lbp_rate' => $rate,
+            ];
+        });
+
+        return $result;
+    }
+
+    /**
      * Record a collection. Flat-rate subscribers get their current-period bill
      * created on the spot. The amount is capped at the outstanding balance and
      * allocated oldest-bill-first (FIFO). $method records how the money arrived

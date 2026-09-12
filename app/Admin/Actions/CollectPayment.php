@@ -6,6 +6,7 @@ use App\Admin\ActionDefinition;
 use App\Models\Payment;
 use App\Models\Subscriber;
 use App\Services\BillingService;
+use App\Services\Currency;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -68,13 +69,48 @@ class CollectPayment extends ActionDefinition
             'title' => '',
             'fields' => [
                 [
+                    // Money in the street arrives in lira as often as in dollars, and the office
+                    // taking a payment over the phone is handed either. The switch decides which
+                    // amount below is asked for — not both, so neither can be left blank.
+                    'key' => 'unit',
+                    'label' => __('a.collect_unit'),
+                    'type' => 'select',
+                    'default' => 'usd',
+                    'options' => [
+                        'usd' => __('portal.pay_unit_usd'),
+                        'lbp' => __('portal.pay_unit_lbp'),
+                    ],
+                    'rules' => ['required'],
+                ],
+                [
                     'key' => 'amount',
                     'label' => __('t.amount_received'),
                     'type' => 'money',
                     'default' => 0,
                     'span' => 'full',
                     'helper' => __('a.collect_helper'),
-                    'rules' => ['required', 'numeric', 'min:0.01'],
+                    'visible_when' => fn (array $state): bool => ($state['unit'] ?? 'usd') !== 'lbp',
+                    'required_when' => fn (array $state): bool => ($state['unit'] ?? 'usd') !== 'lbp',
+                    'rules' => ['numeric', 'min:0.01'],
+                ],
+                [
+                    'key' => 'lbp',
+                    'label' => __('portal.amount_lbp'),
+                    'type' => 'number',
+                    'span' => 'full',
+                    'helper' => __('a.collect_lbp_helper'),
+                    'visible_when' => fn (array $state): bool => ($state['unit'] ?? 'usd') === 'lbp',
+                    'required_when' => fn (array $state): bool => ($state['unit'] ?? 'usd') === 'lbp',
+                    'rules' => ['numeric', 'min:1'],
+                ],
+                [
+                    'key' => 'rate',
+                    'label' => __('portal.rate_label'),
+                    'type' => 'number',
+                    'helper' => __('a.rate_helper'),
+                    'visible_when' => fn (array $state): bool => ($state['unit'] ?? 'usd') === 'lbp',
+                    'required_when' => fn (array $state): bool => ($state['unit'] ?? 'usd') === 'lbp',
+                    'rules' => ['numeric', 'min:1'],
                 ],
                 [
                     'key' => 'method',
@@ -95,14 +131,19 @@ class CollectPayment extends ActionDefinition
 
     /**
      * The amount a collector normally takes: the whole outstanding balance. Prefilled so the
-     * common case is one click, still editable for a part payment.
+     * common case is one click, still editable for a part payment — and prefilled in LIRA too, so
+     * switching the unit does not leave the office doing the multiplication by hand.
      */
     public function defaults(?Model $subject = null): array
     {
+        $outstanding = $subject instanceof Subscriber ? $subject->outstanding() : null;
+        $rate = Currency::rate();
+
         return [
-            'amount' => $subject instanceof Subscriber
-                ? number_format($subject->outstanding(), 2, '.', '')
-                : null,
+            'unit' => 'usd',
+            'amount' => $outstanding === null ? null : number_format($outstanding, 2, '.', ''),
+            'lbp' => $outstanding === null || $rate <= 0 ? null : number_format(round($outstanding * $rate), 0, '.', ''),
+            'rate' => $rate > 0 ? rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.') : null,
             'method' => Payment::METHOD_CASH_USD,
             'note' => null,
         ];
@@ -111,6 +152,34 @@ class CollectPayment extends ActionDefinition
     public function handle(array $state, Model $subject): array
     {
         /** @var Subscriber $subject */
+        if (($state['unit'] ?? 'usd') === 'lbp') {
+            $rate = (float) ($state['rate'] ?? 0);
+
+            $result = BillingService::collectInLira(
+                $subject,
+                (float) $state['lbp'],
+                $rate > 0 ? $rate : null,
+                auth()->id(),
+                $state['note'] ?: null,
+                null,
+                $state['method'] ?? Payment::METHOD_CASH_LBP,
+            );
+
+            $message = __('a.collect_lbp_ok', [
+                'lbp' => 'LBP '.number_format((float) $result['lbp_applied'], 0, '.', ','),
+                'amount' => money_ltr($result['applied']),
+                'remaining' => money_ltr($result['remaining']),
+            ]);
+
+            if ((float) $result['lbp_change'] > 0) {
+                $message .= ' '.__('a.collect_lbp_change', [
+                    'change' => 'LBP '.number_format((float) $result['lbp_change'], 0, '.', ','),
+                ]);
+            }
+
+            return ['ok' => true, 'message' => $message];
+        }
+
         $result = BillingService::collect(
             $subject,
             (float) $state['amount'],

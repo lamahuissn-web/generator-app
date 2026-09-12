@@ -44,6 +44,28 @@ if (! function_exists('money_ltr')) {
     }
 }
 
+if (! function_exists('lbp')) {
+    /**
+     * A dollar amount in lira: 'LBP 9,850,000', or null when no rate has been set.
+     *
+     * Nullable on purpose, and null rather than an empty string: a screen must be able to tell
+     * "this subscriber owes nothing in lira" from "nobody has told the panel what a dollar is
+     * worth", and only the second one should keep the lira line off the page entirely.
+     */
+    function lbp(float|int|string|null $usd): ?string
+    {
+        return \App\Services\Currency::isConfigured() ? \App\Services\Currency::label($usd) : null;
+    }
+}
+
+if (! function_exists('lbp_ltr')) {
+    /** lbp() wrapped in an LTR isolate, for a lira figure interpolated into Arabic prose. */
+    function lbp_ltr(float|int|string|null $usd): ?string
+    {
+        return ($label = lbp($usd)) === null ? null : ltr_isolate($label);
+    }
+}
+
 if (! function_exists('reading_pair')) {
     /**
      * A meter's two numbers as one readable cell: "4478 → 4512".

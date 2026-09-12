@@ -155,6 +155,15 @@
                 </form>
 
                 <span class="text-xs text-muted-foreground">{{ __('file.filter_hint') }}</span>
+
+                {{-- Said once for the whole page rather than on every card: lira figures here are
+                     today's conversion of a dollar debt (see Currency). --}}
+                @if (lbp(1))
+                    <span class="text-xs text-muted-foreground">
+                        <i class="ki-filled ki-dollar"></i>
+                        {{ __('file.lbp_note') }}
+                    </span>
+                @endif
             </div>
         </div>
     </div>
@@ -168,6 +177,9 @@
                     <span class="tile tile-muted size-9 text-sm"><i class="ki-filled ki-receipt-square"></i></span>
                 </div>
                 <div class="amount-cell mt-2 text-2xl font-semibold text-mono">{{ money($totals['billed']) }}</div>
+                @if ($billedLbp = lbp($totals['billed']))
+                    <div class="mt-0.5 text-xs font-medium text-muted-foreground" dir="ltr">{{ $billedLbp }}</div>
+                @endif
                 <div class="mt-1 text-xs text-muted-foreground">
                     {{ $scope }} · {{ plural('file.records', $counts['bills']) }}
                 </div>
@@ -181,6 +193,9 @@
                     <span class="tile tile-muted size-9 text-sm"><i class="ki-filled ki-dollar"></i></span>
                 </div>
                 <div class="amount-cell mt-2 text-2xl font-semibold text-green-700 dark:text-green-500">{{ money($totals['paid']) }}</div>
+                @if ($paidLbp = lbp($totals['paid']))
+                    <div class="mt-0.5 text-xs font-medium text-muted-foreground" dir="ltr">{{ $paidLbp }}</div>
+                @endif
                 <div class="mt-1 text-xs text-muted-foreground">
                     {{ $scope }} · {{ plural('file.records', $counts['payments']) }}
                 </div>
@@ -196,6 +211,10 @@
                 <div class="amount-cell mt-2 text-2xl font-semibold {{ $totals['due'] > 0 ? 'text-destructive' : 'text-green-700 dark:text-green-500' }}">
                     {{ money($totals['due']) }}
                 </div>
+                {{-- The figure the office asks for at the door: what the debt is in lira today. --}}
+                @if ($dueLbp = lbp($totals['due']))
+                    <div class="mt-0.5 text-xs font-medium text-muted-foreground" dir="ltr">{{ $dueLbp }}</div>
+                @endif
                 <div class="mt-1 text-xs text-muted-foreground">
                     @if ($period && abs($totals['other_cycles_due']) > 0.005)
                         {{-- A cycle-scoped card must not let the rest of the account disappear:

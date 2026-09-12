@@ -6,6 +6,7 @@ use App\Models\Bill;
 use App\Models\Payment;
 use App\Models\Subscriber;
 use App\Services\BillingService;
+use App\Services\Currency;
 use App\Services\WhatsAppService;
 use Illuminate\Support\Collection;
 use Livewire\Component;
@@ -23,12 +24,21 @@ class SubscriberShow extends Component
 
     public ?string $paymentAmount = null;
 
+    /** 'usd' | 'lbp' — which currency is in the collector's hand right now. */
+    public string $paymentUnit = 'usd';
+
+    /** The amount in lira, typed as handed over (never pre-converted by the collector's head). */
+    public ?string $paymentLbp = null;
+
+    /** The rate for a lira collection: the office's setting, overridable in the street. */
+    public ?string $paymentRate = null;
+
     public string $paymentNote = '';
 
     /** How the money arrived: cash USD/LBP, Whish, OMT… */
     public string $paymentMethod = Payment::METHOD_CASH_USD;
 
-    /** @var array{applied: float, excess: float, remaining: float, method: string, method_label: string, number: ?string, settled: array<int,array<string,mixed>>, bill_id: ?int, bill_period: ?string}|null */
+    /** @var array{applied: float, excess: float, remaining: float, method: string, method_label: string, number: ?string, settled: array<int,array<string,mixed>>, bill_id: ?int, bill_period: ?string, lbp_given: ?float, lbp_applied: ?float, lbp_change: ?float, lbp_rate: ?float, wa_ar: ?string, wa_en: ?string}|null */
     public ?array $receipt = null;
 
     public ?int $lastPaymentId = null;
@@ -46,6 +56,10 @@ class SubscriberShow extends Component
     {
         $this->subscriber = $subscriber;
         $this->period = BillingService::currentPeriod();
+
+        // Prefilled from Settings, and editable: the street rate and the office rate are not
+        // always the same number on the same day, and the collector is the one holding the cash.
+        $this->paymentRate = Currency::rate() > 0 ? (string) Currency::rate() : null;
     }
 
     // ---- read helpers --------------------------------------------------------
@@ -268,22 +282,56 @@ class SubscriberShow extends Component
             return;
         }
 
-        $amount = trim((string) $this->paymentAmount);
-        if ($amount === '' || ! is_numeric($amount) || (float) $amount <= 0) {
-            $this->addError('paymentAmount', __('portal.err_payment_input'));
+        $unit = $this->paymentUnit === 'lbp' ? 'lbp' : 'usd';
+        $lbp = null;
+        $rate = null;
+        $amount = null;
 
-            return;
+        if ($unit === 'lbp') {
+            // The collector types what is in his hand. He is not asked to divide anything, and the
+            // rate he used is saved with the receipt so the figure can be checked later.
+            $lbp = trim((string) $this->paymentLbp);
+            $rate = (float) ($this->paymentRate ?? 0);
+
+            if ($lbp === '' || ! is_numeric($lbp) || (float) $lbp <= 0) {
+                $this->addError('paymentLbp', __('portal.err_lbp_input'));
+
+                return;
+            }
+
+            if ($rate <= 0) {
+                $this->addError('paymentRate', __('refuse.no_lbp_rate'));
+
+                return;
+            }
+        } else {
+            $amount = trim((string) $this->paymentAmount);
+            if ($amount === '' || ! is_numeric($amount) || (float) $amount <= 0) {
+                $this->addError('paymentAmount', __('portal.err_payment_input'));
+
+                return;
+            }
         }
 
         try {
-            $result = BillingService::collect(
-                $this->subscriber,
-                (float) $amount,
-                auth()->id(),
-                $this->paymentNote !== '' ? $this->paymentNote : null,
-                $this->period,
-                $this->paymentMethod,
-            );
+            $result = $unit === 'lbp'
+                ? BillingService::collectInLira(
+                    $this->subscriber,
+                    (float) $lbp,
+                    $rate,
+                    auth()->id(),
+                    $this->paymentNote !== '' ? $this->paymentNote : null,
+                    $this->period,
+                    $this->paymentMethod,
+                )
+                : BillingService::collect(
+                    $this->subscriber,
+                    (float) $amount,
+                    auth()->id(),
+                    $this->paymentNote !== '' ? $this->paymentNote : null,
+                    $this->period,
+                    $this->paymentMethod,
+                );
 
             $this->subscriber->refresh();
 
@@ -328,16 +376,38 @@ class SubscriberShow extends Component
                 'settled' => $settled,
                 'bill_id' => $bill?->id,
                 'bill_period' => $bill?->period,
+                // The lira this receipt took, when it was taken in lira: what was handed over, the
+                // rate, and what came back as change. Null on a dollar receipt — not zero.
+                'lbp_given' => $unit === 'lbp' ? $result['lbp_given'] : null,
+                'lbp_applied' => $unit === 'lbp' ? $result['lbp_applied'] : null,
+                'lbp_change' => $unit === 'lbp' ? $result['lbp_change'] : null,
+                'lbp_rate' => $unit === 'lbp' ? $result['lbp_rate'] : null,
                 'wa_ar' => WhatsAppService::waLink($phone, $messageAr),
                 'wa_en' => WhatsAppService::waLink($phone, $messageEn),
             ];
             $this->lastPaymentId = $result['payment']->id;
 
             $this->paymentAmount = null;
+            $this->paymentLbp = null;
             $this->paymentNote = '';
             $this->view = 'payment';
 
-            if ($result['excess'] > 0) {
+            if ($unit === 'lbp') {
+                // Says both currencies: the lira he just took, and the ledger figure it became.
+                $message = __('portal.flash_collected_lbp', [
+                    'lbp' => 'LBP '.number_format((float) $result['lbp_applied'], 0, '.', ','),
+                    'amount' => money($result['applied']),
+                ]);
+
+                if ((float) $result['lbp_change'] > 0) {
+                    $message .= ' '.__('portal.flash_lbp_change', [
+                        'change' => 'LBP '.number_format((float) $result['lbp_change'], 0, '.', ','),
+                    ]);
+                    $this->flashMessage($message, 'warning');
+                } else {
+                    $this->flashMessage($message);
+                }
+            } elseif ($result['excess'] > 0) {
                 $this->flashMessage(__('portal.flash_collected', ['amount' => money($result['applied']), 'excess' => money($result['excess'])]), 'warning');
             } else {
                 $this->flashMessage(__('portal.flash_payment_ok'));
@@ -353,6 +423,54 @@ class SubscriberShow extends Component
     public function setFullAmount(): void
     {
         $this->paymentAmount = number_format($this->outstanding(), 2, '.', '');
+    }
+
+    /**
+     * Which currency is in his hand.
+     *
+     * Switching to lira also picks the matching payment method, because money handed over in lira
+     * IS cash in lira — the one thing the old screen could not express. The collector can still
+     * change the method afterwards (a lira collection by OMT is a real thing).
+     */
+    public function setPaymentUnit(string $unit): void
+    {
+        $this->paymentUnit = $unit === 'lbp' ? 'lbp' : 'usd';
+        $this->resetErrorBag();
+
+        if ($this->paymentUnit === 'lbp') {
+            if ((float) ($this->paymentRate ?? 0) <= 0) {
+                $this->paymentRate = Currency::rate() > 0 ? (string) Currency::rate() : null;
+            }
+
+            if ($this->paymentMethod === Payment::METHOD_CASH_USD) {
+                $this->paymentMethod = Payment::METHOD_CASH_LBP;
+            }
+        } elseif ($this->paymentMethod === Payment::METHOD_CASH_LBP) {
+            $this->paymentMethod = Payment::METHOD_CASH_USD;
+        }
+    }
+
+    /**
+     * What the lira in his hand is worth in the ledger, shown BEFORE he saves.
+     *
+     * Null when there is nothing to convert yet, so the hint appears only when it means something.
+     */
+    public function liraEquivalent(): ?float
+    {
+        $lbp = (float) ($this->paymentLbp ?? 0);
+        $rate = (float) ($this->paymentRate ?? 0);
+
+        return $lbp > 0 && $rate > 0 ? round($lbp / $rate, 2) : null;
+    }
+
+    /** The full balance, in lira — the same one-click shortcut the dollar path has. */
+    public function setFullAmountLbp(): void
+    {
+        $rate = (float) ($this->paymentRate ?? 0) ?: Currency::rate();
+
+        if ($rate > 0) {
+            $this->paymentLbp = number_format(round($this->outstanding() * $rate), 0, '.', '');
+        }
     }
 
     public function dismissFlash(): void

@@ -40,6 +40,7 @@ class Settings extends Component
         return [
             'kwh_price' => '0.25',
             'default_maintenance_fee' => '0',
+            'lbp_rate' => '0',
             'bill_rounding' => BillingService::ROUND_NONE,
         ];
     }
@@ -50,6 +51,9 @@ class Settings extends Component
         return [
             'state.kwh_price' => ['required', 'numeric', 'min:0'],
             'state.default_maintenance_fee' => ['required', 'numeric', 'min:0'],
+            // 0 is allowed and means "show nothing in lira": an operator who bills in dollars
+            // only must not be forced into a rate he does not use.
+            'state.lbp_rate' => ['required', 'numeric', 'min:0'],
             // Only the two rules the billing service knows how to apply: a stored third option
             // would be a setting the panel silently ignores.
             'state.bill_rounding' => ['required', Rule::in([BillingService::ROUND_NONE, BillingService::ROUND_CEIL_DOLLAR])],
@@ -77,6 +81,7 @@ class Settings extends Component
                 'helper' => __('set.rounding_helper'),
                 'rules' => ['required'],
             ],
+            'lbp_rate' => ['key' => 'lbp_rate', 'label' => __('set.lbp_label'), 'type' => 'number', 'helper' => __('set.lbp_helper'), 'rules' => ['required'], 'min' => 0],
             'company_name' => ['key' => 'company_name', 'label' => __('set.company_name'), 'placeholder' => __('prt.company_default'), 'rules' => ['nullable']],
             'company_phone' => ['key' => 'company_phone', 'label' => __('set.company_phone'), 'type' => 'tel', 'rules' => ['nullable']],
             'company_address' => ['key' => 'company_address', 'label' => __('set.company_address'), 'rules' => ['nullable']],
@@ -94,7 +99,7 @@ class Settings extends Component
 
         // Re-seed from the model so a numeric value typed as "0.250" is displayed the way the
         // billing path will actually read it back.
-        foreach (['kwh_price', 'default_maintenance_fee'] as $key) {
+        foreach (['kwh_price', 'default_maintenance_fee', 'lbp_rate'] as $key) {
             $this->state[$key] = (string) Setting::get($key);
         }
 

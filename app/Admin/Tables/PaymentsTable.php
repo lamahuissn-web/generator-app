@@ -6,6 +6,7 @@ use App\Admin\TableDefinition;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\BillingService;
+use App\Services\Currency;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -68,6 +69,17 @@ class PaymentsTable extends TableDefinition
                     default => 'muted',
                 },
                 'render' => fn (Payment $r): string => $r->methodLabel(),
+            ],
+            [
+                'key' => 'lbp_amount',
+                'label' => __('t.received_lbp'),
+                'align' => 'end',
+                'on_mobile' => false,
+                // The lira as it was handed over, at the rate stored on this very receipt — never
+                // re-converted at today's rate, which would silently restate old collections every
+                // time the rate moves. '—' on a dollar receipt, which is a different fact from zero.
+                'render' => fn (Payment $r): ?string => $r->liraLabel(),
+                'hidden' => ! Currency::liraInUse(),
             ],
             [
                 'key' => 'settled_bills',
