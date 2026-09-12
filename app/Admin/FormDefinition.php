@@ -92,11 +92,51 @@ abstract class FormDefinition
     }
 
     /**
+     * The fields the operator is actually shown in this state — section visibility first,
+     * then the field's own.
+     *
+     * Values for hidden fields stay in the state (so switching a subscriber's type back and
+     * forth does not lose what was typed); what changes is which of them are ASKED for. This is
+     * the one description of that rule: rules() validates against it and the form view renders
+     * from it, so a field that is not on the screen is never required by it.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public function visibleFields(array $state): array
+    {
+        return collect($this->sections())
+            ->filter(fn (array $section): bool => $this->showsSection($section, $state))
+            ->flatMap(fn (array $section): array => $section['fields'])
+            ->filter(fn (array $field): bool => $this->showsField($field, $state))
+            ->values()
+            ->all();
+    }
+
+    /** Is this whole section on the screen for this state? */
+    public function showsSection(array $section, array $state): bool
+    {
+        return ! isset($section['visible_when']) || ($section['visible_when'])($state);
+    }
+
+    /** Is this field on the screen for this state? */
+    public function showsField(array $field, array $state): bool
+    {
+        return ! isset($field['visible_when']) || ($field['visible_when'])($state);
+    }
+
+    /**
      * Validation rules for the CURRENT state.
      *
-     * A rule on a hidden field is a trap: the create form asks for a meter number only
-     * when the type is "metered", so validating the rule for a flat subscriber would
-     * refuse a form the operator cannot satisfy.
+     * A rule on a field the operator cannot see is a trap. The create form asks for a meter
+     * number only when the type is "metered", so validating that rule for a flat subscriber
+     * would refuse a form nobody can satisfy — and the same is true of a field inside a hidden
+     * SECTION, which is how the subscriber form is built (one section for a metered house, one
+     * for a flat one). That second case is not hypothetical: it refused every metered
+     * subscriber, on create AND on edit, with "the monthly flat fee is required" attached to an
+     * input that was never rendered — so pressing Save looked like pressing nothing at all.
+     *
+     * Both levels of visibility are therefore resolved by visibleFields() and read here, so the
+     * rules and the screen cannot disagree about what the operator was asked for.
      *
      * @return array<string, mixed>
      */
@@ -104,11 +144,7 @@ abstract class FormDefinition
     {
         $rules = [];
 
-        foreach ($this->fields() as $field) {
-            if (isset($field['visible_when']) && ! ($field['visible_when'])($state)) {
-                continue;
-            }
-
+        foreach ($this->visibleFields($state) as $field) {
             $fieldRules = $field['rules'] ?? [];
 
             // A rule that is conditional is written as required_when rather than a hand-rolled

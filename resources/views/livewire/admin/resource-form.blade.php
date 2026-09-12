@@ -15,8 +15,11 @@
         @php
             // Visibility is resolved HERE, in the Livewire component's scope: a Blade
             // component view cannot see `$this->shows()` (its `$this` is the Blade component).
+            // Section and field visibility both come from the form definition, which is also
+            // what decides which fields are validated — so what is asked for and what is
+            // required can never drift apart.
             $visibleFields = collect($section['fields'])->filter(fn (array $f) => $this->shows($f))->values();
-            $sectionVisible = isset($section['visible_when']) ? ($section['visible_when'])($state) : true;
+            $sectionVisible = $this->showsSection($section);
         @endphp
 
         @continue (! $sectionVisible || $visibleFields->isEmpty())

@@ -101,7 +101,13 @@ class ResourceForm extends Component
     /** Is a field visible for the current state? Hidden fields are not rendered at all. */
     public function shows(array $field): bool
     {
-        return ! isset($field['visible_when']) || ($field['visible_when'])($this->state);
+        return $this->definition()->showsField($field, $this->state);
+    }
+
+    /** Is a section visible for the current state? */
+    public function showsSection(array $section): bool
+    {
+        return $this->definition()->showsSection($section, $this->state);
     }
 
     /** Re-evaluate conditional fields without a round trip for every keystroke. */
