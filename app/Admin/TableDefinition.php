@@ -3,6 +3,7 @@
 namespace App\Admin;
 
 use Illuminate\Contracts\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -104,6 +105,19 @@ abstract class TableDefinition
     public function rowActions(): array
     {
         return [];
+    }
+
+    /**
+     * Narrow this table to one billing cycle.
+     *
+     * A period is a plain column on most tables — but not on every one: a payment carries no
+     * cycle, only the bills its money was applied to. The rule therefore lives here (and is
+     * overridden where it differs) instead of being hard-coded as a `where()` by every caller,
+     * so the page and the table can never disagree about what "this cycle" means.
+     */
+    public function scopePeriod(EloquentBuilder $query, string $period): void
+    {
+        $query->where('period', $period);
     }
 
     public function emptyState(): string

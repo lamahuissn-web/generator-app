@@ -52,7 +52,7 @@
         </div>
     @endif
 
-    @if ($hasToolbar)
+    @if ($hasToolbar && ! $compact)
         <div class="kt-card-header flex-wrap gap-2.5 py-3">
             <div class="flex flex-wrap items-center gap-2.5">
                 @if ($definition->searchable() !== [])
@@ -142,7 +142,7 @@
                                     'text-start' => ($column['align'] ?? 'start') !== 'end',
                                     'hidden sm:table-cell' => ($column['on_mobile'] ?? true) === false,
                                 ])>
-                                @if ($column['sortable'] ?? false)
+                                @if (($column['sortable'] ?? false) && ! $compact)
                                     <button type="button" wire:click="sortBy('{{ $column['key'] }}')"
                                             class="inline-flex items-center gap-1 transition hover:text-mono">
                                         {{ $column['label'] }}
@@ -303,13 +303,20 @@
 
         @if ($rows->total() > 0)
             <div class="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3">
-                <span class="text-xs text-muted-foreground">
-                    {{ trans_choice('t.showing_range', $rows->total(), [
-                        'from' => $rows->firstItem() ?? 0,
-                        'to' => $rows->lastItem() ?? 0,
-                        'total' => $rows->total(),
-                    ]) }}
-                </span>
+                {{-- A compact table is one section of a page whose header already says how many
+                     records are in it, so the range line would say the same thing twice. The page
+                     buttons stay: a long history still has to be reachable. --}}
+                @if (! $compact)
+                    <span class="text-xs text-muted-foreground">
+                        {{ trans_choice('t.showing_range', $rows->total(), [
+                            'from' => $rows->firstItem() ?? 0,
+                            'to' => $rows->lastItem() ?? 0,
+                            'total' => $rows->total(),
+                        ]) }}
+                    </span>
+                @else
+                    <span></span>
+                @endif
 
                 @if ($rows->hasPages())
                     <div class="flex items-center gap-1">

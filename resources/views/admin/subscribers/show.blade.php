@@ -10,13 +10,26 @@
             ->map(fn ($p) => mb_substr($p, 0, 1))->implode('');
 
         // The URL this page was rendered at, handed to every action modal so the redirect after
-        // an action returns HERE — including the tab in the query string. Taken from the incoming
+        // an action returns HERE — including the cycle being read. Taken from the incoming
         // request rather than the request's Referer header, which a client can forge or omit.
         // (fullUrl() lives on the Request, not on url() — UrlGenerator offers current()/full().)
         $returnTo = request()->fullUrl();
+
+        // How the file is being read, said once and reused by every card and section heading, so
+        // no two parts of the page can disagree about which cycle they are showing.
+        $scope = $period ? period_label_i18n($period) : __('file.all_cycles');
+
+        // The three records the account is made of. Each is the same table component the list
+        // pages use, handed the subscriber constraint, the cycle, and `compact` — the page above
+        // has already fixed the scope, so a second search box over nine rows is noise.
+        $logs = [
+            'bills' => ['table' => \App\Admin\Tables\SubscriberBillsTable::class, 'title' => 'file.bills_log', 'icon' => 'ki-receipt-square'],
+            'readings' => ['table' => \App\Admin\Tables\SubscriberReadingsTable::class, 'title' => 'file.readings_log', 'icon' => 'ki-bill'],
+            'payments' => ['table' => \App\Admin\Tables\SubscriberPaymentsTable::class, 'title' => 'file.payments_log', 'icon' => 'ki-wallet'],
+        ];
     @endphp
 
-    {{-- Identity + balance: what the operator needs before any action --}}
+    {{-- Identity + actions, and the cycle the whole file below is read as of --}}
     <div class="mb-5 grid gap-4 lg:grid-cols-3">
         <div class="kt-card lg:col-span-2">
             <div class="kt-card-content">
@@ -122,59 +135,101 @@
             </div>
         </div>
 
+        {{-- Which cycle the file is read as of. A plain GET form rather than Livewire state: the
+             cycle belongs in the URL, so a link to "this subscriber in August" opens in August,
+             and the back button walks the cycles that were looked at. --}}
         <div class="kt-card">
-            <div class="kt-card-content flex flex-col gap-1">
+            <div class="kt-card-content flex flex-col gap-2">
                 <span class="text-2xs font-semibold uppercase tracking-widest text-muted-foreground">
-                    {{ __('t.outstanding_bal') }}
+                    {{ __('file.filter_label') }}
                 </span>
-                <span class="amount-cell text-3xl font-semibold {{ $outstanding > 0 ? 'text-destructive' : 'text-green-700 dark:text-green-500' }}">
-                    {{ money($outstanding) }}
-                </span>
-                <span class="text-xs text-muted-foreground">
-                    @if ($unpaidCount > 0)
-                        {{ plural('t.bills_open', $unpaidCount) }}
-                    @else
-                        {{ __('portal.balance_clear') }}
-                    @endif
-                </span>
+
+                <form method="GET" action="{{ route('admin.subscribers.show', $subscriber) }}">
+                    <select name="period" class="kt-select w-full" onchange="this.form.submit()"
+                            aria-label="{{ __('file.filter_label') }}">
+                        <option value="">{{ __('file.all_cycles') }}</option>
+                        @foreach ($periods as $key => $label)
+                            <option value="{{ $key }}" @selected($period === $key)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </form>
+
+                <span class="text-xs text-muted-foreground">{{ __('file.filter_hint') }}</span>
             </div>
         </div>
     </div>
 
-    {{-- Tabs: the three records that make up the account. Each tab is the same table
-         component the list pages use, handed a constraint. --}}
-    <div class="mb-4 grid grid-cols-3 gap-1.5 rounded-lg bg-muted p-1.5 sm:w-fit">
-        @foreach ([
-            'bills' => ['label' => __('mdl.bills'), 'icon' => 'ki-receipt-square'],
-            'readings' => ['label' => __('mdl.readings'), 'icon' => 'ki-bill'],
-            'payments' => ['label' => __('mdl.payments'), 'icon' => 'ki-wallet'],
-        ] as $key => $meta)
-            <a href="{{ route('admin.subscribers.show', ['subscriber' => $subscriber, 'tab' => $key]) }}"
-               @class([
-                   'kt-btn kt-btn-sm justify-center',
-                   '' => $tab === $key,
-                   'kt-btn-ghost' => $tab !== $key,
-               ])>
-                <i class="ki-filled {{ $meta['icon'] }}"></i>
-                <span>{{ $meta['label'] }}</span>
-            </a>
-        @endforeach
+    {{-- The three numbers the phone call is about, in the cycle being read. --}}
+    <div class="mb-5 grid gap-4 sm:grid-cols-3">
+        <div class="kt-card">
+            <div class="kt-card-content">
+                <div class="flex items-start justify-between gap-2">
+                    <span class="text-2xs font-semibold uppercase tracking-widest text-muted-foreground">{{ __('file.billed') }}</span>
+                    <span class="tile tile-muted size-9 text-sm"><i class="ki-filled ki-receipt-square"></i></span>
+                </div>
+                <div class="amount-cell mt-2 text-2xl font-semibold text-mono">{{ money($totals['billed']) }}</div>
+                <div class="mt-1 text-xs text-muted-foreground">
+                    {{ $scope }} · {{ plural('file.records', $counts['bills']) }}
+                </div>
+            </div>
+        </div>
+
+        <div class="kt-card">
+            <div class="kt-card-content">
+                <div class="flex items-start justify-between gap-2">
+                    <span class="text-2xs font-semibold uppercase tracking-widest text-muted-foreground">{{ __('file.paid') }}</span>
+                    <span class="tile tile-muted size-9 text-sm"><i class="ki-filled ki-dollar"></i></span>
+                </div>
+                <div class="amount-cell mt-2 text-2xl font-semibold text-green-700 dark:text-green-500">{{ money($totals['paid']) }}</div>
+                <div class="mt-1 text-xs text-muted-foreground">
+                    {{ $scope }} · {{ plural('file.records', $counts['payments']) }}
+                </div>
+            </div>
+        </div>
+
+        <div class="kt-card">
+            <div class="kt-card-content">
+                <div class="flex items-start justify-between gap-2">
+                    <span class="text-2xs font-semibold uppercase tracking-widest text-muted-foreground">{{ __('file.due') }}</span>
+                    <span class="tile tile-muted size-9 text-sm"><i class="ki-filled ki-wallet"></i></span>
+                </div>
+                <div class="amount-cell mt-2 text-2xl font-semibold {{ $totals['due'] > 0 ? 'text-destructive' : 'text-green-700 dark:text-green-500' }}">
+                    {{ money($totals['due']) }}
+                </div>
+                <div class="mt-1 text-xs text-muted-foreground">
+                    @if ($period && abs($totals['other_cycles_due']) > 0.005)
+                        {{-- A cycle-scoped card must not let the rest of the account disappear:
+                             the whole debt is the number the subscriber will be asked for. --}}
+                        {{ __('file.other_cycles_due', ['amount' => money_ltr($totals['other_cycles_due'])]) }}
+                    @elseif ($openBills > 0)
+                        {{ plural('t.bills_open', $openBills) }}
+                    @else
+                        {{ __('portal.balance_clear') }}
+                    @endif
+                </div>
+            </div>
+        </div>
     </div>
 
-    @if ($tab === 'bills')
-        <livewire:admin.data-table
-            :table="\App\Admin\Tables\BillsTable::class"
-            :constraints="['subscriber_id' => $subscriber->id]"
-            :key="'bills-'.$subscriber->id" />
-    @elseif ($tab === 'readings')
-        <livewire:admin.data-table
-            :table="\App\Admin\Tables\ReadingsTable::class"
-            :constraints="['subscriber_id' => $subscriber->id]"
-            :key="'readings-'.$subscriber->id" />
-    @else
-        <livewire:admin.data-table
-            :table="\App\Admin\Tables\PaymentsTable::class"
-            :constraints="['subscriber_id' => $subscriber->id]"
-            :key="'payments-'.$subscriber->id" />
-    @endif
+    {{-- The three logs. Each heading carries its own count, because "٣ سجلات" is the answer to
+         "عندك شي عليه؟" before the list is even read. --}}
+    <div class="flex flex-col gap-5">
+        @foreach ($logs as $key => $log)
+            <section>
+                <div class="mb-2 flex flex-wrap items-center gap-2">
+                    <i class="ki-filled {{ $log['icon'] }} text-muted-foreground"></i>
+                    <h2 class="text-sm font-semibold text-mono">{{ __($log['title']) }}</h2>
+                    <span class="kt-badge kt-badge-sm kt-badge-outline">{{ plural('file.records', $counts[$key]) }}</span>
+                    <span class="text-xs text-muted-foreground">{{ $scope }}</span>
+                </div>
+
+                <livewire:admin.data-table
+                    :table="$log['table']"
+                    :constraints="['subscriber_id' => $subscriber->id]"
+                    :compact="true"
+                    :period="$period"
+                    :key="$key.'-'.$subscriber->id.'-'.($period ?? 'all')" />
+            </section>
+        @endforeach
+    </div>
 @endsection

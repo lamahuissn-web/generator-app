@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Collection;
@@ -44,6 +45,26 @@ class Payment extends Model
     public function allocations(): HasMany
     {
         return $this->hasMany(PaymentAllocation::class);
+    }
+
+    /**
+     * Receipts whose money touched one billing cycle.
+     *
+     * A payment carries no period of its own — it arrives and is applied to bills, oldest first —
+     * so it belongs to a cycle when any invoice it cleared is in that cycle. Written as a scope
+     * because two different places need the same answer (the subscriber's file and the receipts
+     * table inside it), and a rule written twice is a rule that drifts.
+     */
+    public function scopeForPeriod(Builder $query, ?string $period): Builder
+    {
+        if ($period === null) {
+            return $query;
+        }
+
+        return $query->whereHas(
+            'allocations.bill',
+            fn (Builder $bill) => $bill->where('period', $period),
+        );
     }
 
     /** Translated label; falls back to the raw value for legacy rows. */

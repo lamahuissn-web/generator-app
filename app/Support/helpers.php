@@ -44,6 +44,23 @@ if (! function_exists('money_ltr')) {
     }
 }
 
+if (! function_exists('reading_pair')) {
+    /**
+     * A meter's two numbers as one readable cell: "4478 → 4512".
+     *
+     * Isolated as a WHOLE rather than number by number. The arrow is a neutral character in the
+     * Unicode bidi algorithm, so in an Arabic sentence it flips and the pair reads backwards —
+     * which is the one mistake this cell exists to prevent ("هل قرأه طالع ولا نازل؟"). Wrapping
+     * the pair keeps its left-to-right order wherever it is dropped.
+     */
+    function reading_pair(float|int|string|null $previous, float|int|string|null $current): string
+    {
+        return ltr_isolate(
+            number_format((float) $previous, 0, '.', '').' → '.number_format((float) $current, 0, '.', '')
+        );
+    }
+}
+
 if (! function_exists('plural')) {
     /**
      * Counted label: pick the translation form that agrees with $count, then bind

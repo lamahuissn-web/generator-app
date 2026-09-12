@@ -55,18 +55,47 @@ class DataTable extends Component
 
     public int $perPage = 25;
 
-    public function mount(string $table, array $constraints = []): void
-    {
+    /**
+     * Rows only: no search box, no filters, no toolbar.
+     *
+     * For a table that renders INSIDE a page which has already fixed the scope — a subscriber's
+     * file, where the cycle is chosen above and a second set of controls over nine rows is noise
+     * the operator has to read past on every visit. The rows, their actions, the empty state and
+     * the pagination (when the list is longer than a page) are unchanged.
+     */
+    public bool $compact = false;
+
+    /**
+     * The billing cycle this table is scoped to, or null for every cycle.
+     *
+     * Component state on purpose, not read from the request: see filteredQuery().
+     */
+    public ?string $period = null;
+
+    public function mount(
+        string $table,
+        array $constraints = [],
+        bool $compact = false,
+        ?int $perPage = null,
+        ?string $period = null,
+    ): void {
         if (! is_subclass_of($table, TableDefinition::class)) {
             throw new \InvalidArgumentException("{$table} is not a table definition.");
         }
 
         $this->table = $table;
         $this->constraints = $constraints;
+        $this->compact = $compact;
+        $this->period = $period;
 
         // A term arriving from the panel's global search lands in the table's own box, so
         // the header search and the on-page filter are one action rather than two.
-        if ($this->search === '' && ($term = trim((string) request('q'))) !== '') {
+        //
+        // Not for a compact table: it shares a page (and therefore one query string) with other
+        // tables, and Livewire binds these properties per component without a namespace — a `?q=`
+        // aimed at the panel's search would silently filter all three logs, with no search box on
+        // screen to explain or clear it.
+        if (! $compact && $this->search === '' && ($term = trim((string) request('q'))) !== '') {
             $this->search = $term;
         }
 
@@ -76,7 +105,7 @@ class DataTable extends Component
             [$this->sort, $this->direction] = $definition->defaultSort();
         }
 
-        $this->perPage = $definition->perPage();
+        $this->perPage = $perPage ?? $definition->perPage();
     }
 
     public function definition(): TableDefinition
@@ -88,6 +117,12 @@ class DataTable extends Component
 
     public function sortBy(string $column): void
     {
+        // A compact table is scoped by the page it sits in: it renders the definition's own order
+        // and offers no way to re-order, so there is nothing to write to the URL either.
+        if ($this->compact) {
+            return;
+        }
+
         $sortable = collect($this->definition()->columns())
             ->filter(fn (array $c) => ($c['sortable'] ?? false) && ! ($c['hidden'] ?? false))
             ->map(fn (array $c) => $c['key'])
@@ -237,32 +272,46 @@ class DataTable extends Component
         $query = $this->baseQuery();
         $definition = $this->definition();
 
-        // Search across the definition's searchable columns; a relation path
-        // ("actor.name") becomes a whereHas so the base table is not duplicated.
-        $term = trim($this->search);
-        if ($term !== '' && $definition->searchable() !== []) {
-            $query->where(function (Builder $q) use ($definition, $term): void {
-                foreach ($definition->searchable() as $column) {
-                    $like = '%'.$term.'%';
+        // Everything the operator narrowed by hand — the search box, the filters — belongs to the
+        // table that has controls for them. A compact table has none: its narrowing is the page's
+        // (a subscriber, a cycle), handed down as constraints and props, so it reads no URL state
+        // that another table on the same page might have written.
+        if (! $this->compact) {
+            // Search across the definition's searchable columns; a relation path
+            // ("actor.name") becomes a whereHas so the base table is not duplicated.
+            $term = trim($this->search);
+            if ($term !== '' && $definition->searchable() !== []) {
+                $query->where(function (Builder $q) use ($definition, $term): void {
+                    foreach ($definition->searchable() as $column) {
+                        $like = '%'.$term.'%';
 
-                    if (str_contains($column, '.')) {
-                        [$relation, $field] = explode('.', $column, 2);
-                        $q->orWhereHas($relation, fn (Builder $rel) => $rel->where($field, 'like', $like));
-                    } else {
-                        $q->orWhere($column, 'like', $like);
+                        if (str_contains($column, '.')) {
+                            [$relation, $field] = explode('.', $column, 2);
+                            $q->orWhereHas($relation, fn (Builder $rel) => $rel->where($field, 'like', $like));
+                        } else {
+                            $q->orWhere($column, 'like', $like);
+                        }
                     }
-                }
-            });
-        }
-
-        foreach ($definition->filters() as $filter) {
-            $value = $this->filters[$filter['key']] ?? null;
-
-            if ($value === null || $value === '' || $value === [] || ! isset($filter['apply'])) {
-                continue;
+                });
             }
 
-            ($filter['apply'])($query, $value);
+            foreach ($definition->filters() as $filter) {
+                $value = $this->filters[$filter['key']] ?? null;
+
+                if ($value === null || $value === '' || $value === [] || ! isset($filter['apply'])) {
+                    continue;
+                }
+
+                ($filter['apply'])($query, $value);
+            }
+        }
+
+        // The cycle the page handed down. Applied LAST, and from component state rather than the
+        // request: this table renders inside a page whose query string is not part of a Livewire
+        // round trip, so reading it here would silently widen the list back to every cycle the
+        // moment the operator sorts a column or turns a page.
+        if ($this->period !== null) {
+            $definition->scopePeriod($query, $this->period);
         }
 
         return $query;
@@ -270,8 +319,14 @@ class DataTable extends Component
 
     private function applySort(Builder $query): Builder
     {
-        $column = collect($this->definition()->columns())->firstWhere('key', $this->sort);
-        $direction = $this->direction === 'desc' ? 'desc' : 'asc';
+        // A compact table renders the definition's order, always: it has no sort controls, and
+        // honouring a `sort` key that arrived from elsewhere on the page would re-order a log the
+        // operator never touched.
+        $sort = $this->compact ? $this->definition()->defaultSort()[0] : $this->sort;
+        $direction = $this->compact ? $this->definition()->defaultSort()[1] : $this->direction;
+
+        $column = collect($this->definition()->columns())->firstWhere('key', $sort);
+        $direction = $direction === 'desc' ? 'desc' : 'asc';
 
         if ($column === null) {
             return $query->orderBy($this->definition()->model()::make()->getKeyName(), 'desc');
