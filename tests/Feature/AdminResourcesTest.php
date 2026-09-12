@@ -119,6 +119,35 @@ class AdminResourcesTest extends TestCase
         }
     }
 
+    /**
+     * A create route nobody can reach is a feature that does not exist.
+     *
+     * The button is page chrome rather than part of the table, so a screen can own a perfectly
+     * good form and create route and still offer no way in — which is exactly what happened to
+     * the subscriber list, the one list screen that is hand-routed and so does not inherit the
+     * wrapper the registry-driven screens render. Generated from the registry plus that one
+     * screen, so a list added without its button fails here instead of in the office.
+     */
+    public function test_every_list_screen_offers_the_way_to_create_a_record(): void
+    {
+        $screens = ['admin.subscribers.index' => 'admin.subscribers.create'];
+
+        foreach (ResourceRegistry::all() as $key => $resource) {
+            if (! empty($resource['form'])) {
+                $screens['admin.'.$key.'.index'] = 'admin.'.$key.'.create';
+            }
+        }
+
+        $this->assertGreaterThan(4, count($screens), 'the loop is reading the registry');
+
+        foreach ($screens as $index => $create) {
+            $this->actingAs($this->admin)
+                ->get(route($index))
+                ->assertOk()
+                ->assertSee('href="'.route($create).'"', false);
+        }
+    }
+
     public function test_edit_route_404s_for_a_record_that_does_not_exist(): void
     {
         // findOrFail, not find: an unknown id must not open a blank form that creates a
