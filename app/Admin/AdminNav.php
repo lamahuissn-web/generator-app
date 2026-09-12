@@ -23,6 +23,21 @@ class AdminNav
     {
         return [
             [
+                // Ungrouped on purpose: "اليوم" is the day itself, not a section of the panel the
+                // way the groups below are. An empty label renders nothing at all — the layout
+                // skips the heading rather than printing an empty one over the item.
+                'label' => '',
+                'items' => [
+                    [
+                        'label' => __('nav.today'),
+                        'icon' => 'ki-home-2',
+                        'route' => 'admin.today',
+                        'match' => ['admin.today'],
+                        'component' => \App\Livewire\Admin\Pages\Today::class,
+                    ],
+                ],
+            ],
+            [
                 'label' => __('nav.network'),
                 'items' => [
                     [

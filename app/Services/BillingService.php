@@ -120,6 +120,10 @@ class BillingService
             'total' => $total,
             'recorded' => $recordedCount,
             'pending' => $total - $recordedCount,
+            // How much of the cycle is in, as one figure. Here rather than at each call site so
+            // the gate the billing run reads and the figure a board prints are the same number,
+            // and so the empty-network case (nothing to read = done, not 0%) is decided once.
+            'percent' => $total === 0 ? 100 : (int) round($recordedCount / $total * 100),
             'routes' => array_values($routes),
         ];
     }

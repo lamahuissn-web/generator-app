@@ -54,9 +54,11 @@
             <nav class="kt-sidebar-content flex grow flex-col gap-5 overflow-y-auto px-3.5 py-4" aria-label="{{ __('mdl.dashboard') }}">
                 @foreach (\App\Admin\AdminNav::forUser(auth()->user()) as $group)
                     <div class="flex flex-col gap-1">
-                        <span class="px-2.5 pb-1 text-2xs font-semibold uppercase tracking-widest text-muted-foreground">
-                            {{ $group['label'] }}
-                        </span>
+                        @if (($group['label'] ?? '') !== '')
+                            <span class="px-2.5 pb-1 text-2xs font-semibold uppercase tracking-widest text-muted-foreground">
+                                {{ $group['label'] }}
+                            </span>
+                        @endif
                         @foreach ($group['items'] as $item)
                             @php
                                 $active = \App\Admin\AdminNav::isActive($item);
