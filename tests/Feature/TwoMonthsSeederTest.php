@@ -174,6 +174,19 @@ class TwoMonthsSeederTest extends TestCase
         $this->assertSame(0, DB::table('payments')->whereNotIn('subscriber_id', $ids)->count());
         $this->assertSame(0, DB::table('payment_allocations')->whereNotIn('bill_id', Bill::query()->pluck('id'))->count());
 
+        // The audit trail names the ledger's rows, so it has to go with them: a trail left behind
+        // lists events for payments that no longer exist and makes the merged screen's closing
+        // balance disagree with the cash in hand.
+        $this->assertSame(
+            0,
+            DB::table('audit_logs')
+                ->whereIn('subject_type', [Payment::class, CashHandover::class])
+                ->whereNotIn('subject_id', Payment::query()->pluck('id'))
+                ->whereNotIn('subject_id', CashHandover::query()->pluck('id'))
+                ->count(),
+            'the wipe left audit rows pointing at records that are gone',
+        );
+
         // The baseline reading is the value July reads from, not a bill: 6 metered houses × 3 periods.
         $this->assertSame(6, Subscriber::query()->where('type', Subscriber::TYPE_METERED)->count());
         $this->assertSame(18, Reading::count());

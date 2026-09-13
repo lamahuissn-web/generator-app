@@ -183,6 +183,12 @@ class TwoMonthsSeeder extends Seeder
             }
         });
 
+        // The audit trail goes with it. It is not part of the ledger, but it NAMES the ledger's rows:
+        // a trail left behind refers to payments and settlements that no longer exist, and the merged
+        // التحصيل والتسليم screen reads that trail as history — it would list events for a network that
+        // is gone, and its closing balance would disagree with the cash actually in hand.
+        DB::table('audit_logs')->delete();
+
         // Sessions and the cache outlive the ledger otherwise: a signed-in browser would keep a user
         // id that no longer exists, and a cached figure would describe a network that is gone.
         foreach (['sessions', 'cache', 'cache_locks', 'jobs', 'failed_jobs'] as $table) {
@@ -196,7 +202,7 @@ class TwoMonthsSeeder extends Seeder
         $driver = DB::getDriverName();
 
         if ($driver === 'mysql') {
-            foreach ([...self::LEDGER_TABLES, 'bill_items'] as $table) {
+            foreach ([...self::LEDGER_TABLES, 'bill_items', 'audit_logs'] as $table) {
                 DB::statement("ALTER TABLE `{$table}` AUTO_INCREMENT = 1");
             }
         } elseif ($driver === 'sqlite' && Schema::hasTable('sqlite_sequence')) {
