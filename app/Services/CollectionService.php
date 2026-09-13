@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AuditLog;
 use App\Models\Bill;
 use App\Models\CashHandover;
 use App\Models\Payment;
@@ -103,6 +104,31 @@ class CollectionService
             })
             ->sortByDesc(fn ($row) => [$row['in_hand'], $row['collected']])
             ->values();
+    }
+
+    /**
+     * When each collector last handed cash over: [collector id => ['date' => 'Y-m-d', 'amount' => …]].
+     *
+     * The collectors table needs it to say "آخر تسليم — منذ ٥ أيام", which is the half of the question
+     * «مين بدنا نستلم منو؟» that the in-hand figure alone cannot answer: two collectors can hold the
+     * same amount and only one of them has been holding it for a fortnight.
+     *
+     * @return array<int, array{date: string, amount: float}>
+     */
+    public static function lastHandoverByCollector(): array
+    {
+        return CashHandover::query()
+            ->selectRaw('collector_id, MAX(handover_date) as last_date')
+            ->groupBy('collector_id')
+            ->get()
+            ->mapWithKeys(fn ($row) => [(int) $row->collector_id => [
+                'date' => Carbon::parse((string) $row->last_date)->toDateString(),
+                'amount' => (float) CashHandover::query()
+                    ->where('collector_id', (int) $row->collector_id)
+                    ->where('handover_date', $row->last_date)
+                    ->sum('amount'),
+            ]])
+            ->all();
     }
 
     /** @return Collection<int, array<string, mixed>> one row per route */
@@ -265,7 +291,10 @@ class CollectionService
                 'id' => $payment->id,
             ];
         })->concat($handovers->map(fn (CashHandover $handover) => [
-            'date' => $handover->created_at,
+            // The day the cash changed hands, not the moment somebody typed it in. A settlement
+            // entered late for the 5th belongs to the 5th — the period's «سلّم» figure already counts
+            // it there, and a ledger that filed it under today would contradict the row above it.
+            'date' => $handover->handover_date?->copy()->startOfDay() ?? $handover->created_at,
             'kind' => 'handover',
             'label' => $handover->handover_date?->format('Y-m-d'),
             'description' => __('col.led_handover'),
@@ -277,6 +306,381 @@ class CollectionService
         ]))->values();
 
         return self::foldEntries($entries, $from, $payments->count() + $handovers->count());
+    }
+
+    /**
+     * What the collector actually took from subscribers in the range, one row per receipt, grouped
+     * by the day he went out.
+     *
+     * This is the auditing view the office asked for — «اعرف متي الجابي اخذ مال من الزبون» — so a row
+     * carries the moment (date AND time, not just the day), the receipt, who paid (with the meter or
+     * the flat subscription), the area, the amount, the method with its second-currency detail, WHICH
+     * invoice that money settled, the collector's own note, and who recorded it.
+     *
+     * The recorder is read from the audit log on purpose: a receipt entered by the collector in the
+     * field and one entered at the office are not the same fact, and the operator has to be able to
+     * tell them apart. When the trail has no actor it says «غير مسجّل» — a money screen may not guess.
+     *
+     * @return array{days: array<int, array<string, mixed>>, rows_total: int, total: float}
+     */
+    public static function collectorDocuments(
+        User $collector,
+        Carbon $from,
+        Carbon $to,
+        ?string $method = null,
+        ?string $search = null,
+    ): array {
+        $term = $search !== null && trim($search) !== '' ? '%'.trim($search).'%' : null;
+
+        $payments = Payment::query()
+            ->where('collector_id', $collector->id)
+            ->whereBetween('created_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
+            ->when($method, fn ($q) => $q->where('method', $method))
+            ->when($term, fn ($q) => $q->where(fn ($w) => $w
+                ->where('number', 'like', $term)
+                ->orWhereHas('subscriber', fn ($s) => $s->where('name', 'like', $term))))
+            ->with([
+                'subscriber:id,name,meter_no,route_id',
+                'subscriber.route:id,name',
+                'allocations.bill:id,number,period',
+            ])
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get();
+
+        $recorders = self::recordersFor('payment', $payments->pluck('id')->all());
+
+        $days = [];
+        foreach ($payments as $payment) {
+            $day = (string) $payment->created_at?->format('Y-m-d');
+            $days[$day] ??= ['day' => $day, 'rows' => [], 'total' => 0.0, 'count' => 0];
+
+            $recorder = $recorders[$payment->id] ?? null;
+
+            $days[$day]['rows'][] = [
+                'id' => $payment->id,
+                'ref' => 'P'.$payment->id,
+                'number' => $payment->number,
+                'at' => $payment->created_at,
+                'time' => $payment->created_at?->format('H:i'),
+                'subscriber' => $payment->subscriber?->name ?? '—',
+                'meter_no' => $payment->subscriber?->meter_no,
+                'route' => $payment->subscriber?->route?->name ?: __('col.no_route'),
+                'amount' => (float) $payment->amount,
+                'method' => $payment->methodLabel(),
+                'method_key' => $payment->method,
+                'lira' => $payment->lbp_amount
+                    ? __('col.lira_detail', [
+                        'amount' => number_format((float) $payment->lbp_amount),
+                        'rate' => number_format((float) $payment->lbp_rate),
+                    ])
+                    : null,
+                'invoices' => $payment->allocations
+                    ->map(fn ($allocation) => $allocation->bill?->number ?: $allocation->bill?->period)
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all(),
+                'note' => $payment->note,
+                'recorder' => $recorder,
+                'recorder_label' => self::recorderLabel($recorder, $collector),
+            ];
+
+            $days[$day]['total'] = round($days[$day]['total'] + (float) $payment->amount, 2);
+            $days[$day]['count']++;
+        }
+
+        return [
+            'days' => array_values($days),
+            'rows_total' => $payments->count(),
+            'total' => round((float) $payments->sum('amount'), 2),
+        ];
+    }
+
+    /**
+     * The append-only record of one collector's money: every event the program logged, to the
+     * second, with the balance AFTER it.
+     *
+     * Read from the audit log rather than from the live movements, because the log is the only place
+     * that still knows about a receipt that was reversed or a settlement that was deleted. A money
+     * screen whose history can be edited away is not auditable, which is the whole point.
+     *
+     * Movements with no audit row (imported or seeded data) are listed too, marked «غير مسجّل»:
+     * dropping them would make the closing balance disagree with the cash in hand, and that is the
+     * one number the operator counts in the drawer. For the same reason the closing figure is the
+     * invariant of this method — it must equal inHand(), whatever the log does or does not hold.
+     *
+     * Deltas: a receipt raises what he holds, a settlement lowers it, an EDITED settlement moves it
+     * by the difference, a deleted settlement hands the amount back, and a voided receipt takes it
+     * away — so a receipt that was created and then reversed ends at zero, not at a phantom debt.
+     *
+     * @return array{rows: array<int, array<string, mixed>>, closing: float, rows_total: int, recorded: int, unrecorded: int}
+     */
+    public static function collectorAuditTrail(User $collector, int $limit = 300): array
+    {
+        $payments = Payment::query()
+            ->where('collector_id', $collector->id)
+            ->with('subscriber:id,name')
+            ->get();
+
+        $handovers = CashHandover::query()->where('collector_id', $collector->id)->get();
+
+        $paymentIds = $payments->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $handoverIds = $handovers->pluck('id')->map(fn ($id) => (int) $id)->all();
+
+        // A settlement carries the collector in its payload. A receipt does not — unless it was
+        // reversed — so the collector is resolved through the payment, and a receipt whose created
+        // row names a payment that no longer exists is matched through that payment's own reversal.
+        $reversedIds = AuditLog::query()
+            ->where('action', 'payment.reversed')
+            ->get()
+            ->filter(fn (AuditLog $log) => (int) ($log->payload['collector_id'] ?? 0) === $collector->id)
+            ->pluck('subject_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $logs = AuditLog::query()
+            ->whereIn('action', ['payment.created', 'payment.reversed', 'handover.created', 'handover.updated', 'handover.deleted'])
+            ->with('actor:id,name')
+            ->orderBy('created_at')
+            ->orderBy('id')
+            ->get()
+            ->filter(function (AuditLog $log) use ($collector, $paymentIds, $handoverIds, $reversedIds) {
+                $subjectId = (int) $log->subject_id;
+                $payloadCollector = (int) ($log->payload['collector_id'] ?? 0);
+
+                if (str_starts_with($log->action, 'handover.')) {
+                    return $payloadCollector === $collector->id || in_array($subjectId, $handoverIds, true);
+                }
+
+                return $payloadCollector === $collector->id
+                    || in_array($subjectId, $paymentIds, true)
+                    || in_array($subjectId, $reversedIds, true);
+            })
+            ->values();
+
+        // An edit changes the amount rather than adding a movement; the created line has to start at
+        // the ORIGINAL amount and let the edit carry the difference, or the row is counted twice.
+        $handoverBefore = [];
+        foreach ($logs as $log) {
+            if ($log->action !== 'handover.updated') {
+                continue;
+            }
+
+            $ref = 'H'.(int) $log->subject_id;
+            $handoverBefore[$ref] ??= (float) ($log->payload['before']['amount'] ?? 0);
+        }
+
+        $published = array_fill_keys(array_merge(
+            array_map(fn (int $id) => 'P'.$id, $paymentIds),
+            array_map(fn (int $id) => 'H'.$id, $handoverIds),
+        ), false);
+
+        $rows = [];
+        foreach ($logs as $log) {
+            $payload = $log->payload ?? [];
+            $subjectId = (int) $log->subject_id;
+            $isHandover = str_starts_with($log->action, 'handover.');
+            $ref = ($isHandover ? 'H' : 'P').$subjectId;
+            $actor = $log->actor?->name;
+
+            switch ($log->action) {
+                case 'payment.created':
+                    $live = $payments->firstWhere('id', $subjectId);
+
+                    if ($live) {
+                        $published[$ref] = true;
+                        $rows[] = self::trailLine('payment', $log->created_at, $live->number, [
+                            'subscriber' => $live->subscriber?->name,
+                            'amount' => (float) $live->amount,
+                            'delta' => (float) $live->amount,
+                            'note' => $live->note,
+                            'actor' => $actor,
+                        ]);
+                    } else {
+                        // The receipt itself is gone (reversed) — the applied part plus the excess is
+                        // what it had put into his hand at the time.
+                        $amount = round((float) ($payload['applied'] ?? 0) + (float) ($payload['excess'] ?? 0), 2);
+                        $rows[] = self::trailLine('payment', $log->created_at, null, [
+                            'subscriber' => Subscriber::whereKey((int) ($payload['subscriber_id'] ?? 0))->value('name'),
+                            'amount' => $amount,
+                            'delta' => $amount,
+                            'note' => $payload['note'] ?? null,
+                            'actor' => $actor,
+                        ]);
+                    }
+                    break;
+
+                case 'payment.reversed':
+                    $amount = round((float) ($payload['amount'] ?? 0), 2);
+                    $rows[] = self::trailLine('void', $log->created_at, null, [
+                        'subscriber' => Subscriber::whereKey((int) ($payload['subscriber_id'] ?? 0))->value('name'),
+                        'amount' => $amount,
+                        'delta' => -$amount,
+                        'note' => $payload['note'] ?? null,
+                        'actor' => $actor,
+                    ]);
+                    break;
+
+                case 'handover.created':
+                    $live = $handovers->firstWhere('id', $subjectId);
+                    $amount = $handoverBefore[$ref] ?? (float) ($live?->amount ?? $payload['amount'] ?? 0);
+
+                    if ($live) {
+                        $published[$ref] = true;
+                    }
+
+                    $rows[] = self::trailLine('handover', $log->created_at, null, [
+                        'amount' => round($amount, 2),
+                        'delta' => -round($amount, 2),
+                        'note' => $live?->note ?? $payload['note'] ?? null,
+                        'actor' => $actor,
+                        'balance_recorded' => $payload['in_hand_after'] ?? null,
+                    ]);
+                    break;
+
+                case 'handover.updated':
+                    $before = (float) ($payload['before']['amount'] ?? 0);
+                    $after = (float) ($payload['after']['amount'] ?? 0);
+                    $rows[] = self::trailLine('edit', $log->created_at, null, [
+                        'amount' => round($after, 2),
+                        'delta' => -round($after - $before, 2),
+                        'note' => $payload['after']['handover_date'] ?? null,
+                        'actor' => $actor,
+                        'balance_recorded' => null,
+                        'replaced' => round($before, 2),
+                    ]);
+                    break;
+
+                case 'handover.deleted':
+                    $amount = round((float) ($payload['amount'] ?? 0), 2);
+                    $rows[] = self::trailLine('delete', $log->created_at, null, [
+                        'amount' => $amount,
+                        'delta' => $amount,
+                        'note' => $payload['note'] ?? null,
+                        'actor' => $actor,
+                        'balance_recorded' => null,
+                    ]);
+                    break;
+            }
+        }
+
+        // Everything the log never saw — imported, seeded, or written before the trail existed.
+        foreach ($payments as $payment) {
+            if ($published['P'.$payment->id] ?? false) {
+                continue;
+            }
+
+            $rows[] = self::trailLine('payment', $payment->created_at, $payment->number, [
+                'subscriber' => $payment->subscriber?->name,
+                'amount' => (float) $payment->amount,
+                'delta' => (float) $payment->amount,
+                'note' => $payment->note,
+                'actor' => null,
+            ]);
+        }
+
+        foreach ($handovers as $handover) {
+            if ($published['H'.$handover->id] ?? false) {
+                continue;
+            }
+
+            $rows[] = self::trailLine('handover', $handover->created_at, null, [
+                'amount' => (float) $handover->amount,
+                'delta' => -(float) $handover->amount,
+                'note' => $handover->note,
+                'actor' => null,
+                'balance_recorded' => null,
+            ]);
+        }
+
+        foreach ($rows as $index => $row) {
+            $rows[$index]['seq'] = $index;
+        }
+
+        usort($rows, fn ($a, $b) => [$a['at']?->timestamp ?? 0, $a['order'], $a['seq']]
+            <=> [$b['at']?->timestamp ?? 0, $b['order'], $b['seq']]);
+
+        $balance = 0.0;
+        foreach ($rows as $index => $row) {
+            // A balance the log recorded is taken as-is; otherwise it is folded from the movements,
+            // which keeps the closing figure honest even for events whose record is gone.
+            $balance = round($balance + $row['delta'], 2);
+            $rows[$index]['balance'] = $row['balance_recorded'] ?? $balance;
+        }
+
+        $closing = round($balance, 2);
+        $recorded = count(array_filter($rows, fn ($row) => $row['actor'] !== null));
+        $total = count($rows);
+
+        return [
+            'rows' => array_slice(array_reverse($rows), 0, $limit),
+            'closing' => $closing,
+            'rows_total' => $total,
+            'recorded' => $recorded,
+            'unrecorded' => $total - $recorded,
+        ];
+    }
+
+    /**
+     * One line of the audit trail.
+     *
+     * `order` keeps the sort stable when two events share a timestamp: a receipt or a settlement
+     * lands before the edit or the deletion that followed it in the same second.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private static function trailLine(string $kind, ?Carbon $at, ?string $number, array $data): array
+    {
+        return [
+            'kind' => $kind,
+            'at' => $at,
+            'number' => $number,
+            'detail' => $data['subscriber'] ?? null,
+            'amount' => round((float) ($data['amount'] ?? 0), 2),
+            'delta' => round((float) ($data['delta'] ?? 0), 2),
+            'note' => $data['note'] ?? null,
+            'actor' => $data['actor'] ?? null,
+            'balance_recorded' => $data['balance_recorded'] ?? null,
+            'replaced' => $data['replaced'] ?? null,
+            'order' => in_array($kind, ['payment', 'handover'], true) ? 0 : 1,
+            'seq' => 0,
+        ];
+    }
+
+    /**
+     * Who recorded each of these subjects, from the audit log: [subject id => User].
+     *
+     * @param  array<int, int>  $ids
+     * @return array<int, User>
+     */
+    private static function recordersFor(string $prefix, array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+
+        return AuditLog::query()
+            ->where('action', $prefix.'.created')
+            ->whereIn('subject_id', $ids)
+            ->with('actor:id,name')
+            ->get()
+            ->filter(fn (AuditLog $log) => $log->actor !== null)
+            ->mapWithKeys(fn (AuditLog $log) => [(int) $log->subject_id => $log->actor])
+            ->all();
+    }
+
+    /** «الجابي بالميدان» / «المكتب (اسم)» / «غير مسجّل» — never a guess. */
+    private static function recorderLabel(?User $actor, User $collector): string
+    {
+        if ($actor === null) {
+            return __('col.recorder_unknown');
+        }
+
+        return (int) $actor->id === (int) $collector->id
+            ? __('col.recorder_collector')
+            : __('col.recorder_office', ['name' => $actor->name]);
     }
 
     /**
