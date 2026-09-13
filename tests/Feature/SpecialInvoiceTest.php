@@ -440,7 +440,7 @@ class SpecialInvoiceTest extends TestCase
 
         $this->get('/admin/subscribers')->assertOk();
         $this->get('/admin/subscribers/'.$this->subscriber->id)->assertOk();
-        $this->get('/admin/collection-report')->assertOk();
+        $this->get('/admin/collections')->assertOk();
         $this->get('/admin/overdue-report')->assertOk();
         $this->get('/admin/profit-loss')->assertOk();
         $this->get('/admin/generate-bills')->assertOk();

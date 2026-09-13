@@ -3,7 +3,6 @@
 namespace App\Admin;
 
 use App\Admin\Forms\ExpenseForm;
-use App\Admin\Forms\HandoverForm;
 use App\Admin\Forms\ReadingForm;
 use App\Admin\Forms\RouteForm;
 use App\Admin\Forms\TariffForm;
@@ -11,7 +10,6 @@ use App\Admin\Forms\UserForm;
 use App\Admin\Tables\AuditLogsTable;
 use App\Admin\Tables\BillsTable;
 use App\Admin\Tables\ExpensesTable;
-use App\Admin\Tables\HandoversTable;
 use App\Admin\Tables\PaymentsTable;
 use App\Admin\Tables\ReadingsTable;
 use App\Admin\Tables\RoutesTable;
@@ -80,13 +78,6 @@ class ResourceRegistry
                 'title' => __('mdl.expenses'),
                 'singular' => __('mdl.expense'),
                 'description' => __('t.expenses_sub'),
-            ],
-            'handovers' => [
-                'table' => HandoversTable::class,
-                'form' => HandoverForm::class,
-                'title' => __('mdl.handovers'),
-                'singular' => __('mdl.handover'),
-                'description' => __('t.handovers_sub'),
             ],
             'users' => [
                 'table' => UsersTable::class,

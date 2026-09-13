@@ -342,7 +342,7 @@ final class TodayQueue
                 'icon' => 'ki-bank',
                 'title' => __('today.cash_done'),
                 'detail' => [],
-                'route' => 'admin.handovers.index',
+                'route' => 'admin.collections',
                 'cta' => __('today.cash_cta'),
             ];
         }
@@ -368,7 +368,7 @@ final class TodayQueue
                 'amount' => money_ltr((float) $holders->sum('in_hand')),
             ]),
             'detail' => $detail,
-            'route' => 'admin.handovers.index',
+            'route' => 'admin.collections',
             'cta' => __('today.cash_cta'),
         ];
     }

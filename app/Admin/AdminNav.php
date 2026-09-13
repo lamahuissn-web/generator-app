@@ -121,17 +121,14 @@ class AdminNav
                         'match' => ['admin.expenses.*'],
                     ],
                     [
-                        'label' => __('mdl.handovers'),
+                        // The three screens that used to answer this separately — the handover
+                        // register, the collector's statement and the collection report — are one
+                        // page now, built around the collector rather than around the old pages.
+                        'label' => __('col.hub_title'),
                         'icon' => 'ki-bank',
-                        'route' => 'admin.handovers.index',
-                        'match' => ['admin.handovers.*'],
-                    ],
-                    [
-                        'label' => __('mdl.collector_statement'),
-                        'icon' => 'ki-note-2',
-                        'route' => 'admin.collector-statement',
-                        'match' => ['admin.collector-statement'],
-                        'component' => \App\Livewire\Admin\Pages\CollectorStatement::class,
+                        'route' => 'admin.collections',
+                        'match' => ['admin.collections'],
+                        'component' => \App\Livewire\Admin\Pages\Collections::class,
                     ],
                     [
                         'label' => __('mdl.profit_loss'),
@@ -146,13 +143,6 @@ class AdminNav
                         'route' => 'admin.overdue-report',
                         'match' => ['admin.overdue-report'],
                         'component' => \App\Livewire\Admin\Pages\OverdueReport::class,
-                    ],
-                    [
-                        'label' => __('col.title'),
-                        'icon' => 'ki-percentage',
-                        'route' => 'admin.collection-report',
-                        'match' => ['admin.collection-report'],
-                        'component' => \App\Livewire\Admin\Pages\CollectionReport::class,
                     ],
                 ],
             ],

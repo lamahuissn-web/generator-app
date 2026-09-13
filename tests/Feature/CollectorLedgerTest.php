@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Livewire\Admin\Pages\CollectorStatement;
+use App\Livewire\Admin\Pages\Collections;
 use App\Models\AuditLog;
 use App\Models\CashHandover;
 use App\Models\Payment;
@@ -139,7 +139,7 @@ class CollectorLedgerTest extends TestCase
         $this->bill('2026-08', 1040);
         $this->collect(25, '2026-08-28', '2026-08');
 
-        $url = route('admin.collector-statement', [
+        $url = route('admin.collections', [
             'collector_id' => $this->collector->id,
             'from' => '2026-08-01',
             'to' => '2026-08-31',
@@ -156,7 +156,7 @@ class CollectorLedgerTest extends TestCase
 
         // All-time view of the same ledger.
         $this->actingAs($this->admin)
-            ->get(route('admin.collector-statement', ['collector_id' => $this->collector->id, 'all_time' => 1]))
+            ->get(route('admin.collections', ['collector_id' => $this->collector->id, 'all_time' => 1]))
             ->assertOk()
             ->assertSee('Jad Haddad');
     }
@@ -164,10 +164,10 @@ class CollectorLedgerTest extends TestCase
     public function test_page_renders_without_a_collector_and_is_admin_only(): void
     {
         $this->actingAs($this->admin)
-            ->get(route('admin.collector-statement', ['collector_id' => null]))
+            ->get(route('admin.collections', ['collector_id' => null]))
             ->assertOk();
 
-        $this->actingAs($this->collector)->get(route('admin.collector-statement'))->assertForbidden();
+        $this->actingAs($this->collector)->get(route('admin.collections'))->assertForbidden();
     }
 
     public function test_quick_handover_action_records_cash_for_the_shown_collector(): void
@@ -176,7 +176,7 @@ class CollectorLedgerTest extends TestCase
         $this->collect(40, '2026-08-28', '2026-08');
 
         Livewire::actingAs($this->admin)
-            ->test(CollectorStatement::class, ['filters' => ['collector_id' => $this->collector->id]])
+            ->test(Collections::class)->call('selectCollector', $this->collector->id)
             ->set('filters.from', '2026-08-01')
             ->set('filters.to', '2026-08-31')
             ->assertOk()
@@ -197,14 +197,17 @@ class CollectorLedgerTest extends TestCase
         $this->assertSame(1, AuditLog::where('action', 'handover.created')->count());
     }
 
-    public function test_report_table_links_each_collector_to_their_ledger(): void
+    public function test_the_collectors_table_offers_each_collector_his_file(): void
     {
         $this->bill('2026-08', 1040);
         $this->collect(25, '2026-08-28', '2026-08');
 
-        $response = $this->actingAs($this->admin)->get('/admin/collection-report');
-        $response->assertOk()->assertSee('collector-statement');
-        $response->assertSee('collector_id='.$this->collector->id);
+        $response = $this->actingAs($this->admin)->get('/admin/collections');
+        $response->assertOk()->assertSee('Jad Haddad');
+
+        // The affordance is a control that selects him, not an anchor: his file opens in this same
+        // page, under the table, instead of navigating away from the office's view of the money.
+        $response->assertSee('selectCollector', false);
     }
 
     public function test_ledger_prints_and_downloads_as_pdf(): void

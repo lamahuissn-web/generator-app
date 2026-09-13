@@ -9,18 +9,15 @@ use App\Admin\Actions\ConvertToMetered;
 use App\Admin\Actions\RecordReading;
 use App\Admin\Actions\SpecialInvoice;
 use App\Admin\Forms\ExpenseForm;
-use App\Admin\Forms\HandoverForm;
 use App\Admin\Forms\ReadingForm;
 use App\Admin\Forms\RouteForm;
 use App\Admin\Forms\TariffForm;
 use App\Admin\Forms\UserForm;
 use App\Admin\ResourceRegistry;
-use App\Admin\Tables\HandoversTable;
 use App\Livewire\Admin\ActionForm;
 use App\Livewire\Admin\ResourceForm;
 use App\Models\AuditLog;
 use App\Models\Bill;
-use App\Models\CashHandover;
 use App\Models\Expense;
 use App\Models\Payment;
 use App\Models\Reading;
@@ -28,7 +25,6 @@ use App\Models\Route;
 use App\Models\Subscriber;
 use App\Models\Tariff;
 use App\Models\User;
-use App\Services\CollectionService;
 use App\Services\ReadingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -500,89 +496,6 @@ class AdminResourcesTest extends TestCase
             ->assertHasNoErrors();
 
         $this->assertSame(25.0, (float) Reading::where('period', '2026-10')->firstOrFail()->consumption);
-    }
-
-    // ---- cash handovers ----------------------------------------------------
-
-    /** A payment, so the collector is actually holding cash to hand over. */
-    private function collected(float $amount): void
-    {
-        Payment::create([
-            'subscriber_id' => $this->subscriber->id,
-            'collector_id' => $this->collector->id,
-            'amount' => $amount,
-            'method' => Payment::METHOD_CASH_USD,
-        ]);
-    }
-
-    /**
-     * The handover form caps the amount at the cash in hand, and says so on the field.
-     *
-     * The service refuses it too (that is the authoritative guard, and it covers the quick
-     * action as well) — this asserts the operator gets the reason where they are typing.
-     */
-    public function test_the_handover_form_refuses_more_than_the_collector_holds(): void
-    {
-        $this->collected(75);
-
-        Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => HandoverForm::class])
-            ->set('state.collector_id', $this->collector->id)
-            ->set('state.handover_date', '2026-09-08')
-            ->set('state.amount', '100')
-            ->call('save')
-            ->assertHasErrors('state.amount');
-
-        $this->assertSame(0, CashHandover::count(), 'A refused handover was written anyway.');
-    }
-
-    /** Exactly what the collector holds is accepted, and the ledger lands on zero. */
-    public function test_the_handover_form_accepts_exactly_what_the_collector_holds(): void
-    {
-        $this->collected(75);
-
-        Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => HandoverForm::class])
-            ->set('state.collector_id', $this->collector->id)
-            ->set('state.handover_date', '2026-09-08')
-            ->set('state.amount', '75')
-            ->call('save')
-            ->assertHasNoErrors();
-
-        $this->assertSame(1, CashHandover::count());
-        $this->assertSame(0.0, CollectionService::inHand($this->collector->id));
-    }
-
-    /**
-     * When editing, the record's own amount counts as available again.
-     *
-     * A handover typed a digit short is the case this form is opened for: measuring against the
-     * already-reduced balance would make it impossible to correct upwards.
-     */
-    public function test_the_handover_form_lets_an_edit_raise_the_amount_back_up(): void
-    {
-        $this->collected(75);
-
-        $handover = CashHandover::create([
-            'collector_id' => $this->collector->id, 'amount' => 20,
-            'handover_date' => '2026-09-08', 'recorded_by' => $this->admin->id,
-        ]);   // created directly, bypassing the service: this is data as it is already stored
-
-        Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => HandoverForm::class, 'record' => $handover->id])
-            ->set('state.amount', '75')
-            ->call('save')
-            ->assertHasNoErrors();
-
-        $this->assertSame(75.0, (float) $handover->fresh()->amount);
-        $this->assertSame(0.0, CollectionService::inHand($this->collector->id));
-
-        // one cent past the full in-hand figure is still refused
-        Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => HandoverForm::class, 'record' => $handover->id])
-            ->set('state.amount', '75.01')
-            ->call('save')
-            ->assertHasErrors('state.amount');
     }
 
     // ---- view contracts ---------------------------------------------------
@@ -1112,44 +1025,4 @@ class AdminResourcesTest extends TestCase
         }
     }
 
-    // ---- handovers --------------------------------------------------------
-
-    public function test_handover_group_shows_the_collectors_actual_collections(): void
-    {
-        // collector_id is the column the ledger reads — `collected_by`/`recorded_by` are not
-        // columns on payments at all, so this payment used to be recorded with no collector and
-        // the collector's in-hand balance stayed at zero.
-        Payment::create([
-            'subscriber_id' => $this->subscriber->id,
-            'collector_id' => $this->collector->id,
-            'amount' => 80, 'method' => 'cash',
-        ]);
-
-        Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => HandoverForm::class])
-            ->set('state.collector_id', $this->collector->id)
-            ->set('state.handover_date', '2026-09-10')
-            ->set('state.amount', '50')
-            ->call('save')
-            ->assertHasNoErrors();
-
-        $handover = CashHandover::firstOrFail();
-        $this->assertSame(50.0, (float) $handover->amount);
-        $this->assertSame($this->collector->id, $handover->collector_id);
-        $this->assertSame($this->admin->id, $handover->recorded_by);
-    }
-
-    /** Deleting a handover puts the cash back in the collector's hand — the warning must say so. */
-    public function test_handover_delete_warning_states_the_resulting_in_hand_balance(): void
-    {
-        $handover = CashHandover::create([
-            'collector_id' => $this->collector->id, 'amount' => 50,
-            'handover_date' => '2026-09-10', 'recorded_by' => $this->admin->id,
-        ]);
-
-        $warning = HandoversTable::make()->deleteWarning($handover);
-
-        $this->assertStringContainsString('$50.00', $warning);
-        $this->assertStringContainsString('Jad Haddad', $warning);
-    }
 }

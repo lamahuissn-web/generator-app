@@ -49,6 +49,22 @@ Route::middleware(['auth', 'role:admin', 'locale'])->group(function () {
         ]))->name(AdminNav::slug($page));
     }
 
+    // ---- the three screens the merged page replaced ------------------------------------------
+    // Their nav entries went with them, but bookmarks, the dashboard and the collector portal still
+    // point at these paths, and the range and the collector ride along so an old link lands on the
+    // same figures it used to show. Registered here rather than in the pages loop: they are
+    // redirects, not screens.
+    $legacy = fn (array $params = []) => fn () => redirect()->route('admin.collections', array_filter(
+        array_merge(request()->only(['collector_id', 'from', 'to', 'all_time']), $params),
+        fn ($value) => $value !== null && $value !== '',
+    ));
+
+    Route::get('handovers', $legacy())->name('handovers.index');
+    Route::get('handovers/create', $legacy(['tab' => 'handovers']))->name('handovers.create');
+    Route::get('handovers/{record}/edit', $legacy(['tab' => 'handovers']))->name('handovers.edit');
+    Route::get('collector-statement', $legacy())->name('collector-statement');
+    Route::get('collection-report', $legacy())->name('collection-report');
+
     // The registry-driven resources: one entry per screen, four routes each. The key rides
     // along as a route DEFAULT so the names stay readable (admin.routes.index, …) instead of
     // collapsing into one generic admin.resource.index?resource=routes.

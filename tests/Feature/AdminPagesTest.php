@@ -3,8 +3,7 @@
 namespace Tests\Feature;
 
 use App\Admin\AdminNav;
-use App\Livewire\Admin\Pages\CollectionReport;
-use App\Livewire\Admin\Pages\CollectorStatement;
+use App\Livewire\Admin\Pages\Collections;
 use App\Livewire\Admin\Pages\GenerateBills;
 use App\Livewire\Admin\Pages\OverdueReport;
 use App\Livewire\Admin\Pages\ProfitLoss;
@@ -340,7 +339,7 @@ class AdminPagesTest extends TestCase
         ]);
 
         Livewire::actingAs($this->admin)
-            ->test(CollectionReport::class)
+            ->test(Collections::class)
             ->set('filters.from', '2026-09-01')
             ->set('filters.to', '2026-09-30')
             ->call('$refresh')
@@ -373,7 +372,7 @@ class AdminPagesTest extends TestCase
     public function test_the_collection_report_clamps_a_reversed_range(): void
     {
         $component = Livewire::actingAs($this->admin)
-            ->test(CollectionReport::class)
+            ->test(Collections::class)
             ->set('filters.from', '2026-09-30')
             ->set('filters.to', '2026-09-01')
             ->call('$refresh');
@@ -387,7 +386,7 @@ class AdminPagesTest extends TestCase
     public function test_the_collection_report_survives_a_garbage_date(): void
     {
         Livewire::actingAs($this->admin)
-            ->test(CollectionReport::class)
+            ->test(Collections::class)
             ->set('filters.from', 'not-a-date')
             ->call('$refresh')
             ->assertOk();
@@ -399,12 +398,12 @@ class AdminPagesTest extends TestCase
         // own request, and merging into the test's request never reaches it.
         $instance = Livewire::actingAs($this->admin)
             ->withQueryParams(['from' => '2026-08-01', 'to' => '2026-08-31', 'collector_id' => $this->collector->id])
-            ->test(CollectionReport::class)
+            ->test(Collections::class)
             ->instance();
 
         $this->assertSame('2026-08-01', $instance->from()->toDateString());
         $this->assertSame('2026-08-31', $instance->to()->toDateString());
-        $this->assertSame($this->collector->id, $instance->collectorId());
+        $this->assertSame($this->collector->id, $instance->collector()?->id);
     }
 
     // ---- collector ledger -------------------------------------------------
@@ -419,7 +418,7 @@ class AdminPagesTest extends TestCase
         ]);
 
         $component = Livewire::actingAs($this->admin)
-            ->test(CollectorStatement::class, ['filters' => ['collector_id' => $this->collector->id]])
+            ->test(Collections::class)->call('selectCollector', $this->collector->id)
             ->assertSee('Jad Haddad');
 
         $instance = $component->instance();
@@ -446,7 +445,7 @@ class AdminPagesTest extends TestCase
         $this->payment(777, '2026-09-05', $other);
 
         $ledger = Livewire::actingAs($this->admin)
-            ->test(CollectorStatement::class, ['filters' => ['collector_id' => $this->collector->id]])
+            ->test(Collections::class)->call('selectCollector', $this->collector->id)
             ->instance()
             ->ledger();
 
@@ -458,7 +457,7 @@ class AdminPagesTest extends TestCase
         $this->payment(200, '2026-09-05');
 
         $component = Livewire::actingAs($this->admin)
-            ->test(CollectorStatement::class, ['filters' => ['collector_id' => $this->collector->id]])
+            ->test(Collections::class)->call('selectCollector', $this->collector->id)
             ->call('openHandover')
             ->assertSet('handoverOpen', true)
             ->set('handover.amount', '120')
@@ -470,15 +469,10 @@ class AdminPagesTest extends TestCase
         // snapshot, and the page it lands on is a fresh render where the modal is closed by its
         // own default. Asserting the property would only be testing the test.
 
-        // A flash alone is not feedback: the layout — the only thing that renders
-        // session('status') — is not re-rendered by a Livewire update, so the message was
-        // invisible here and then surfaced later on an unrelated page. The action redirects back
-        // to the same statement, collector and range included, so the confirmation is rendered
-        // and the operator keeps looking at what they were looking at.
-        $target = (string) ($component->effects['redirect'] ?? '');
-        $this->assertStringStartsWith(route('admin.collector-statement'), $target);
-        $this->assertStringContainsString('collector_id='.$this->collector->id, $target);
-        $this->assertStringContainsString('from='.$component->instance()->from()?->toDateString(), $target);
+        // A flash is only feedback if something renders it. The merged screen prints the
+        // confirmation inside its own markup, so the operator sees it without the page — and the
+        // collector they were looking at — being thrown away by a redirect.
+        $component->assertSee(__('col.handover_saved', ['amount' => money_ltr(120.0)]));
 
         $this->assertSame(1, CashHandover::count());
         $this->assertSame(80.0, round($component->instance()->inHand(), 2));
@@ -497,7 +491,7 @@ class AdminPagesTest extends TestCase
         $this->payment(200, '2026-09-05');
 
         $component = Livewire::actingAs($this->admin)
-            ->test(CollectorStatement::class, ['filters' => ['collector_id' => $this->collector->id]])
+            ->test(Collections::class)->call('selectCollector', $this->collector->id)
             ->call('openHandover')
             ->set('handover.amount', '250')
             ->set('handover.handover_date', '2026-09-08')
@@ -518,7 +512,7 @@ class AdminPagesTest extends TestCase
         $this->payment(200, '2026-09-05');
 
         $component = Livewire::actingAs($this->admin)
-            ->test(CollectorStatement::class, ['filters' => ['collector_id' => $this->collector->id]])
+            ->test(Collections::class)->call('selectCollector', $this->collector->id)
             ->call('openHandover')
             ->set('handover.amount', '200')
             ->set('handover.handover_date', '2026-09-08')
@@ -532,7 +526,7 @@ class AdminPagesTest extends TestCase
     public function test_a_handover_of_zero_is_refused(): void
     {
         Livewire::actingAs($this->admin)
-            ->test(CollectorStatement::class, ['filters' => ['collector_id' => $this->collector->id]])
+            ->test(Collections::class)->call('selectCollector', $this->collector->id)
             ->call('openHandover')
             ->set('handover.amount', '0')
             ->call('saveHandover')
@@ -618,7 +612,7 @@ class AdminPagesTest extends TestCase
     public function test_resetting_the_filters_restores_the_defaults(): void
     {
         $component = Livewire::actingAs($this->admin)
-            ->test(CollectionReport::class)
+            ->test(Collections::class)
             ->set('filters.from', '2020-01-01')
             ->set('filters.to', '2020-01-31')
             ->call('resetFilters');

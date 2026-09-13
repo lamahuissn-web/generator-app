@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Livewire\Admin\Pages\CollectionReport;
+use App\Livewire\Admin\Pages\Collections;
 use App\Models\AuditLog;
 use App\Models\CashHandover;
 use App\Models\Payment;
@@ -346,10 +346,10 @@ class CollectionReportTest extends TestCase
 
     public function test_report_page_filters_and_exports(): void
     {
-        $this->actingAs($this->admin)->get('/admin/collection-report')->assertOk()->assertSee('Collector A');
+        $this->actingAs($this->admin)->get('/admin/collections')->assertOk()->assertSee('Collector A');
 
         $component = Livewire::actingAs($this->admin)
-            ->test(CollectionReport::class)
+            ->test(Collections::class)
             ->set('filters.from', '2026-09-01')
             ->set('filters.to', '2026-09-30')
             ->assertOk()
@@ -362,36 +362,34 @@ class CollectionReportTest extends TestCase
         $this->assertSame(100.0, $component->instance()->totals()['collected']);
         $this->assertCount(2, $component->instance()->collectors());
 
-        // Scoping by collector narrows the reconciliation table to one row.
-        $component->set('filters.collector_id', $this->collectorA->id);
-        $this->assertCount(1, $component->instance()->collectors());
-        $this->assertSame('Collector A', $component->instance()->collectors()->first()['name']);
-        $this->assertSame(60.0, $component->instance()->totals()['collected']);
-        $this->assertSame('Area A', $component->instance()->routeRows()->first()['name']);
+        // Picking a collector opens HIS file. The table keeps showing the whole office — that is
+        // what the merged screen is for — and the dossier under it narrows to him.
+        $component->call('selectCollector', $this->collectorA->id);
+        $this->assertSame($this->collectorA->id, $component->instance()->collector()?->id);
+        // The area and by-day cuts stay office-wide — they are the report's own view of the period —
+        // while the dossier above them is his.
+        $this->assertSame(['Area A', 'Area B'], $component->instance()->routeRows()->pluck('name')->all());
+        $this->assertSame(60.0, $component->instance()->collectors()->firstWhere('collector_id', $this->collectorA->id)['collected']);
 
-        // The print view is driven by the same filters.
+        // The print view is driven by the same range, plus the collector whose statement it is.
         $this->assertSame(
             ['from' => '2026-09-01', 'to' => '2026-09-30', 'collector_id' => $this->collectorA->id],
             $component->instance()->exportParams()
         );
     }
 
-    public function test_handover_resource_pages_render_and_the_report_prints(): void
+    public function test_the_report_prints_with_pdf_and_is_admin_only(): void
     {
-        $handover = CashHandover::create([
+        CashHandover::create([
             'collector_id' => $this->collectorA->id,
             'amount' => 20,
             'handover_date' => '2026-09-06',
             'recorded_by' => $this->admin->id,
         ]);
 
-        foreach ([
-            '/admin/handovers',
-            '/admin/handovers/create',
-            '/admin/handovers/'.$handover->id.'/edit',
-        ] as $path) {
-            $this->actingAs($this->admin)->get($path)->assertOk($path.' failed to render');
-        }
+        // The handovers screen is gone with the merge; its paths are redirects now (asserted in
+        // CollectionsTest). What has to keep working is the printed document.
+        $this->actingAs($this->admin)->get('/admin/handovers')->assertRedirect();
 
         $this->actingAs($this->admin)
             ->get(route('print.collection-report', ['from' => '2026-09-01', 'to' => '2026-09-30', 'size' => 'a4']))
@@ -406,9 +404,9 @@ class CollectionReportTest extends TestCase
         $pdf->assertOk();
         $this->assertStringStartsWith('%PDF', $pdf->getContent());
 
-        // Finance data: collectors must not reach the report.
+        // Finance data: collectors must not reach the office's screen.
         $this->actingAs($this->collectorA)->get(route('print.collection-report'))->assertForbidden();
-        $this->actingAs($this->collectorA)->get('/admin/collection-report')->assertForbidden();
+        $this->actingAs($this->collectorA)->get('/admin/collections')->assertForbidden();
     }
 
     public function test_statement_prints_for_admin_and_collector_with_pdf(): void
