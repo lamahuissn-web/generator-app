@@ -1092,5 +1092,10 @@
     "bk.refuse_unwritable": "ما قدرنا نكتب مجلد النسخ: :path",
     "bk.refuse_empty_dump": "النسخة طلعت فاضية",
     "bk.refuse_driver": "نوع قاعدة البيانات (:driver) مو مدعوم للنسخ الاحتياطي",
-    "bk.refuse_no_schema": "ما لقينا تعريف الجدول :table"
+    "bk.refuse_no_schema": "ما لقينا تعريف الجدول :table",
+    "t.pick_month": "اختر الشهر",
+    "t.prev_year": "السنة السابقة",
+    "t.next_year": "السنة التالية",
+    "t.month_dot_hint": "العلامة تحت الشهر = الشهر فيه داتا (قراءات أو فواتير)",
+    "t.all_months": "كل الأشهر"
 }

@@ -52,9 +52,8 @@ class GenerateBills extends Component
             [
                 'key' => 'period',
                 'label' => __('gen.period'),
-                'type' => 'select',
+                'type' => 'month',
                 'default' => now()->format('Y-m'),
-                'options_from' => fn (): array => $this->monthOptions(),
                 'rules' => ['required', 'regex:/^\d{4}-\d{2}$/'],
             ],
             [
@@ -66,12 +65,6 @@ class GenerateBills extends Component
                 'rules' => ['nullable', 'integer', 'exists:routes,id'],
             ],
         ];
-    }
-
-    /** @return array<string, string> this month, then 17 back and 3 forward, labelled */
-    public function monthOptions(): array
-    {
-        return period_options();
     }
 
     public function period(): string

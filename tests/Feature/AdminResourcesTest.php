@@ -2,13 +2,20 @@
 
 namespace Tests\Feature;
 
+use App\Admin\ActionDefinition;
 use App\Admin\Actions\CollectPayment;
 use App\Admin\Actions\ConvertToFlat;
 use App\Admin\Actions\ConvertToMetered;
+use App\Admin\Actions\RecordReading;
 use App\Admin\Actions\SpecialInvoice;
+use App\Admin\Forms\ExpenseForm;
 use App\Admin\Forms\HandoverForm;
+use App\Admin\Forms\ReadingForm;
+use App\Admin\Forms\RouteForm;
+use App\Admin\Forms\TariffForm;
 use App\Admin\Forms\UserForm;
 use App\Admin\ResourceRegistry;
+use App\Admin\Tables\HandoversTable;
 use App\Livewire\Admin\ActionForm;
 use App\Livewire\Admin\ResourceForm;
 use App\Models\AuditLog;
@@ -16,9 +23,13 @@ use App\Models\Bill;
 use App\Models\CashHandover;
 use App\Models\Expense;
 use App\Models\Payment;
+use App\Models\Reading;
 use App\Models\Route;
 use App\Models\Subscriber;
+use App\Models\Tariff;
 use App\Models\User;
+use App\Services\CollectionService;
+use App\Services\ReadingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route as RouteFacade;
@@ -148,6 +159,24 @@ class AdminResourcesTest extends TestCase
         }
     }
 
+    /**
+     * A list whose first column is a name has to open that record from the name.
+     *
+     * The link itself lived in `TableDefinition::rowUrl()` and was asserted at that level — while
+     * the view drew it for plain cells only. The subscriber list's first column is a two-line cell
+     * (the name with the meter and the amperage under it), so the office's busiest screen printed
+     * names that looked clickable and did nothing. What is asserted here is the RENDERED anchor:
+     * the definition returning a URL is not the same fact as the page carrying it, and only the
+     * second one is what the operator clicks.
+     */
+    public function test_a_list_opens_a_record_from_its_name(): void
+    {
+        $this->actingAs($this->admin)
+            ->get(route('admin.subscribers.index'))
+            ->assertOk()
+            ->assertSee('href="'.route('admin.subscribers.show', $this->subscriber).'"', false);
+    }
+
     public function test_edit_route_404s_for_a_record_that_does_not_exist(): void
     {
         // findOrFail, not find: an unknown id must not open a blank form that creates a
@@ -176,7 +205,7 @@ class AdminResourcesTest extends TestCase
     public function test_route_form_creates_and_edits(): void
     {
         Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\RouteForm::class])
+            ->test(ResourceForm::class, ['form' => RouteForm::class])
             ->set('state.name', 'Tariq El Jdideh')
             ->set('state.notes', 'Old quarter')
             ->call('save')
@@ -186,7 +215,7 @@ class AdminResourcesTest extends TestCase
         $this->assertSame('Old quarter', $created->notes);
 
         Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\RouteForm::class, 'record' => $created->id])
+            ->test(ResourceForm::class, ['form' => RouteForm::class, 'record' => $created->id])
             ->assertSet('state.name', 'Tariq El Jdideh')
             ->set('state.name', 'Tariq El Jadideh')
             ->call('save')
@@ -199,7 +228,7 @@ class AdminResourcesTest extends TestCase
     public function test_route_form_requires_a_name(): void
     {
         Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\RouteForm::class])
+            ->test(ResourceForm::class, ['form' => RouteForm::class])
             ->set('state.name', '')
             ->call('save')
             ->assertHasErrors('state.name');
@@ -247,22 +276,22 @@ class AdminResourcesTest extends TestCase
     /** A tariff is what the next billing run prices with: two per month is a coin toss. */
     public function test_tariff_period_must_be_unique(): void
     {
-        \App\Models\Tariff::create(['period' => '2026-09', 'kwh_price' => 0.25, 'created_by' => $this->admin->id]);
+        Tariff::create(['period' => '2026-09', 'kwh_price' => 0.25, 'created_by' => $this->admin->id]);
 
         Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\TariffForm::class])
+            ->test(ResourceForm::class, ['form' => TariffForm::class])
             ->set('state.period', '2026-09')
             ->set('state.kwh_price', '0.30')
             ->call('save')
             ->assertHasErrors('state.period');
 
-        $this->assertSame(1, \App\Models\Tariff::count());
+        $this->assertSame(1, Tariff::count());
     }
 
     public function test_expense_form_records_the_expense_and_audits_the_edit(): void
     {
         Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ExpenseForm::class])
+            ->test(ResourceForm::class, ['form' => ExpenseForm::class])
             ->set('state.category', Expense::CAT_FUEL)
             ->set('state.expense_date', '2026-09-10')
             ->set('state.amount', '120.50')
@@ -277,7 +306,7 @@ class AdminResourcesTest extends TestCase
         $this->assertSame($this->admin->id, $expense->entered_by);
 
         Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ExpenseForm::class, 'record' => $expense->id])
+            ->test(ResourceForm::class, ['form' => ExpenseForm::class, 'record' => $expense->id])
             ->set('state.amount', '131.00')
             ->call('save')
             ->assertHasNoErrors();
@@ -293,7 +322,7 @@ class AdminResourcesTest extends TestCase
     public function test_expense_quantity_is_dropped_for_a_non_fuel_category(): void
     {
         Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ExpenseForm::class])
+            ->test(ResourceForm::class, ['form' => ExpenseForm::class])
             ->set('state.category', Expense::CAT_RENT)
             ->set('state.expense_date', '2026-09-01')
             ->set('state.amount', '400')
@@ -313,12 +342,12 @@ class AdminResourcesTest extends TestCase
     private function readingForm()
     {
         return Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ReadingForm::class]);
+            ->test(ResourceForm::class, ['form' => ReadingForm::class]);
     }
 
     public function test_the_reading_screen_records_a_normal_read_and_bills_it(): void
     {
-        \App\Models\Reading::create([
+        Reading::create([
             'subscriber_id' => $this->subscriber->id, 'period' => '2026-08',
             'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 0,
             'entered_by' => $this->admin->id,
@@ -327,12 +356,12 @@ class AdminResourcesTest extends TestCase
         $this->readingForm()
             ->set('state.subscriber_id', $this->subscriber->id)
             ->set('state.period', '2026-10')
-            ->set('state.reading_mode', \App\Services\ReadingService::MODE_NORMAL)
+            ->set('state.reading_mode', ReadingService::MODE_NORMAL)
             ->set('state.current_reading', '1140')
             ->call('save')
             ->assertHasNoErrors();
 
-        $reading = \App\Models\Reading::where('period', '2026-10')->firstOrFail();
+        $reading = Reading::where('period', '2026-10')->firstOrFail();
         $this->assertSame(40.0, (float) $reading->consumption);
 
         // The bill is the point of the visit: 40 kWh + the maintenance fee.
@@ -343,7 +372,7 @@ class AdminResourcesTest extends TestCase
     /** A dead meter: the estimate is what gets billed, and it becomes the new baseline. */
     public function test_the_reading_screen_records_an_estimate(): void
     {
-        \App\Models\Reading::create([
+        Reading::create([
             'subscriber_id' => $this->subscriber->id, 'period' => '2026-08',
             'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 0,
             'entered_by' => $this->admin->id,
@@ -352,13 +381,13 @@ class AdminResourcesTest extends TestCase
         $this->readingForm()
             ->set('state.subscriber_id', $this->subscriber->id)
             ->set('state.period', '2026-10')
-            ->set('state.reading_mode', \App\Services\ReadingService::MODE_ESTIMATED)
+            ->set('state.reading_mode', ReadingService::MODE_ESTIMATED)
             ->set('state.estimated_kwh', '48')
             ->set('state.estimate_reason', 'العدّاد معطّل')
             ->call('save')
             ->assertHasNoErrors();
 
-        $reading = \App\Models\Reading::where('period', '2026-10')->firstOrFail();
+        $reading = Reading::where('period', '2026-10')->firstOrFail();
         $this->assertTrue($reading->is_estimated);
         $this->assertSame(48.0, (float) $reading->consumption);
         $this->assertSame('العدّاد معطّل', $reading->estimate_reason);
@@ -370,7 +399,7 @@ class AdminResourcesTest extends TestCase
      */
     public function test_the_reading_screen_records_a_meter_replacement(): void
     {
-        \App\Models\Reading::create([
+        Reading::create([
             'subscriber_id' => $this->subscriber->id, 'period' => '2026-08',
             'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 0,
             'entered_by' => $this->admin->id,
@@ -379,7 +408,7 @@ class AdminResourcesTest extends TestCase
         $this->readingForm()
             ->set('state.subscriber_id', $this->subscriber->id)
             ->set('state.period', '2026-10')
-            ->set('state.reading_mode', \App\Services\ReadingService::MODE_SWAP)
+            ->set('state.reading_mode', ReadingService::MODE_SWAP)
             ->set('state.current_reading', '12')
             ->set('state.old_meter_no', '2202')
             ->set('state.old_meter_reading', '1100')
@@ -388,7 +417,7 @@ class AdminResourcesTest extends TestCase
             ->call('save')
             ->assertHasNoErrors();
 
-        $reading = \App\Models\Reading::where('period', '2026-10')->firstOrFail();
+        $reading = Reading::where('period', '2026-10')->firstOrFail();
         $this->assertTrue($reading->hasMeterSwap());
         $this->assertSame(12.0, (float) $reading->consumption);
         $this->assertSame('4478', $this->subscriber->fresh()->meter_no);
@@ -398,17 +427,17 @@ class AdminResourcesTest extends TestCase
     public function test_the_reading_screen_shows_only_the_fields_of_the_chosen_mode(): void
     {
         $normal = $this->readingForm()
-            ->set('state.reading_mode', \App\Services\ReadingService::MODE_NORMAL)
+            ->set('state.reading_mode', ReadingService::MODE_NORMAL)
             ->assertSee(__('t.cur_meter_reading'))
             ->assertDontSee(__('t.estimated_kwh'))
             ->assertDontSee(__('t.new_meter_no'));
 
-        $normal->set('state.reading_mode', \App\Services\ReadingService::MODE_ESTIMATED)
+        $normal->set('state.reading_mode', ReadingService::MODE_ESTIMATED)
             ->assertSee(__('t.estimated_kwh'))
             ->assertSee(__('t.estimate_reason'))
             ->assertDontSee(__('t.cur_meter_reading'));
 
-        $normal->set('state.reading_mode', \App\Services\ReadingService::MODE_SWAP)
+        $normal->set('state.reading_mode', ReadingService::MODE_SWAP)
             ->assertSee(__('t.new_meter_no'))
             ->assertSee(__('t.old_meter_final'))
             ->assertDontSee(__('t.estimated_kwh'));
@@ -420,12 +449,12 @@ class AdminResourcesTest extends TestCase
         $this->readingForm()
             ->set('state.subscriber_id', $this->subscriber->id)
             ->set('state.period', '2026-10')
-            ->set('state.reading_mode', \App\Services\ReadingService::MODE_NORMAL)
+            ->set('state.reading_mode', ReadingService::MODE_NORMAL)
             ->set('state.current_reading', '')
             ->call('save')
             ->assertHasErrors('state.current_reading');
 
-        $this->assertSame(0, \App\Models\Reading::where('period', '2026-10')->count());
+        $this->assertSame(0, Reading::where('period', '2026-10')->count());
     }
 
     /** The search box narrows the picker, and the chosen subscriber survives the filter. */
@@ -452,7 +481,7 @@ class AdminResourcesTest extends TestCase
     /** The same three modes are reachable from the subscriber's own profile. */
     public function test_the_profile_records_a_reading_through_the_action_modal(): void
     {
-        \App\Models\Reading::create([
+        Reading::create([
             'subscriber_id' => $this->subscriber->id, 'period' => '2026-08',
             'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 0,
             'entered_by' => $this->admin->id,
@@ -460,7 +489,7 @@ class AdminResourcesTest extends TestCase
 
         Livewire::actingAs($this->admin)
             ->test(ActionForm::class, [
-                'action' => \App\Admin\Actions\RecordReading::class,
+                'action' => RecordReading::class,
                 'subjectId' => $this->subscriber->id,
             ])
             ->call('openModal')
@@ -470,7 +499,7 @@ class AdminResourcesTest extends TestCase
             ->call('submit')
             ->assertHasNoErrors();
 
-        $this->assertSame(25.0, (float) \App\Models\Reading::where('period', '2026-10')->firstOrFail()->consumption);
+        $this->assertSame(25.0, (float) Reading::where('period', '2026-10')->firstOrFail()->consumption);
     }
 
     // ---- cash handovers ----------------------------------------------------
@@ -521,7 +550,7 @@ class AdminResourcesTest extends TestCase
             ->assertHasNoErrors();
 
         $this->assertSame(1, CashHandover::count());
-        $this->assertSame(0.0, \App\Services\CollectionService::inHand($this->collector->id));
+        $this->assertSame(0.0, CollectionService::inHand($this->collector->id));
     }
 
     /**
@@ -546,7 +575,7 @@ class AdminResourcesTest extends TestCase
             ->assertHasNoErrors();
 
         $this->assertSame(75.0, (float) $handover->fresh()->amount);
-        $this->assertSame(0.0, \App\Services\CollectionService::inHand($this->collector->id));
+        $this->assertSame(0.0, CollectionService::inHand($this->collector->id));
 
         // one cent past the full in-hand figure is still refused
         Livewire::actingAs($this->admin)
@@ -613,37 +642,37 @@ class AdminResourcesTest extends TestCase
      */
     public function test_a_refused_save_shows_the_reason_instead_of_erroring(): void
     {
-        \App\Models\Reading::create([
+        Reading::create([
             'subscriber_id' => $this->subscriber->id, 'period' => '2026-10',
             'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 100,
             'entered_by' => $this->admin->id,
         ]);
 
         Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ReadingForm::class])
+            ->test(ResourceForm::class, ['form' => ReadingForm::class])
             ->set('state.subscriber_id', $this->subscriber->id)
             ->set('state.period', '2026-10')
-            ->set('state.reading_mode', \App\Services\ReadingService::MODE_NORMAL)
+            ->set('state.reading_mode', ReadingService::MODE_NORMAL)
             ->set('state.current_reading', '1500')
             ->call('save')
             ->assertHasErrors('save')
             // The refusal must be VISIBLE, not just recorded in the error bag.
             ->assertSee('already exists');
 
-        $this->assertSame(1, \App\Models\Reading::where('period', '2026-10')->count());
+        $this->assertSame(1, Reading::where('period', '2026-10')->count());
     }
 
     /** A refusal must not be silent either — the form stays put rather than redirecting away. */
     public function test_a_refused_save_does_not_redirect(): void
     {
-        \App\Models\Reading::create([
+        Reading::create([
             'subscriber_id' => $this->subscriber->id, 'period' => '2026-10',
             'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 100,
             'entered_by' => $this->admin->id,
         ]);
 
         Livewire::actingAs($this->admin)
-            ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ReadingForm::class])
+            ->test(ResourceForm::class, ['form' => ReadingForm::class])
             ->set('state.subscriber_id', $this->subscriber->id)
             ->set('state.period', '2026-10')
             ->set('state.current_reading', '1500')
@@ -660,7 +689,7 @@ class AdminResourcesTest extends TestCase
      */
     public function test_the_refusal_is_shown_in_the_panel_language(): void
     {
-        \App\Models\Reading::create([
+        Reading::create([
             'subscriber_id' => $this->subscriber->id, 'period' => '2026-10',
             'current_reading' => 1100, 'previous_reading' => 1000, 'consumption' => 100,
             'entered_by' => $this->admin->id,
@@ -668,7 +697,7 @@ class AdminResourcesTest extends TestCase
 
         $refuse = function () {
             return Livewire::actingAs($this->admin)
-                ->test(ResourceForm::class, ['form' => \App\Admin\Forms\ReadingForm::class])
+                ->test(ResourceForm::class, ['form' => ReadingForm::class])
                 ->set('state.subscriber_id', $this->subscriber->id)
                 ->set('state.period', '2026-10')
                 ->set('state.current_reading', '1500')
@@ -976,7 +1005,7 @@ class AdminResourcesTest extends TestCase
         // plus the directory name, with the separator from its codepoint, so no hand-written
         // namespace literal has to survive an escaping layer.
         $separator = chr(92);
-        $namespace = (new \ReflectionClass(\App\Admin\ActionDefinition::class))->getNamespaceName()
+        $namespace = (new \ReflectionClass(ActionDefinition::class))->getNamespaceName()
             .$separator.basename(app_path('Admin/Actions'));
 
         preg_match_all('/([A-Za-z_][A-Za-z0-9_]*)::class/', $blade, $mounts);
@@ -986,7 +1015,7 @@ class AdminResourcesTest extends TestCase
             $class = $namespace.$separator.$short;
 
             // The blade also mounts table definitions; keep only the actions.
-            if (class_exists($class) && is_subclass_of($class, \App\Admin\ActionDefinition::class)) {
+            if (class_exists($class) && is_subclass_of($class, ActionDefinition::class)) {
                 $classes[] = $class;
             }
         }
@@ -1035,7 +1064,7 @@ class AdminResourcesTest extends TestCase
         preg_match_all('/in_array\([^,]+,\s*\[([^\]]+)\]/', $view, $in);
         $supported = array_values(array_unique(array_merge(
             $eq[1],
-            preg_split("/[^a-z_]+/", implode(',', $in[1]), -1, PREG_SPLIT_NO_EMPTY) ?: [],
+            preg_split('/[^a-z_]+/', implode(',', $in[1]), -1, PREG_SPLIT_NO_EMPTY) ?: [],
         )));
 
         $this->assertContains('success', $supported, 'Could not read the colour map out of the table view.');
@@ -1090,7 +1119,7 @@ class AdminResourcesTest extends TestCase
         // collector_id is the column the ledger reads — `collected_by`/`recorded_by` are not
         // columns on payments at all, so this payment used to be recorded with no collector and
         // the collector's in-hand balance stayed at zero.
-        \App\Models\Payment::create([
+        Payment::create([
             'subscriber_id' => $this->subscriber->id,
             'collector_id' => $this->collector->id,
             'amount' => 80, 'method' => 'cash',
@@ -1118,7 +1147,7 @@ class AdminResourcesTest extends TestCase
             'handover_date' => '2026-09-10', 'recorded_by' => $this->admin->id,
         ]);
 
-        $warning = \App\Admin\Tables\HandoversTable::make()->deleteWarning($handover);
+        $warning = HandoversTable::make()->deleteWarning($handover);
 
         $this->assertStringContainsString('$50.00', $warning);
         $this->assertStringContainsString('Jad Haddad', $warning);

@@ -86,6 +86,20 @@
                    class="kt-input w-full p-1.5 file:me-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5">
         </div>
 
+    @elseif ($type === 'month')
+        {{-- A month is chosen on a calendar rather than in a list of eighteen cycles: see
+             App\Livewire\Admin\MonthPicker. It keeps its own year and open state, and hands the
+             chosen 'YYYY-MM' straight back to this form's property. --}}
+        {{-- The listener sits on the host's own element: inside the picker's root, `$wire` is the
+             picker's, and the month would be written into a component that has no such property. The
+             event bubbles out of the picker to here. --}}
+        <div x-on:month-picked="$wire.set('{{ $path }}', $event.detail.month)" class="contents">
+            <livewire:admin.month-picker
+                :value="$value"
+                :placeholder="$field['placeholder'] ?? __('t.pick_month')"
+                :key="'month-'.$idPrefix.'-'.$key" />
+        </div>
+
     @elseif ($type === 'select')
         {{-- .live: the screen's figures are derived from this value, so a change has to
              re-render rather than wait for a submit the screen may not even have. --}}

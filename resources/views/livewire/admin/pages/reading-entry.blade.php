@@ -4,11 +4,9 @@
         <div class="kt-card-content grid gap-3 py-4">
             <div>
                 <label class="kt-form-label" for="re-period">{{ __('t.period') }}</label>
-                <select id="re-period" wire:model.live="period" class="kt-select w-full">
-                    @foreach ($periodOptions as $value => $label)
-                        <option value="{{ $value }}">{{ $label }}</option>
-                    @endforeach
-                </select>
+                <div x-on:month-picked="$wire.set('period', $event.detail.month)" class="contents">
+                    <livewire:admin.month-picker :value="$period" :key="'entry-month'" />
+                </div>
             </div>
             <p class="text-xs text-muted-foreground">{{ __('rdge.period_hint') }}</p>
         </div>

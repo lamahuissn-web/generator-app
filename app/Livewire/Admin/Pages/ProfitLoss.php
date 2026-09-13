@@ -31,9 +31,8 @@ class ProfitLoss extends Component
         return [[
             'key' => 'month',
             'label' => __('t.month'),
-            'type' => 'select',
+            'type' => 'month',
             'default' => now()->format('Y-m'),
-            'options_from' => fn (): array => ProfitLossReport::monthOptions(),
             'rules' => ['required', 'regex:/^\d{4}-\d{2}$/'],
         ]];
     }

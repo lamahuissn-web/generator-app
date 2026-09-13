@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Admin\Tables\AuditLogsTable;
 use App\Admin\Tables\ReadingsTable;
 use App\Livewire\Admin\DataTable;
+use App\Livewire\Admin\MonthPicker;
 use App\Models\Bill;
 use App\Models\Reading;
 use App\Models\Route;
@@ -12,6 +13,7 @@ use App\Models\Subscriber;
 use App\Models\User;
 use App\Services\BillingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -89,7 +91,7 @@ class ReadingsListTest extends TestCase
         )['reading'];
     }
 
-    private function table(array $filters = [], string $search = ''): \Livewire\Features\SupportTesting\Testable
+    private function table(array $filters = [], string $search = ''): Testable
     {
         return Livewire::actingAs($this->admin)
             ->test(DataTable::class, ['table' => ReadingsTable::class])
@@ -98,7 +100,7 @@ class ReadingsListTest extends TestCase
     }
 
     /** @return array<int, string> the subscriber names the table currently shows */
-    private function names(\Livewire\Features\SupportTesting\Testable $component): array
+    private function names(Testable $component): array
     {
         return collect($component->instance()->rows()->items())
             ->map(fn ($row) => $row->subscriber?->name)
@@ -156,11 +158,26 @@ class ReadingsListTest extends TestCase
         $component = $this->table();
         $row = $component->instance()->rows()->items()[0];
 
-        // The name links to the subscriber…
+        // The name links to the subscriber — asked of the rendered page, not only of the
+        // definition: a rowUrl() that the view never draws is a link nobody can click.
         $this->assertSame(
             route('admin.subscribers.show', $this->first->id),
             $component->instance()->definition()->rowUrl($row),
         );
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.readings.index'))
+            ->assertOk()
+            ->assertSee('href="'.route('admin.subscribers.show', $this->first->id).'"', false);
+
+        // The cycle filter is the calendar, and the list carries the listener that writes the chosen
+        // month into the table's own filters — asserted on the rendered page, because the wiring is
+        // the part that silently did nothing while looking perfectly correct.
+        $this->actingAs($this->admin)
+            ->get(route('admin.readings.index'))
+            ->assertOk()
+            ->assertSeeHtml('x-on:month-picked="$wire.set(\'filters.period\', $event.detail.month)"', false)
+            ->assertSeeLivewire(MonthPicker::class);
 
         // …and the row offers the invoice it produced (the bill points at the reading, not the
         // other way round, so this is where a null bill_id used to break the whole screen).
@@ -246,7 +263,7 @@ class ReadingsListTest extends TestCase
     // ---- the export -----------------------------------------------------------
 
     /** The streamed CSV, as the browser would receive it. */
-    private function csv(\Livewire\Features\SupportTesting\Testable $component): array
+    private function csv(Testable $component): array
     {
         $response = $component->instance()->exportCsv();
 

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Livewire\Admin\MonthPicker;
 use App\Livewire\Admin\Pages\ReadingEntry;
 use App\Livewire\RouteReadingSheet;
 use App\Models\Bill;
@@ -164,15 +165,32 @@ class ReadingEntryTest extends TestCase
             ->assertSee('اختر المنطقة');
     }
 
-    public function test_the_cycle_picker_covers_the_panel_window_and_defaults_to_this_month(): void
+    /**
+     * The cycle picker is the calendar component, bound to this screen's own period — not a list of
+     * eighteen cycles measured from today, which could only offer the range whoever wrote it guessed.
+     *
+     * The calendar's own behaviour (the year arrows, the twelve months, the dots) is pinned in
+     * MonthPickerTest; what matters here is that this screen is wired to it.
+     */
+    public function test_the_cycle_picker_is_the_calendar_bound_to_this_screens_period(): void
     {
         $this->actingAs($this->admin);
 
         $component = Livewire::test(ReadingEntry::class);
 
         $this->assertSame($this->period, $component->get('period'));
-        $this->assertArrayHasKey($this->period, $component->instance()->periodOptions());
-        $this->assertArrayHasKey(now()->startOfMonth()->subMonths(6)->format('Y-m'), $component->instance()->periodOptions());
+
+        $component->assertSeeLivewire(MonthPicker::class);
+        $component->assertSee(period_label_i18n($this->period));
+
+        // The picker announces the month it chose and this screen writes it into its own `period`:
+        // the listener has to sit in THIS screen's scope (inside the picker's root, `$wire` is the
+        // picker's), which is exactly what the first wiring got wrong.
+        $component->assertSeeHtml('x-on:month-picked="$wire.set(\'period\', $event.detail.month)"', false);
+
+        // A month the old list never reached: nineteen months back is beyond any window someone would
+        // have curated, and the calendar is supposed to reach it.
+        $component->set('period', '2019-03')->assertSet('period', '2019-03');
     }
 
     // ---- entering readings ----------------------------------------------------

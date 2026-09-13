@@ -1,6 +1,9 @@
 <?php
 
+use App\Services\Currency;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 if (! function_exists('money')) {
     /** Format a USD amount the way Lebanese generator operators expect: $1,234.50 */
@@ -54,7 +57,7 @@ if (! function_exists('lbp')) {
      */
     function lbp(float|int|string|null $usd): ?string
     {
-        return \App\Services\Currency::isConfigured() ? \App\Services\Currency::label($usd) : null;
+        return Currency::isConfigured() ? Currency::label($usd) : null;
     }
 }
 
@@ -145,50 +148,84 @@ if (! function_exists('period_label_i18n')) {
     }
 }
 
-if (! function_exists('period_label_ar')) {
-    /** '2026-09' => 'أيلول 2026' (Lebanese month names, Latin digits) */
-    function period_label_ar(string $ym): string
+if (! function_exists('month_names_ar')) {
+    /**
+     * The twelve months as this office says them: 1 => 'كانون الثاني' … 12 => 'كانون الأول'.
+     *
+     * Arabic calendar months are the Levantine names, not a transliteration of January — the office
+     * reads 'تموز', never 'يوليو'. Kept here rather than inside one label so a picker, a heading and a
+     * print all name a month the same way; anything that needs a month's NAME asks this.
+     *
+     * @return array<int, string>
+     */
+    function month_names_ar(): array
     {
-        $months = [
+        return [
             1 => 'كانون الثاني', 2 => 'شباط', 3 => 'آذار', 4 => 'نيسان',
             5 => 'أيار', 6 => 'حزيران', 7 => 'تموز', 8 => 'آب',
             9 => 'أيلول', 10 => 'تشرين الأول', 11 => 'تشرين الثاني', 12 => 'كانون الأول',
         ];
-        $d = Carbon::createFromFormat('Y-m', $ym);
-
-        return $months[(int) $d->format('n')].' '.$d->format('Y');
     }
 }
 
-if (! function_exists('period_options')) {
+if (! function_exists('month_names')) {
     /**
-     * 'Y-m' => label for the cycles an operator picks from: this month, 17 back, 3 forward.
+     * The twelve month names in the reader's language, WITHOUT a year: 1 => 'تموز' / 'July'.
      *
-     * The window is deliberately lopsided. Everything the panel does — readings, bills,
-     * payments, reports — happens on the cycle that just started or one of the recent ones; a
-     * few months forward are there for pre-entering a reading the office already has on paper.
-     * Further back than a year and a half is archaeology, and a picker nobody scrolls to the
-     * end of is a picker that costs a scroll on every use.
+     * Used by the month picker, whose grid prints a month name under a year chosen separately, so a
+     * label that carried its own year would say the year twice and contradict the arrows.
      *
-     * Shared by every screen with a cycle picker so adding one cannot quietly offer a
-     * different range than the screen next to it.
-     *
-     * @return array<string, string>
+     * @return array<int, string>
      */
-    function period_options(): array
+    function month_names(): array
     {
-        $options = [now()->format('Y-m') => period_label_i18n(now()->format('Y-m'))];
-
-        for ($i = 1; $i <= 17; $i++) {
-            $key = now()->startOfMonth()->subMonths($i)->format('Y-m');
-            $options[$key] = period_label_i18n($key);
+        if (app()->isLocale('ar')) {
+            return month_names_ar();
         }
 
-        for ($i = 1; $i <= 3; $i++) {
-            $key = now()->startOfMonth()->addMonths($i)->format('Y-m');
-            $options[$key] = period_label_i18n($key);
+        $names = [];
+
+        for ($month = 1; $month <= 12; $month++) {
+            $names[$month] = Carbon::create(2000, $month, 1)->format('F');
         }
 
-        return $options;
+        return $names;
+    }
+}
+
+if (! function_exists('period_label_ar')) {
+    /** '2026-09' => 'أيلول 2026' (Lebanese month names, Latin digits) */
+    function period_label_ar(string $ym): string
+    {
+        $d = Carbon::createFromFormat('Y-m', $ym);
+
+        return month_names_ar()[(int) $d->format('n')].' '.$d->format('Y');
+    }
+}
+
+if (! function_exists('periods_with_data')) {
+    /**
+     * The cycles the ledger actually holds something for: a reading, or a bill.
+     *
+     * The month picker marks these with a dot, which is the difference between "this program has no
+     * June" and "June is here and empty" — an operator looking at an empty month should know which of
+     * the two they are looking at.
+     *
+     * Two indexed DISTINCT lookups, deliberately not cached in a static: a static would survive a
+     * test's database refresh and start answering for a ledger that no longer exists.
+     *
+     * @return array<int, string>
+     */
+    function periods_with_data(): array
+    {
+        if (! Schema::hasTable('bills') || ! Schema::hasTable('readings')) {
+            return [];
+        }
+
+        return DB::table('bills')->distinct()->pluck('period')
+            ->merge(DB::table('readings')->distinct()->pluck('period'))
+            ->unique()
+            ->values()
+            ->all();
     }
 }

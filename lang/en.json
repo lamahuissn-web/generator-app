@@ -1092,5 +1092,10 @@
     "bk.refuse_unwritable": "The backup directory could not be written: :path",
     "bk.refuse_empty_dump": "The copy came out empty",
     "bk.refuse_driver": "The database driver (:driver) is not supported for backups",
-    "bk.refuse_no_schema": "No schema found for table :table"
+    "bk.refuse_no_schema": "No schema found for table :table",
+    "t.pick_month": "Pick a month",
+    "t.prev_year": "Previous year",
+    "t.next_year": "Next year",
+    "t.month_dot_hint": "The mark under a month means it holds data (readings or bills)",
+    "t.all_months": "All months"
 }

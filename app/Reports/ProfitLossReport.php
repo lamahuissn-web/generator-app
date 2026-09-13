@@ -34,19 +34,6 @@ final class ProfitLossReport
         return $this->month;
     }
 
-    /** The month options the picker offers: 18 back from today, oldest first. */
-    public static function monthOptions(): array
-    {
-        $options = [];
-
-        for ($i = 17; $i >= 0; $i--) {
-            $date = now()->startOfMonth()->subMonths($i);
-            $options[$date->format('Y-m')] = period_label_i18n($date->format('Y-m'));
-        }
-
-        return $options;
-    }
-
     /** @return array<string, mixed> */
     public function data(): array
     {

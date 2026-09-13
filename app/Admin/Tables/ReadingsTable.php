@@ -2,14 +2,13 @@
 
 namespace App\Admin\Tables;
 
-use App\Admin\TableDefinition;
 use App\Admin\Actions\CorrectLockedReading;
+use App\Admin\TableDefinition;
 use App\Models\Reading;
 use App\Models\Route;
 use App\Models\User;
 use App\Services\BillingService;
 use App\Services\CycleLock;
-use Illuminate\Contracts\Database\Eloquent\Builder as BuilderContract;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -146,13 +145,11 @@ class ReadingsTable extends TableDefinition
             [
                 'key' => 'period',
                 'label' => __('t.period'),
-                'type' => 'select',
-                // The list's own periods AND the cycles the rest of the panel offers: a cycle with
-                // no reading yet is exactly the one an operator comes here looking for.
-                'options_from' => fn (): array => array_merge(
-                    period_options(),
-                    Reading::query()->distinct()->orderByDesc('period')->pluck('period', 'period')->all(),
-                ),
+                // A calendar, not a list: the operator reaches any cycle — including one with no
+                // reading yet, which is exactly what they come here looking for — and the dot says
+                // which cycles hold something. Nothing is empty just because nobody listed it.
+                'type' => 'month',
+                'placeholder' => __('t.all_months'),
                 'apply' => fn (Builder $query, $value) => $query->where('period', $value),
             ],
             [

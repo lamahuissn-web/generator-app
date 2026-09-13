@@ -64,7 +64,19 @@
                 @endif
 
                 @foreach ($filterDefs as $filter)
-                    @if (($filter['type'] ?? 'select') === 'select')
+                    @if (($filter['type'] ?? 'select') === 'month')
+                        {{-- A cycle filter is a calendar in every list in this panel: the same control
+                             the reading screens and the reports use, bound to the same property, so a
+                             month is chosen one way everywhere. --}}
+                        <div x-on:month-picked="$wire.set('filters.{{ $filter['key'] }}', $event.detail.month)"
+                             class="contents">
+                            <livewire:admin.month-picker
+                                :value="$filters[$filter['key']] ?? null"
+                                :placeholder="$filter['placeholder'] ?? $filter['label'].' — '.__('t.all')"
+                                :key="'month-filter-'.$filter['key']" />
+                        </div>
+
+                    @elseif (($filter['type'] ?? 'select') === 'select')
                         <select wire:model.live="filters.{{ $filter['key'] }}" class="kt-select kt-select-sm w-auto"
                                 aria-label="{{ $filter['label'] }}">
                             <option value="">{{ $filter['label'] }} — {{ __('t.all') }}</option>
@@ -208,7 +220,15 @@
                                         @endif
                                     @elseif ($type === 'two-line')
                                         <div class="leading-tight">
-                                            <div class="font-medium text-mono">{{ $value }}</div>
+                                            {{-- The row's link lives here, not only in the plain
+                                                 branch below: the subscriber list's first column is
+                                                 this type, and it was the one screen where a name
+                                                 could not be clicked. --}}
+                                            @if ($rowUrl && $loop->first)
+                                                <x-admin.row-link :url="$rowUrl">{{ $value }}</x-admin.row-link>
+                                            @else
+                                                <div class="font-medium text-mono">{{ $value }}</div>
+                                            @endif
                                             @php $sub = isset($column['sub']) ? ($column['sub'])($row) : null; @endphp
                                             @if ($sub)
                                                 <div class="mt-0.5 text-xs text-muted-foreground">{{ $sub }}</div>
@@ -222,9 +242,7 @@
                                         <span class="amount-cell text-mono">{{ $value }}</span>
                                     @else
                                         @if ($rowUrl && $loop->first)
-                                            <a href="{{ $rowUrl }}" class="font-medium text-mono transition hover:text-amber-700 dark:hover:text-amber-400">
-                                                {{ $value }}
-                                            </a>
+                                            <x-admin.row-link :url="$rowUrl">{{ $value }}</x-admin.row-link>
                                         @else
                                             <span class="text-secondary-foreground">{{ $value }}</span>
                                         @endif

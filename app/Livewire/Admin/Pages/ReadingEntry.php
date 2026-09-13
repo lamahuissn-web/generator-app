@@ -54,12 +54,6 @@ class ReadingEntry extends Component
         return $this->routeId === null ? null : Route::query()->find($this->routeId);
     }
 
-    /** @return array<string, string> cycle picker options, the same window as every other screen */
-    public function periodOptions(): array
-    {
-        return period_options();
-    }
-
     /**
      * The areas, each with how much of the cycle is still unread.
      *
@@ -108,7 +102,6 @@ class ReadingEntry extends Component
         return view('livewire.admin.pages.reading-entry', [
             'routes' => $this->routes(),
             'route' => $this->selectedRoute(),
-            'periodOptions' => $this->periodOptions(),
         ]);
     }
 }

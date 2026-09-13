@@ -38,9 +38,8 @@ class ReadingBoard extends Component
             [
                 'key' => 'period',
                 'label' => __('gen.period'),
-                'type' => 'select',
+                'type' => 'month',
                 'default' => now()->format('Y-m'),
-                'options_from' => fn (): array => period_options(),
                 'rules' => ['required', 'regex:/^\d{4}-\d{2}$/'],
             ],
             [
