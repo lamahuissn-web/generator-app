@@ -830,7 +830,6 @@
     "t.audit_logs_sub": "Every recorded change: who, when, and what the old value was.",
     "a.del_route_guard": "Deleting the area leaves its subscribers with no area. Move them first, or keep it.",
     "a.del_tariff_guard": "Deleting the :period tariff makes that month price from the global setting.",
-    "a.del_user_guard": "Deleting the account blocks its owner from signing in. Check they have no open money movements.",
     "a.extend_estimate": "Exceptional extension",
     "a.extend_estimate_heading": "Extend the estimate — :name",
     "a.extend_estimate_desc": "A logged exception: one more estimated cycle for a meter that is still dead. The amount, the reason and your name go into the audit trail.",
@@ -1183,5 +1182,11 @@
     "a.collect_inactive_notice": "This subscriber is inactive — this collection is recorded against an old debt; readings stay disabled.",
     "dash.outstanding_sub_inactive": "Unpaid across all periods — :amount of it on inactive subscribers.",
     "portal.inactive_service_note": "This subscriber is inactive — readings are disabled, and an old debt can still be collected.",
-    "a.del_sub_refused": "Cannot delete — this subscriber has billing history (invoices, receipts or readings). Set the status to Inactive instead."
+    "a.del_sub_refused": "Cannot delete — this subscriber has billing history (invoices, receipts or readings). Set the status to Inactive instead.",
+    "auth.account_disabled": "This account is disabled — ask the office.",
+    "t.account_active": "Active",
+    "t.account_inactive": "Disabled",
+    "t.account_status_hint": "Disabled = cannot sign in, while their history keeps their name on it.",
+    "a.del_user_refused": "Cannot delete — this user is named on recorded movements (receipts, invoices or readings). Disable the account instead.",
+    "a.del_user_self": "You cannot delete the account you are signed in with."
 }

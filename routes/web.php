@@ -22,7 +22,7 @@ Route::middleware('auth')->post('/locale', function (Request $request) {
 })->name('locale.switch');
 
 // ---- Printable documents (bills, receipts, per-period batches) --------------
-Route::middleware(['auth', 'locale'])->prefix('print')->name('print.')->group(function () {
+Route::middleware(['auth', 'active', 'locale'])->prefix('print')->name('print.')->group(function () {
     Route::get('/bill/{bill}', [PrintController::class, 'bill'])->name('bill');
     Route::get('/bill/{bill}/pdf', [PrintController::class, 'billPdf'])->name('bill.pdf');
     Route::get('/bills', [PrintController::class, 'bills'])->name('bills');
@@ -42,7 +42,7 @@ Route::middleware(['guest', 'locale'])->group(function () {
     Route::post('/collector/login', [AuthController::class, 'login'])->name('collector.login.attempt');
 });
 
-Route::middleware(['auth', 'role:collector', 'locale'])->prefix('collector')->name('collector.')->group(function () {
+Route::middleware(['auth', 'active', 'role:collector', 'locale'])->prefix('collector')->name('collector.')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');

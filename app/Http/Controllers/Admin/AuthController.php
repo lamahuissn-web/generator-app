@@ -37,6 +37,18 @@ class AuthController extends Controller
             ]);
         }
 
+        // Checked before the role: "your account is retired" explains the refusal, while "admins
+        // only" would send the operator looking for a permissions problem that does not exist.
+        if ($request->user()->isInactive()) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            throw ValidationException::withMessages([
+                'email' => __('auth.account_disabled'),
+            ]);
+        }
+
         if (! $request->user()->isAdmin()) {
             Auth::logout();
             $request->session()->invalidate();

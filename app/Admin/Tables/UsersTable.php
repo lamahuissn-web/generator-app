@@ -3,7 +3,13 @@
 namespace App\Admin\Tables;
 
 use App\Admin\TableDefinition;
+use App\Models\BackupAttempt;
+use App\Models\CashHandover;
+use App\Models\Expense;
+use App\Models\Subscriber;
+use App\Models\Tariff;
 use App\Models\User;
+use App\Services\Audit;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -33,6 +39,14 @@ class UsersTable extends TableDefinition
     {
         return [
             ['key' => 'name', 'label' => __('t.name'), 'sortable' => true, 'searchable' => true],
+            [
+                'key' => 'status',
+                'label' => __('t.status'),
+                'type' => 'badge',
+                'sortable' => true,
+                'color' => fn (User $r): string => $r->isActive() ? 'success' : 'muted',
+                'render' => fn (User $r): string => $r->isActive() ? __('t.account_active') : __('t.account_inactive'),
+            ],
             [
                 'key' => 'email',
                 'label' => __('t.email'),
@@ -87,18 +101,56 @@ class UsersTable extends TableDefinition
         ];
     }
 
+    /**
+     * An account that NAMES a figure in the ledger cannot be deleted — the name IS the record.
+     *
+     * Every one of those columns is `nullOnDelete`, so deleting the account does not fail: it
+     * quietly strips the name off the receipts he collected and the records he entered, and the
+     * office keeps amounts it can no longer attribute to anybody. The way out is the status:
+     * «معطّل» takes the access away at once and leaves his history with his name on it.
+     */
     public function canDelete(Model $row): bool
     {
-        return ! $row->is(auth()->user());
+        return ! $row->is(auth()->user()) && ! $this->hasFootprint($row);
     }
 
+    /** The refusal names the way out; deleting yourself is a different refusal with its own words. */
+    public function deleteRefusal(Model $row): ?string
+    {
+        if ($row->is(auth()->user())) {
+            return __('a.del_user_self');
+        }
+
+        return $this->hasFootprint($row) ? __('a.del_user_refused') : null;
+    }
+
+    /** Every column that names him, checked in one place so the rule is described once. */
+    private function hasFootprint(User $row): bool
+    {
+        return $row->collectedPayments()->exists()
+            || $row->enteredReadings()->exists()
+            || CashHandover::query()->where('collector_id', $row->id)->orWhere('recorded_by', $row->id)->exists()
+            || Expense::query()->where('entered_by', $row->id)->exists()
+            || Subscriber::query()->where('created_by', $row->id)->exists()
+            || Subscriber::query()->where('meter_broken_reported_by', $row->id)->exists()
+            || Tariff::query()->where('created_by', $row->id)->exists()
+            || BackupAttempt::query()->where('created_by', $row->id)->exists();
+    }
+
+    /** Only an account that names nothing gets this far, so the warning is the plain one. */
     public function deleteWarning(Model $row): string
     {
-        return __('a.del_user_guard');
+        return __('t.confirm_delete_record');
     }
 
     public function deleteRecord(Model $row): void
     {
+        Audit::log('user.deleted', $row, [
+            'name' => $row->name,
+            'email' => $row->email,
+            'role' => $row->role,
+        ]);
+
         $row->delete();
     }
 }

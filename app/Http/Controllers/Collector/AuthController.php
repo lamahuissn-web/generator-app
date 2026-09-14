@@ -29,6 +29,14 @@ class AuthController extends Controller
         }
 
         $user = Auth::user();
+
+        if ($user->isInactive()) {
+            Auth::logout();
+            $request->session()->invalidate();
+
+            return redirect()->route('login')->withErrors(['email' => __('auth.account_disabled')]);
+        }
+
         if ($user->isAdmin()) {
             Auth::logout();
 

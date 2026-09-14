@@ -50,6 +50,18 @@ class UserForm extends FormDefinition
                     'rules' => ['required', 'in:'.User::ROLE_ADMIN.','.User::ROLE_COLLECTOR],
                 ],
                 [
+                    'key' => 'status',
+                    'label' => __('t.status'),
+                    'type' => 'select',
+                    'default' => User::STATUS_ACTIVE,
+                    'options' => [
+                        User::STATUS_ACTIVE => __('t.account_active'),
+                        User::STATUS_INACTIVE => __('t.account_inactive'),
+                    ],
+                    'helper' => __('t.account_status_hint'),
+                    'rules' => ['required', 'in:'.User::STATUS_ACTIVE.','.User::STATUS_INACTIVE],
+                ],
+                [
                     'key' => 'phone',
                     'label' => __('t.phone'),
                     'type' => 'tel',
@@ -94,6 +106,7 @@ class UserForm extends FormDefinition
             'name' => $state['name'],
             'email' => $state['email'],
             'role' => $state['role'],
+            'status' => $state['status'] ?? User::STATUS_ACTIVE,
             'phone' => $state['phone'] ?: null,
         ];
 

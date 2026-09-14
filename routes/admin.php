@@ -22,7 +22,7 @@ Route::middleware(['guest', 'locale'])->group(function () {
 // 'locale' is load-bearing: the layout's AR/EN button writes the preference and this
 // middleware is the only thing that reads it back. Without it the panel is stuck on
 // config('app.locale') and the button does nothing.
-Route::middleware(['auth', 'role:admin', 'locale'])->group(function () {
+Route::middleware(['auth', 'active', 'role:admin', 'locale'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     Route::get('/', DashboardController::class)->name('dashboard');
