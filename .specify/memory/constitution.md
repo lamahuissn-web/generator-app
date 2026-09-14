@@ -1,27 +1,30 @@
 <!--
 Sync Impact Report
 ==================
-Version change: (none, first ratification, template) → 1.0.0
-Ratified: 2026-09-12
+Version change: 1.0.0 → 1.1.0 (MINOR: one principle added)
+Last amended: 2026-09-13
 
-Modified principles: n/a (template placeholders replaced)
-  [PRINCIPLE_1_NAME] → I. Bilingual Parity, and the Numbers Never Change
-  [PRINCIPLE_2_NAME] → II. One Description of Every Rule
-  [PRINCIPLE_3_NAME] → III. Tests Are the Definition of Done (NON-NEGOTIABLE)
-  [PRINCIPLE_4_NAME] → IV. Nothing Fails Silently
-  [PRINCIPLE_5_NAME] → V. Exact Money, and the Paper Adds Up
+Modified principles: none renamed, none redefined
+Added: VI. The Status Governs Service; a Debt Is Money Already Owed
 
-Added sections:
-  [SECTION_2_NAME] → Additional Constraints
-  [SECTION_3_NAME] → Development Workflow
-
+Added sections: none
 Removed sections: none
 
-Deferred TODOs: none — every placeholder is resolved.
+Why this amendment: the three cash screens were merged into التحصيل والتسليم and the merge
+exposed a domain rule that had been applied by accident — `CollectPayment::visible()` and the
+field app's `savePayment()` both refused a stopped subscriber, which made an unpaid invoice
+uncollectable while it sat in the receivables and explained the missing button to nobody. The
+office asked the question directly («بقدر اقبض الفواتير؟»), and the answer had to be a rule rather
+than a habit, because the SAME status is what must keep stopping readings and new charges.
 
-Scope note: this constitution was adopted on an existing, working panel (416 tests, a live
-ledger) and codifies rules the repository ALREADY follows. It is not a wish list: a principle
-here can be cited against a change, so it is written to be testable rather than aspirational.
+Testable, and tested: 492 tests pass (2727 assertions) at this amendment, 12 of them new
+(`tests/Feature/InactiveSubscriberMoneyTest.php`) and pinning BOTH halves — the debt is
+collectable in the office and in the field, and the reading is still refused in both.
+
+Deferred TODOs: none.
+
+Previous report (v1.0.0, 2026-09-12): first ratification, on an existing working panel (416
+tests), codifying rules the repository already followed rather than aspirations.
 -->
 
 # Generator Manager Constitution
@@ -89,6 +92,24 @@ corrected, but only deliberately, with an admin and a written reason. Rationale:
 August must still say what August was worth, and an invoice whose consumptions do not add up is an
 argument at the door.
 
+### VI. The Status Governs Service; a Debt Is Money Already Owed
+
+A subscriber's `status` MUST gate what the panel does FORWARD — a reading, the next invoice, a new
+charge, membership of the route's round — and MUST NOT gate the collection of money already
+invoiced. Any subscriber with `outstanding > 0` MUST offer a collection, in the office and in the
+field app, and the operator MUST be shown that the account is stopped before the money is
+recorded. Where a stopped account must not be charged, that is a rule about the SERVICE, and it
+belongs in the service path (`RecordReading`, `SpecialInvoice`, the billing run), never in the cash
+path. A rule of this kind MUST be described in one place and read from there: the list row, the
+record's own button and the field app's screen MUST agree about who is collectable.
+
+Rationale: a debt outlives the service it paid for. Hiding the collect button does not cancel the
+invoice — it makes it uncollectable while it sits in the receivables, and it fails SILENTLY,
+because a button that is simply absent explains nothing (principle IV). The office may then not
+even know the money exists: the figure stays in the totals while nobody is chasing it. Showing the
+status instead of blocking on it turns an accident into a decision the operator makes with the
+facts in front of them.
+
 ## Additional Constraints
 
 - **Stack**: PHP 8.2+ on Laravel 12, Livewire 4, MySQL in development. Tests run on in-memory
@@ -133,4 +154,4 @@ spec, the plan or the code is corrected. Every feature's `plan.md` MUST name the
 touches and how it satisfies them; complexity that cannot be justified against a principle is
 refused rather than documented.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-12 | **Last Amended**: 2026-09-12
+**Version**: 1.1.0 | **Ratified**: 2026-09-12 | **Last Amended**: 2026-09-13
