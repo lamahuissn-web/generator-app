@@ -44,7 +44,13 @@ class SendDatabaseBackup extends Command
 
         BackupSettings::markSchedulerSeen();
 
-        if (! $sender->configured()) {
+        // A SCHEDULED run still refuses without a destination: a nightly copy that cannot leave the
+        // machine is a half-feature, and it would read as protection the office does not have. But
+        // --no-deliver is the OPPOSITE request — an operator asking for a local copy right now, to
+        // snapshot before a migration or because the channel is down — and refusing that for want of
+        // a destination is a category error. It is also the only way to take a copy at all while the
+        // bot is unconfigured, which is exactly when a snapshot is worth having.
+        if (! $this->option('no-deliver') && ! $sender->configured()) {
             $this->line('no destination: set the bot and chat in the panel');
 
             return 3;

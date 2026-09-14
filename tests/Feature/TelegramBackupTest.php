@@ -399,6 +399,26 @@ class TelegramBackupTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_a_local_copy_is_possible_while_there_is_no_destination(): void
+    {
+        // The one case where a local file is all there is: the channel is not configured yet and the
+        // operator wants a snapshot before doing something risky. --no-deliver asks for a copy, not a
+        // delivery, so a missing destination must not refuse it — while the SCHEDULED rule above
+        // stands, and the night is still not called covered.
+        Http::fake();
+
+        $this->artisan('backup:send --no-deliver')->assertExitCode(2);
+
+        $attempt = BackupAttempt::query()->latestFirst()->first();
+
+        $this->assertNotNull($attempt->file_name, 'the copy exists on the machine');
+        $this->assertFileExists($this->backups.'/'.$attempt->file_name);
+        $this->assertNotSame('', (string) $attempt->error, 'and it says plainly that nothing was sent');
+        $this->assertNull(BackupAttempt::lastSent(), 'an undelivered copy is never last night\'s backup');
+
+        Http::assertNothingSent();
+    }
+
     public function test_without_a_destination_nothing_is_copied_and_the_run_says_why(): void
     {
         Http::fake();
