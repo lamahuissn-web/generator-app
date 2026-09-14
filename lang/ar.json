@@ -146,7 +146,6 @@
     "portal.call": "اتصال",
     "portal.whatsapp": "واتساب",
     "portal.current_bill_line": ":type لفترة :period:",
-    "portal.inactive_blocked": "هذا المشترك موقوف — القراءة والتحصيل معطلان.",
     "portal.flash_reading_ok": "تم تسجيل القراءة وإنشاء الفاتورة ✅",
     "portal.flash_payment_ok": "تم تسجيل الدفعة ✅",
     "portal.flash_collected": "تم تحصيل :amount — الزائد :excess لم يُحتسب (يتجاوز الرصيد).",
@@ -155,7 +154,6 @@
     "portal.err_reading_exists": "تم تسجيل قراءة هذا الشهر مسبقاً.",
     "portal.err_reading_input": "أدخل قراءة صحيحة.",
     "portal.err_reading_lower": "القراءة الجديدة لا يمكن أن تكون أقل من السابقة.",
-    "portal.err_payment_inactive": "المشترك موقوف — لا يمكن التحصيل.",
     "portal.err_payment_input": "أدخل مبلغاً صحيحاً.",
     "portal.err_payment_nothing": "لا يوجد رصيد مطلوب لهذا المشترك.",
     "portal.auth_failed": "البريد أو كلمة المرور غير صحيحة.",
@@ -1182,5 +1180,8 @@
     "col.by_area_day_hint": "تفاصيل تقرير التحصيل (اضغط للفتح)",
     "col.affected_note": "كل رقم بيقول نطاقو جانبو: «بالفترة» ولا «كل الوقت».",
     "col.audit_title_export": "تدقيق تحصيل :name",
-    "col.delete_warning_row": "حذف التسليم؟ برجع :amount ليد :name."
+    "col.delete_warning_row": "حذف التسليم؟ برجع :amount ليد :name.",
+    "a.collect_inactive_notice": "هذا المشترك موقوف — هذا التحصيل مسجّل على دين قديم، والقراءة تبقى معطّلة.",
+    "dash.outstanding_sub_inactive": "غير مدفوع (كل الفترات) — منها :amount على مشتركين موقوفين.",
+    "portal.inactive_service_note": "هذا المشترك موقوف — القراءة معطّلة، وإذا عليه دين قديم بتقدر تقبضه."
 }

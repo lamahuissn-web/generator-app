@@ -146,7 +146,6 @@
     "portal.call": "Call",
     "portal.whatsapp": "WhatsApp",
     "portal.current_bill_line": ":type for :period:",
-    "portal.inactive_blocked": "This subscriber is inactive — readings and collections are disabled.",
     "portal.flash_reading_ok": "Reading recorded and bill generated ✅",
     "portal.flash_payment_ok": "Payment recorded ✅",
     "portal.flash_collected": "Collected :amount — excess :excess not applied (over the balance).",
@@ -155,7 +154,6 @@
     "portal.err_reading_exists": "A reading for this month was already recorded.",
     "portal.err_reading_input": "Enter a valid reading.",
     "portal.err_reading_lower": "The new reading cannot be lower than the previous one.",
-    "portal.err_payment_inactive": "Subscriber is inactive — collection disabled.",
     "portal.err_payment_input": "Enter a valid amount.",
     "portal.err_payment_nothing": "This subscriber has no outstanding balance to collect.",
     "portal.auth_failed": "The email or password is incorrect.",
@@ -1182,5 +1180,8 @@
     "col.by_area_day_hint": "the collection report's detail (click to expand)",
     "col.affected_note": "Every figure states its scope: “this period” or “all time”.",
     "col.audit_title_export": "Collection audit — :name",
-    "col.delete_warning_row": "Delete this settlement? :amount goes back into :name's hand."
+    "col.delete_warning_row": "Delete this settlement? :amount goes back into :name's hand.",
+    "a.collect_inactive_notice": "This subscriber is inactive — this collection is recorded against an old debt; readings stay disabled.",
+    "dash.outstanding_sub_inactive": "Unpaid across all periods — :amount of it on inactive subscribers.",
+    "portal.inactive_service_note": "This subscriber is inactive — readings are disabled, and an old debt can still be collected."
 }

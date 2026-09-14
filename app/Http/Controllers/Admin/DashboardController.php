@@ -35,6 +35,15 @@ class DashboardController extends Controller
             ->whereRaw('paid_amount < total')
             ->value('o');
 
+        // How much of that sits on STOPPED accounts. It is collected the same way (see principle
+        // VI), but money nobody is chasing is money the panel is quietly not working on, and the
+        // office cannot decide about a figure it cannot see.
+        $inactiveOutstanding = (float) Bill::query()
+            ->whereHas('subscriber', fn ($query) => $query->where('status', Subscriber::STATUS_INACTIVE))
+            ->selectRaw('COALESCE(SUM(total - paid_amount), 0) as o')
+            ->whereRaw('paid_amount < total')
+            ->value('o');
+
         $active = Subscriber::query()->active();
         $activeCount = (clone $active)->count();
         $meteredCount = (clone $active)->metered()->count();
@@ -54,7 +63,9 @@ class DashboardController extends Controller
             [
                 'label' => __('dash.outstanding'),
                 'value' => money($outstanding),
-                'sub' => __('dash.outstanding_sub'),
+                'sub' => $inactiveOutstanding > 0
+                    ? __('dash.outstanding_sub_inactive', ['amount' => money($inactiveOutstanding)])
+                    : __('dash.outstanding_sub'),
                 'icon' => 'ki-information',
                 'tone' => 'danger',
             ],

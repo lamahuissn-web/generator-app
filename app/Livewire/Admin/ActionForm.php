@@ -55,9 +55,22 @@ class ActionForm extends Component
         $this->returnTo = $returnTo ?? '';
     }
 
+    /**
+     * Resolve the action AND bind the record it runs against.
+     *
+     * submit() binds it too, but that is too late for the modal's own text: modalDescription() is
+     * rendered before anything is saved, and a warning about the record cannot ask the record
+     * anything while the record is missing. The model is resolved directly here because subject()
+     * calls this method — it cannot be used to resolve itself.
+     */
     public function definition(): ActionDefinition
     {
-        return app($this->action);
+        $definition = app($this->action);
+
+        $model = $definition->subjectModel();
+        $record = $model::query()->find($this->subjectId);
+
+        return $record ? $definition->forSubject($record) : $definition;
     }
 
     public function subject(): Model

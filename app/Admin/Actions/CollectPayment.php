@@ -50,7 +50,16 @@ class CollectPayment extends ActionDefinition
 
     public function modalDescription(): ?string
     {
-        return __('a.collect_desc');
+        $description = __('a.collect_desc');
+
+        // A stopped account can still owe (principle VI), and the operator taking the money should
+        // be told which one they are taking it from: a rule nobody sees being applied is a rule
+        // nobody remembers. The ordinary subscriber's modal says exactly what it said before.
+        if ($this->subject instanceof Subscriber && $this->subject->status !== Subscriber::STATUS_ACTIVE) {
+            $description .= ' '.__('a.collect_inactive_notice');
+        }
+
+        return $description;
     }
 
     public function submitLabel(): string
@@ -58,9 +67,20 @@ class CollectPayment extends ActionDefinition
         return __('a.record_collection');
     }
 
+    /**
+     * Is there money to take? That is the whole question.
+     *
+     * A stopped subscriber can still owe, and the debt has nothing to do with whether the meter
+     * runs today: refusing the collection does not protect anything, it just makes the invoice
+     * uncollectable while it sits in the receivables. So the status does not appear here. It
+     * governs SERVICE — the readings and the next invoice — which is why RecordReading still asks
+     * it, and why SpecialInvoice (a NEW charge) does too. The status is shown to the operator
+     * instead, on the modal itself, so taking an old debt from a stopped account is a decision
+     * rather than an accident. See principle VI.
+     */
     public function visible(Model $subject): bool
     {
-        return $subject->outstanding() > 0 && $subject->status === Subscriber::STATUS_ACTIVE;
+        return $subject->outstanding() > 0;
     }
 
     public function sections(): array

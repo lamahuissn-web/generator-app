@@ -172,7 +172,9 @@ class SubscribersTable extends TableDefinition
                 'icon' => 'ki-wallet',
                 'variant' => 'default',
                 'url' => fn (Subscriber $r) => route('admin.subscribers.show', ['subscriber' => $r, 'action' => 'collect']),
-                'hidden' => fn (Subscriber $r): bool => $r->outstanding() <= 0 || $r->status !== Subscriber::STATUS_ACTIVE,
+                // The rule lives on the action and is read from it, so the row and the file can
+                // never disagree about who is collectable.
+                'hidden' => fn (Subscriber $r): bool => ! app(\App\Admin\Actions\CollectPayment::class)->visible($r),
             ],
             [
                 'key' => 'statement',

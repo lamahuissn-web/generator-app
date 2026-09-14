@@ -91,10 +91,13 @@
     </div>
 
     @if ($sub->status === 'inactive')
-        <div class="kt-alert kt-alert-light kt-alert-destructive" role="status">
+        {{-- Readings stop with the account; the debt does not. Saying "collection disabled" here
+             would be a lie now, and it would also be the only place the collector could learn
+             why money is being taken from a stopped account. --}}
+        <div class="kt-alert kt-alert-light kt-alert-warning" role="status">
             <div class="kt-alert-icon"><i class="ki-filled ki-information text-base"></i></div>
             <div class="kt-alert-content">
-                <div class="kt-alert-title">{{ __('portal.inactive_blocked') }}</div>
+                <div class="kt-alert-title">{{ __('portal.inactive_service_note') }}</div>
             </div>
         </div>
     @endif

@@ -276,12 +276,10 @@ class SubscriberShow extends Component
         $this->receipt = null;
         $this->flash = null;
 
-        if ($this->subscriber->status !== Subscriber::STATUS_ACTIVE) {
-            $this->addError('payment', __('portal.err_payment_inactive'));
-
-            return;
-        }
-
+        // No status guard here on purpose: a stopped subscriber still owes what he owes, and this
+        // is often the one moment somebody is standing in front of him with the money. The
+        // screen says the account is stopped (see the alert in the view); the reading is where
+        // the status has teeth. See principle VI.
         $unit = $this->paymentUnit === 'lbp' ? 'lbp' : 'usd';
         $lbp = null;
         $rate = null;
