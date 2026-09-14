@@ -1188,5 +1188,7 @@
     "t.account_inactive": "Disabled",
     "t.account_status_hint": "Disabled = cannot sign in, while their history keeps their name on it.",
     "a.del_user_refused": "Cannot delete — this user is named on recorded movements (receipts, invoices or readings). Disable the account instead.",
-    "a.del_user_self": "You cannot delete the account you are signed in with."
+    "a.del_user_self": "You cannot delete the account you are signed in with.",
+    "t.collected_on": "Collection date",
+    "t.collected_on_hint": "The day the money was collected — leave it today unless you are entering yesterday’s receipts."
 }

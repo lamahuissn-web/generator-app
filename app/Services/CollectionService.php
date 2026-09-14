@@ -23,7 +23,7 @@ class CollectionService
         return Payment::query()
             ->when($collectorId, fn ($q) => $q->where('collector_id', $collectorId))
             ->when($routeId, fn ($q) => $q->whereHas('subscriber', fn ($s) => $s->where('route_id', $routeId)))
-            ->whereBetween('created_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()]);
+            ->collectedInRange($from->toDateString(), $to->toDateString());
     }
 
     public static function collectedBetween(Carbon $from, Carbon $to, ?int $collectorId = null, ?int $routeId = null): float
@@ -51,6 +51,14 @@ class CollectionService
      * Cash the collector is still holding: all-time collections minus handovers.
      * This is the number that matters for reconciliation — it does NOT depend
      * on the report's date range.
+     */
+    /**
+     * What the collector still OWES THE OFFICE — every method, cash and electronic alike.
+     *
+     * The office's own rule, in its own words: «ما بهمني شو قبض الجابي سواء كاش او الكتروني، بس
+     * يحاسب المكتب». A collector is accountable for the money he collected, not for the form it
+     * arrived in: how the subscriber paid is a fact about the receipt, and it stays recorded there,
+     * while the figure the office settles against is the total he has not handed over yet.
      */
     public static function inHand(?int $collectorId = null): float
     {
@@ -138,7 +146,7 @@ class CollectionService
             ->when($collectorId, fn ($q) => $q->where('collector_id', $collectorId))
             ->join('subscribers as s', 's.id', '=', 'payments.subscriber_id')
             ->leftJoin('routes as r', 'r.id', '=', 's.route_id')
-            ->whereBetween('payments.created_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
+            ->collectedInRange($from->toDateString(), $to->toDateString())
             ->selectRaw("s.route_id, COALESCE(r.name, '') as route_name, COUNT(*) as payments_count, COALESCE(SUM(payments.amount), 0) as collected")
             ->groupBy('s.route_id', 'r.name')
             ->orderByDesc('collected')
@@ -156,7 +164,7 @@ class CollectionService
     public static function byDay(Carbon $from, Carbon $to, ?int $collectorId = null, ?int $routeId = null): Collection
     {
         $rows = self::paymentsBetween($from, $to, $collectorId, $routeId)
-            ->selectRaw('DATE(created_at) as day, COUNT(*) as payments_count, COALESCE(SUM(amount), 0) as collected')
+            ->selectRaw('DATE(COALESCE(collected_on, created_at)) as day, COUNT(*) as payments_count, COALESCE(SUM(amount), 0) as collected')
             ->groupBy('day')
             ->orderByDesc('day')
             ->get();
@@ -221,9 +229,9 @@ class CollectionService
             'ref' => 'B'.$bill->id,
             'id' => $bill->id,
         ])->concat($payments->map(fn (Payment $payment) => [
-            'date' => $payment->created_at,
+            'date' => $payment->collectedOn(),
             'kind' => 'payment',
-            'label' => $payment->created_at?->format('Y-m-d'),
+            'label' => $payment->collectedOn()->format('Y-m-d'),
             'description' => self::paymentDescription($payment),
             'due' => 0.0,
             'settled' => (float) $payment->amount,
@@ -280,9 +288,9 @@ class CollectionService
             }
 
             return [
-                'date' => $payment->created_at,
+                'date' => $payment->collectedOn(),
                 'kind' => 'payment',
-                'label' => $payment->created_at?->format('Y-m-d'),
+                'label' => $payment->collectedOn()->format('Y-m-d'),
                 'description' => $description,
                 'due' => (float) $payment->amount,
                 'settled' => 0.0,
@@ -334,7 +342,7 @@ class CollectionService
 
         $payments = Payment::query()
             ->where('collector_id', $collector->id)
-            ->whereBetween('created_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
+            ->collectedInRange($from->toDateString(), $to->toDateString())
             ->when($method, fn ($q) => $q->where('method', $method))
             ->when($term, fn ($q) => $q->where(fn ($w) => $w
                 ->where('number', 'like', $term)
@@ -352,7 +360,7 @@ class CollectionService
 
         $days = [];
         foreach ($payments as $payment) {
-            $day = (string) $payment->created_at?->format('Y-m-d');
+            $day = $payment->collectedOn()->format('Y-m-d');
             $days[$day] ??= ['day' => $day, 'rows' => [], 'total' => 0.0, 'count' => 0];
 
             $recorder = $recorders[$payment->id] ?? null;
@@ -361,8 +369,11 @@ class CollectionService
                 'id' => $payment->id,
                 'ref' => 'P'.$payment->id,
                 'number' => $payment->number,
-                'at' => $payment->created_at,
-                'time' => $payment->created_at?->format('H:i'),
+                'at' => $payment->collectedOn(),
+                // The clock time belongs to the collection only when it was entered that same day;
+                // for a receipt written in this morning for the 31st, the date column says the truth
+                // and a time beside it would contradict it.
+                'time' => $payment->collectedOn()->isSameDay($payment->created_at) ? $payment->created_at?->format('H:i') : null,
                 'subscriber' => $payment->subscriber?->name ?? '—',
                 'meter_no' => $payment->subscriber?->meter_no,
                 'route' => $payment->subscriber?->route?->name ?: __('col.no_route'),

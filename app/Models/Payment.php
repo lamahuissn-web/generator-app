@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 
 class Payment extends Model
@@ -30,13 +31,14 @@ class Payment extends Model
         self::METHOD_OTHER => 'Other',
     ];
 
-    protected $fillable = ['number', 'subscriber_id', 'collector_id', 'amount', 'method', 'note', 'lbp_amount', 'lbp_rate'];
+    protected $fillable = ['number', 'subscriber_id', 'collector_id', 'amount', 'method', 'collected_on', 'note', 'lbp_amount', 'lbp_rate'];
 
     protected function casts(): array
     {
         return [
             'lbp_amount' => 'float',
             'lbp_rate' => 'float',
+            'collected_on' => 'date',
         ];
     }
 
@@ -105,6 +107,34 @@ class Payment extends Model
     public function methodLabel(): string
     {
         return self::label($this->method);
+    }
+
+    /**
+     * The day this money was COLLECTED — which is what every report means by a receipt's date.
+     *
+     * `created_at` is when somebody typed it: a collector with no signal writes his day in at night,
+     * and the office entering yesterday's receipts this morning would otherwise file both under
+     * today. Falls back to the entry moment only for a row written before the column existed.
+     */
+    public function collectedOn(): CarbonInterface
+    {
+        return $this->collected_on ?? $this->created_at ?? now();
+    }
+
+    /**
+     * Payments COLLECTED inside a range.
+     *
+     * COALESCE, not a plain `whereBetween('collected_on')`: a row written without a business date
+     * (an import, a factory, anything predating the column) must still be counted on the day it was
+     * entered rather than silently vanish from the month's figures — a report that drops rows is
+     * worse than one that dates them loosely.
+     */
+    public function scopeCollectedInRange(Builder $query, string $from, string $to): Builder
+    {
+        return $query->whereRaw(
+            'DATE(COALESCE(payments.collected_on, payments.created_at)) BETWEEN ? AND ?',
+            [$from, $to],
+        );
     }
 
     /** @return array<string,string> for selects/filters */

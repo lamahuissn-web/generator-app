@@ -25,8 +25,10 @@ class DashboardController extends Controller
         $prevPeriod = $previous->format('Y-m');
 
         $invoiced = (float) Bill::query()->where('period', $period)->sum('total');
+        // The day the money was collected, not the day it was typed in: this rate says how much of
+        // the month's billing actually came in during that month.
         $collected = (float) Payment::query()
-            ->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()])
+            ->collectedInRange(now()->copy()->startOfMonth()->toDateString(), now()->copy()->endOfMonth()->toDateString())
             ->sum('amount');
         $rate = $invoiced > 0 ? round($collected / $invoiced * 100, 1) : 0.0;
 
@@ -52,7 +54,7 @@ class DashboardController extends Controller
 
         $prevInvoiced = (float) Bill::query()->where('period', $prevPeriod)->sum('total');
         $prevCollected = (float) Payment::query()
-            ->whereBetween('created_at', [$previous->copy()->startOfMonth(), $previous->copy()->endOfMonth()])
+            ->collectedInRange($previous->copy()->startOfMonth()->toDateString(), $previous->copy()->endOfMonth()->toDateString())
             ->sum('amount');
         $prevRate = $prevInvoiced > 0 ? round($prevCollected / $prevInvoiced * 100, 1) : 0.0;
 

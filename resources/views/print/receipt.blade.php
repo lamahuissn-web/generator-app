@@ -10,7 +10,7 @@
     @unless ($forPdf ?? false)
         <div class="toolbar">
             <strong>{{ __('prt.receipt_title') }} #{{ $payment->id }}</strong>
-            <span>{{ $subscriber->name }} · <span class="ltr">{{ $payment->created_at->format('Y-m-d H:i') }}</span></span>
+            <span>{{ $subscriber->name }} · <span class="ltr">{{ $payment->collectedOn()->format('Y-m-d') }}</span></span>
             <span class="spacer"></span>
             @foreach (\App\Services\PdfService::RECEIPT_SIZES as $s)
                 <a href="{{ request()->fullUrlWithQuery(['size' => $s]) }}"

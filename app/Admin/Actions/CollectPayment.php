@@ -7,6 +7,7 @@ use App\Models\Payment;
 use App\Models\Subscriber;
 use App\Services\BillingService;
 use App\Services\Currency;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -141,6 +142,17 @@ class CollectPayment extends ActionDefinition
                     'rules' => ['required'],
                 ],
                 [
+                    // Only the office enters yesterday's receipts this morning; the field app records a
+                    // collection as it happens. This is where a back-dated receipt gets its real day —
+                    // and with it the month it belongs to in every report, and its receipt number.
+                    'key' => 'collected_on',
+                    'label' => __('t.collected_on'),
+                    'type' => 'date',
+                    'default' => now()->toDateString(),
+                    'helper' => __('t.collected_on_hint'),
+                    'rules' => ['required', 'date', 'before_or_equal:today'],
+                ],
+                [
                     'key' => 'note',
                     'label' => __('t.note'),
                     'rules' => ['nullable', 'string', 'max:200'],
@@ -165,6 +177,9 @@ class CollectPayment extends ActionDefinition
             'lbp' => $outstanding === null || $rate <= 0 ? null : number_format(round($outstanding * $rate), 0, '.', ''),
             'rate' => $rate > 0 ? rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.') : null,
             'method' => Payment::METHOD_CASH_USD,
+            // Today, and the operator changes it only when entering an older receipt: the state is
+            // built by hand here, so a new field has to be added in both places.
+            'collected_on' => now()->toDateString(),
             'note' => null,
         ];
     }
@@ -183,6 +198,7 @@ class CollectPayment extends ActionDefinition
                 $state['note'] ?: null,
                 null,
                 $state['method'] ?? Payment::METHOD_CASH_LBP,
+                filled($state['collected_on'] ?? null) ? Carbon::parse($state['collected_on']) : null,
             );
 
             $message = __('a.collect_lbp_ok', [
@@ -200,6 +216,10 @@ class CollectPayment extends ActionDefinition
             return ['ok' => true, 'message' => $message];
         }
 
+        // The day the money was collected. Left null when the operator left it alone, so the ordinary
+        // case — recorded as it is collected — keeps behaving exactly as it always has.
+        $collectedOn = filled($state['collected_on'] ?? null) ? Carbon::parse($state['collected_on']) : null;
+
         $result = BillingService::collect(
             $subject,
             (float) $state['amount'],
@@ -207,6 +227,7 @@ class CollectPayment extends ActionDefinition
             $state['note'] ?: null,
             null,
             $state['method'] ?? Payment::METHOD_CASH_USD,
+            $collectedOn,
         );
 
         $message = __('a.collect_ok', [

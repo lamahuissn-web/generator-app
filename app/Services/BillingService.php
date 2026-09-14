@@ -696,6 +696,7 @@ class BillingService
         ?string $note = null,
         ?string $period = null,
         string $method = Payment::METHOD_CASH_LBP,
+        ?CarbonInterface $collectedOn = null,
     ): array {
         $rate = round($rate ?: Currency::rate(), 2);
         $lbp = round($lbp, 0);
@@ -712,8 +713,8 @@ class BillingService
         // what is exact. The two can differ by less than a cent, and the lira is the truth.
         $usd = round($lbp / $rate, 2);
 
-        $result = DB::transaction(function () use ($subscriber, $usd, $collectorId, $note, $period, $method, $lbp, $rate): array {
-            $result = self::collect($subscriber, $usd, $collectorId, $note, $period, $method);
+        $result = DB::transaction(function () use ($subscriber, $usd, $collectorId, $note, $period, $method, $lbp, $rate, $collectedOn): array {
+            $result = self::collect($subscriber, $usd, $collectorId, $note, $period, $method, $collectedOn);
 
             $appliedLbp = round($result['applied'] * $rate, 0);
 
@@ -750,6 +751,7 @@ class BillingService
         ?string $note = null,
         ?string $period = null,
         string $method = Payment::METHOD_CASH_USD,
+        ?CarbonInterface $collectedOn = null,
     ): array {
         $period ??= self::currentPeriod();
         $amount = round(max(0, (float) $amount), 2);
@@ -767,18 +769,24 @@ class BillingService
             throw new \RuntimeException(__('refuse.nothing_to_collect'));
         }
 
-        return DB::transaction(function () use ($subscriber, $collectorId, $applied, $note, $excess, $outstanding, $method) {
+        return DB::transaction(function () use ($subscriber, $collectorId, $applied, $note, $excess, $outstanding, $method, $collectedOn) {
             $payment = Payment::create([
                 'subscriber_id' => $subscriber->id,
                 'collector_id' => $collectorId,
                 'amount' => $applied,
                 'method' => $method,
+                // Left empty unless the operator SAID which day the money was collected: everything
+                // that reads it falls back to the entry day, so the ordinary case is unchanged and
+                // only a deliberate back-dated receipt moves.
+                'collected_on' => $collectedOn?->toDateString(),
                 'note' => $note,
             ]);
 
-            // Receipt number mirrors the invoice series (REC-2026-09-0007).
+            // Receipt number mirrors the invoice series (REC-2026-09-0007) — and follows the day the
+            // money was COLLECTED, not the day it was typed in: a receipt for the 31st is August's
+            // paper, whatever morning it was written in.
             $payment->forceFill([
-                'number' => self::receiptNumber($payment->created_at ?? now(), $payment->id),
+                'number' => self::receiptNumber($collectedOn ?? $payment->created_at ?? now(), $payment->id),
             ])->save();
 
             $remainingToAllocate = $applied;
