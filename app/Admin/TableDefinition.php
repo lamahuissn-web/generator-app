@@ -203,4 +203,17 @@ abstract class TableDefinition
     {
         return false;
     }
+
+    /**
+     * WHY this row cannot be deleted, in the operator's words.
+     *
+     * canDelete() answers yes or no, and a bare "no" tells the operator nothing they can act on —
+     * a button that refuses without a reason is the silent failure this project refuses (principle
+     * IV). Definitions that refuse deletion say what to do instead; the subscriber case names the
+     * status to set. Null falls back to the generic line.
+     */
+    public function deleteRefusal(Model $row): ?string
+    {
+        return null;
+    }
 }

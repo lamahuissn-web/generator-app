@@ -365,10 +365,22 @@ class AdminPanelRebuildTest extends TestCase
     }
 
     /** Deleting a subscriber with billing history warns about the blast radius first. */
-    public function test_delete_warning_names_the_history_it_would_take_with_it(): void
+    /**
+     * The blast radius is no longer a warning the operator reads and clicks through: a subscriber who
+     * exists in the ledger cannot be deleted at all, and the refusal names the status to set instead
+     * (see SubscriberDeletionTest). The plain warning survives for a row with no history, where
+     * deleting really is the honest correction.
+     */
+    public function test_the_delete_refusal_names_the_history_and_the_way_out(): void
     {
-        $warning = (new SubscribersTable)->deleteWarning($this->subscriber);
+        $table = new SubscribersTable;
 
-        $this->assertSame(__('a.del_sub_history'), $warning);
+        $this->assertFalse($table->canDelete($this->subscriber));
+        $this->assertSame(__('a.del_sub_refused'), $table->deleteRefusal($this->subscriber));
+
+        // The refusal must point somewhere: this test's locale is English, so the word is "Inactive".
+        $this->assertStringContainsString('Inactive', (string) $table->deleteRefusal($this->subscriber));
+
+        $this->assertSame(__('a.del_sub_plain'), $table->deleteWarning($this->subscriber));
     }
 }

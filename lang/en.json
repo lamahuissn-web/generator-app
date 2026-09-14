@@ -296,7 +296,6 @@
     "w.no_payments": "No payments recorded yet.",
     "w.all_settled": "Everyone is settled 🎉",
     "t.meter_readings": "Meter readings",
-    "a.del_sub_history": "This subscriber has billing history — deleting removes ALL their readings, bills and payments permanently. Consider setting status to Inactive instead.",
     "a.del_sub_plain": "Delete this subscriber permanently.",
     "t.category": "Category",
     "t.description": "Description",
@@ -1183,5 +1182,6 @@
     "col.delete_warning_row": "Delete this settlement? :amount goes back into :name's hand.",
     "a.collect_inactive_notice": "This subscriber is inactive — this collection is recorded against an old debt; readings stay disabled.",
     "dash.outstanding_sub_inactive": "Unpaid across all periods — :amount of it on inactive subscribers.",
-    "portal.inactive_service_note": "This subscriber is inactive — readings are disabled, and an old debt can still be collected."
+    "portal.inactive_service_note": "This subscriber is inactive — readings are disabled, and an old debt can still be collected.",
+    "a.del_sub_refused": "Cannot delete — this subscriber has billing history (invoices, receipts or readings). Set the status to Inactive instead."
 }

@@ -4,6 +4,7 @@ namespace App\Admin\Tables;
 
 use App\Admin\TableDefinition;
 use App\Models\Subscriber;
+use App\Services\Audit;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -201,20 +202,58 @@ class SubscribersTable extends TableDefinition
         ];
     }
 
+    /**
+     * A subscriber who exists in the ledger CANNOT be deleted — the history is the money.
+     *
+     * Deleting one cascades: the database takes his readings, his invoices, his receipts and their
+     * allocations with him, and nothing anywhere records that they existed. The receipt and invoice
+     * numbering keeps a permanent hole (the numbers are issued from a counter and never reused), so
+     * the office ends up with gaps in the paper it can neither explain nor restore. The status is
+     * built for exactly this: «موقوف» takes him out of the round, the readings and the billing while
+     * keeping his file, his debt and his history — and his debt stays collectable (principle VI).
+     *
+     * A row with NO trace is still deletable: somebody typed a subscriber twice, or created one to
+     * see how the form works, and deleting that is honest correction rather than destruction. A
+     * blanket ban would push the office into inventing a fake «موقوف» for it, which is how a real
+     * stopped-subscriber report fills up with people who never existed.
+     */
     public function canDelete(Model $row): bool
     {
-        return true;
+        return ! $this->hasLedgerTrace($row);
     }
 
-    public function deleteWarning(Model $row): string
+    /** The refusal names the way out, so the button teaches instead of looking broken. */
+    public function deleteRefusal(Model $row): ?string
+    {
+        return $this->hasLedgerTrace($row) ? __('a.del_sub_refused') : null;
+    }
+
+    /** Anything that would be destroyed with him, or that names him. */
+    private function hasLedgerTrace(Model $row): bool
     {
         return $row->bills()->exists()
-            ? __('a.del_sub_history')
-            : __('a.del_sub_plain');
+            || $row->payments()->exists()
+            || $row->readings()->exists();
+    }
+
+    /** Only a subscriber with no trace gets this far, so the warning is the plain one. */
+    public function deleteWarning(Model $row): string
+    {
+        return __('a.del_sub_plain');
     }
 
     public function deleteRecord(Model $row): void
     {
+        // Even a row that never existed in the ledger is a deliberate act: the trail should be able
+        // to say who decided it was a mistake, and what the row said before it left.
+        Audit::log('subscriber.deleted', $row, [
+            'name' => $row->name,
+            'meter_no' => $row->meter_no,
+            'route' => $row->route?->name,
+            'status' => $row->status,
+            'period_created' => $row->created_at?->toDateString(),
+        ]);
+
         $row->delete();
     }
 }

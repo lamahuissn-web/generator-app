@@ -168,8 +168,17 @@ class DataTable extends Component
     {
         $row = $this->baseQuery()->whereKey($id)->first();
 
-        if (! $row || ! $this->definition()->canDelete($row)) {
+        if (! $row) {
             $this->flashMessage(__('t.delete_not_allowed'), 'error');
+
+            return;
+        }
+
+        if (! $this->definition()->canDelete($row)) {
+            $this->flashMessage(
+                $this->definition()->deleteRefusal($row) ?? __('t.delete_not_allowed'),
+                'error',
+            );
 
             return;
         }
