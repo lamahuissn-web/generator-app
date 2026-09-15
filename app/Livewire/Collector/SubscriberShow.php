@@ -83,11 +83,10 @@ class SubscriberShow extends Component
         return BillingService::kwhPrice();
     }
 
+    /** Where this cycle starts — the same answer the invoice and the printed sheet get. */
     public function previousReadingValue(): float
     {
-        $prev = BillingService::latestReadingBefore($this->subscriber, $this->period);
-
-        return (float) ($prev?->current_reading ?? 0);
+        return BillingService::previousValue($this->subscriber, $this->period);
     }
 
     public function currentBill(): ?Bill

@@ -167,7 +167,12 @@ final class RouteReadingSheet extends Component
                 'amperage' => $subscriber->amperage,
                 // A done row stores the value it continued from, so the pair shown is the
                 // pair that was billed — not a re-derivation that a deleted row would move.
-                'previous' => round($done ? (float) $newest->previous_reading : (float) ($newest?->current_reading ?? 0), 2),
+                // A done row stores the value it continued from; an open one asks the same place the
+                // invoice will, so the sheet never shows «السابقة: 0» for a meter that reads 12,500.
+                'previous' => round(
+                    $done ? (float) $newest->previous_reading : BillingService::previousValue($subscriber, $this->period),
+                    2,
+                ),
                 'maintenance' => $subscriber->effectiveMaintenanceFee(),
                 'debt' => (float) ($debts[$subscriber->id] ?? 0),
                 'done' => $done,

@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\ResourceController;
 use App\Http\Controllers\Admin\SubscriberController;
+use App\Http\Controllers\Admin\SubscriberImportController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -26,6 +27,11 @@ Route::middleware(['auth', 'active', 'role:admin', 'locale'])->group(function ()
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     Route::get('/', DashboardController::class)->name('dashboard');
+
+    // A native POST for the import's apply step: it must work in every browser, which a click handler
+    // could not promise (see the controller).
+    Route::post('/subscribers-import/apply', [SubscriberImportController::class, 'apply'])
+        ->name('subscribers-import.apply');
 
     // Subscribers are hand-routed: their profile screen (identity + balance + three tabs)
     // has no equivalent among the generic list resources.

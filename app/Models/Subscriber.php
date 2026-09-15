@@ -26,6 +26,7 @@ class Subscriber extends Model
     public const MAINT_EXEMPT = 'exempt';
 
     protected $fillable = [
+        'opening_reading', 'opening_period',
         'route_id', 'name', 'phone', 'address', 'meter_no', 'type',
         'amperage', 'maintenance_fee', 'maintenance_mode', 'flat_fee', 'status', 'notes', 'created_by',
         'meter_broken_reported_at', 'meter_broken_note', 'meter_broken_estimates', 'meter_broken_reported_by',
@@ -35,6 +36,7 @@ class Subscriber extends Model
     {
         return [
             'meter_broken_reported_at' => 'datetime',
+            'opening_reading' => 'float',
         ];
     }
 
@@ -114,6 +116,17 @@ class Subscriber extends Model
     }
 
     /** Reading recorded for a specific period, if any. */
+    /**
+     * A month as this program stores one: `YYYY-MM`.
+     *
+     * `2026/09`, `2026-9` and stray spaces are all how a person types it; anything that is not a month
+     * comes back as null rather than being stored as something no query can compare against.
+     */
+    public static function cleanOpeningPeriod(?string $value): ?string
+    {
+        return BillingService::cleanPeriod($value);
+    }
+
     public function readingFor(string $period): ?Reading
     {
         return $this->readings()->where('period', $period)->first();

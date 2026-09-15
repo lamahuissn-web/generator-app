@@ -22,7 +22,19 @@
         };
     };
 
+    // A table that declares CSV columns can be exported, so the button is added HERE rather than in
+    // each table's toolbar(): subclasses keep their own actions and cannot lose the export by
+    // overriding them.
     $actions = $definition->toolbar();
+
+    if ($definition->csvHeader() !== []) {
+        $actions[] = [
+            'label' => __('t.export_csv'),
+            'icon' => 'ki-file-down',
+            'method' => 'exportCsv',
+            'variant' => 'outline',
+        ];
+    }
     $rowActions = $definition->rowActions();
     $hasToolbar = $definition->searchable() !== [] || $filterDefs !== [] || $actions !== [];
 @endphp

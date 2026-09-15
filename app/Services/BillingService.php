@@ -153,10 +153,48 @@ class BillingService
             ->first();
     }
 
-    /** The meter value this cycle starts from (the previous reading, or 0 for the very first). */
+    /** A month as this program stores one: `YYYY-MM`. `2026/9` and stray spaces are how people type it. */
+    public static function cleanPeriod(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        if (! preg_match('/^(\d{4})[\-\/](\d{1,2})$/', $value, $m)) {
+            return null;
+        }
+
+        $month = (int) $m[2];
+
+        return $month >= 1 && $month <= 12 ? sprintf('%04d-%02d', (int) $m[1], $month) : null;
+    }
+
+    /** The month before, for dating the reading a household arrived with. */
+    public static function periodBefore(string $period): string
+    {
+        return \Carbon\Carbon::createFromFormat('Y-m-d', $period.'-01')->subMonthNoOverflow()->format('Y-m');
+    }
+
+    /**
+     * The meter value this cycle starts from.
+     *
+     * The last reading that came before the period; failing that, the reading the subscriber's dial
+     * was already showing when the office took him on; failing that, 0 for a brand-new dial.
+     *
+     * That middle term is the whole point. A household arriving from a paper ledger with 12,500 on the
+     * meter used to start from 0 and be billed 12,600 kWh — $3,150 instead of $25 — the first time
+     * anybody read it. Every screen that shows «السابقة» asks HERE, so the printed sheet, the
+     * collector's form and the invoice can never disagree about where the cycle starts.
+     */
     public static function previousValue(Subscriber $subscriber, string $period): float
     {
-        return (float) (self::latestReadingBefore($subscriber, $period)?->current_reading ?? 0);
+        return (float) (
+            self::latestReadingBefore($subscriber, $period)?->current_reading
+            ?? $subscriber->opening_reading
+            ?? 0
+        );
     }
 
     /**
@@ -234,7 +272,7 @@ class BillingService
         }
 
         $previous = self::latestReadingBefore($subscriber, $period);
-        $prevValue = (float) ($previous?->current_reading ?? 0);
+        $prevValue = self::previousValue($subscriber, $period);
 
         if ($swap) {
             // A replacement splits the cycle over two devices: the old meter's final

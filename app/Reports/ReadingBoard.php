@@ -187,7 +187,7 @@ final class ReadingBoard
                 'current' => $recorded ? (float) $newest->current_reading : null,
                 'previous' => $recorded
                     ? (float) $newest->previous_reading
-                    : (float) ($newest?->current_reading ?? 0),
+                    : BillingService::previousValue($subscriber, $this->period),
                 'consumption' => $consumption,
                 'estimated' => $recorded && (bool) $newest->is_estimated,
                 'verdict' => $verdict,

@@ -90,6 +90,24 @@ class SubscriberForm extends FormDefinition
                         'rules' => ['nullable', 'integer', 'min:1', 'max:200'],
                     ],
                     [
+                        // The dial as it stood when we took him on. Left empty for a new meter, which
+                        // is exactly what the panel assumed before these fields existed.
+                        'key' => 'opening_reading',
+                        'label' => __('s.opening_reading'),
+                        'type' => 'number',
+                        'min' => 0,
+                        'helper' => __('s.opening_reading_hint'),
+                        'visible_when' => fn (array $state): bool => ($state['type'] ?? null) === Subscriber::TYPE_METERED,
+                        'rules' => ['nullable', 'numeric', 'min:0'],
+                    ],
+                    [
+                        'key' => 'opening_period',
+                        'label' => __('s.opening_period'),
+                        'helper' => __('s.opening_period_hint'),
+                        'visible_when' => fn (array $state): bool => ($state['type'] ?? null) === Subscriber::TYPE_METERED,
+                        'rules' => ['nullable', 'string'],
+                    ],
+                    [
                         'key' => 'maintenance_mode',
                         'label' => __('s.mode_label'),
                         'type' => 'select',
@@ -149,6 +167,14 @@ class SubscriberForm extends FormDefinition
             'type' => $state['type'],
             'notes' => $state['notes'] ?: null,
         ];
+
+        // An empty box means «no opening reading», never zero: zero is a real value on a new dial and
+        // the two must not be confused.
+        $openingRaw = $state['opening_reading'] ?? null;
+        $attributes['opening_reading'] = ($openingRaw === null || $openingRaw === '') ? null : (float) $openingRaw;
+        $attributes['opening_period'] = $attributes['opening_reading'] === null
+            ? null
+            : (Subscriber::cleanOpeningPeriod($state['opening_period'] ?? null) ?? now()->format('Y-m'));
 
         // A flat subscriber has no meter: null the meter fields instead of leaving the
         // values a hidden input still carries, otherwise the list prints "Meter 2202"

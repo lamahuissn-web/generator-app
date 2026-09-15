@@ -5,6 +5,7 @@ namespace App\Admin\Tables;
 use App\Admin\TableDefinition;
 use App\Models\Subscriber;
 use App\Services\Audit;
+use App\Services\SubscriberImport;
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -30,6 +31,44 @@ class SubscribersTable extends TableDefinition
     public function searchable(): array
     {
         return ['name', 'meter_no', 'phone'];
+    }
+
+    /**
+     * The export carries the SAME columns as the import template, from one list, so the office can
+     * take the data out, edit it in Excel and put it back in without translating column names.
+     */
+    public function csvHeader(): array
+    {
+        return SubscriberImport::headers();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function csvRow(Model $row): array
+    {
+        /** @var Subscriber $row */
+        return [
+            (string) $row->name,
+            (string) ($row->route?->name ?? ''),
+            (string) ($row->meter_no ?? ''),
+            (string) ($row->phone ?? ''),
+            (string) ($row->address ?? ''),
+            SubscriberImport::typeLabel($row->type),
+            SubscriberImport::statusLabel($row->status),
+            $row->amperage === null ? '' : (string) $row->amperage,
+            SubscriberImport::modeLabel($row->maintenance_mode),
+            (float) $row->maintenance_fee > 0 ? number_format((float) $row->maintenance_fee, 2, '.', '') : '',
+            $row->flat_fee === null ? '' : number_format((float) $row->flat_fee, 2, '.', ''),
+            (string) ($row->notes ?? ''),
+            $row->opening_reading === null ? '' : number_format((float) $row->opening_reading, 2, '.', ''),
+            (string) ($row->opening_period ?? ''),
+        ];
+    }
+
+    public function csvFilename(): string
+    {
+        return 'subscribers-'.now()->format('Y-m-d').'.csv';
     }
 
     public function defaultSort(): array
