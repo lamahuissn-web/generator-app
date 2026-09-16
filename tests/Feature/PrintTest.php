@@ -11,6 +11,7 @@ use App\Models\Route;
 use App\Models\Subscriber;
 use App\Models\User;
 use App\Services\BillingService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -143,6 +144,71 @@ class PrintTest extends TestCase
         $pdf = $this->actingAs($this->collector)->get(route('print.receipt.pdf', ['payment' => $this->payment->id]));
         $pdf->assertOk();
         $this->assertStringStartsWith('%PDF', $pdf->getContent());
+    }
+
+    public function test_the_customer_statement_reads_as_invoice_payment_and_balance(): void
+    {
+        // 2026-07 bill of 25.00 with 10.00 collected on it -> 15.00 still due.
+        // The customer gets five columns they can read; «مدين»/«دائن» are for accountants and
+        // are not on this sheet at all.
+        $response = $this->actingAs($this->admin)
+            ->get(route('print.statement', ['subscriber' => $this->subscriber->id, 'size' => 'a4']));
+
+        $response->assertOk()
+            ->assertSee(__('col.st_date'))
+            ->assertSee(__('col.st_description'))
+            ->assertSee(__('col.cst_type'))
+            ->assertSee(__('prt.amount'))
+            ->assertSee(__('col.st_balance'))
+            ->assertDontSee(__('col.st_debit'))
+            ->assertDontSee(__('col.st_credit'))
+            ->assertDontSee(__('col.st_ref'));
+
+        // What happened, how much, who took it, and what is left.
+        $response->assertSee(__('col.cst_kind_bill'))
+            ->assertSee(__('col.cst_kind_payment'))
+            ->assertSee('$25.00')                    // the invoice
+            ->assertSee('$10.00')                    // the payment
+            ->assertSee('Collector One')             // the collector, on the payment line
+            ->assertSee(__('col.cst_total_bills'))
+            ->assertSee(__('col.cst_total_paid'))
+            ->assertSee(__('col.cst_due'))
+            ->assertSee('$15.00');                   // the remaining amount, in the line and in the band
+
+        $this->assertSame(15.0, (float) $this->subscriber->fresh()->outstanding());
+
+        // Amounts are pinned into an LTR island. An amount that follows an Arabic line in the
+        // same cell is otherwise re-ordered by mPDF and prints as "25.00$"; the defect does not
+        // exist in the browser, so it is asserted on the markup.
+        $response->assertSee('<span class="ltr">$25.00</span>', false);
+    }
+
+    public function test_the_statement_from_a_date_carries_the_opening_line_and_a_third_box(): void
+    {
+        // Bill in July, money collected in August: from August the bill is no longer a movement,
+        // it becomes the opening balance — and the summary has to name it, or the three figures
+        // stop adding up on paper.
+        $this->bill->forceFill(['created_at' => Carbon::parse('2026-07-26 10:00')])->save();
+        $this->payment->forceFill(['created_at' => Carbon::parse('2026-08-05 12:00')])->save();
+
+        $this->actingAs($this->admin)
+            ->get(route('print.statement', ['subscriber' => $this->subscriber->id, 'size' => 'a4', 'from' => '2026-08-01']))
+            ->assertOk()
+            ->assertSee(__('col.cst_opening'))
+            ->assertSee('$25.00')                    // the carried-over balance
+            ->assertSee('$15.00')                    // opening 25 - the 10 collected in August
+            ->assertSee('2026-08-01')                // the note saying older movements are folded in
+            ->assertDontSee('2026-07-26');           // the July bill is not listed as a movement any more
+    }
+
+    public function test_the_customer_statement_pdf_is_a4_and_arabic(): void
+    {
+        $pdf = $this->actingAs($this->arAdmin)
+            ->get(route('print.statement', ['subscriber' => $this->subscriber->id, 'size' => 'a4', 'format' => 'pdf']));
+
+        $pdf->assertOk();
+        $this->assertStringStartsWith('%PDF', $pdf->getContent());
+        $this->assertGreaterThan(5000, strlen($pdf->getContent()));
     }
 
     public function test_bill_prints_are_admin_only(): void

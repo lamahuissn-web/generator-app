@@ -78,9 +78,104 @@
     .hero .lbl { font-size: .78em; text-transform: uppercase; letter-spacing: .08em; color: #cbd5e1; }
     .hero .val { font-size: {{ $compact ? '17pt' : '22pt' }}; font-weight: bold; font-variant-numeric: tabular-nums; }
 
+    /* ---- customer account statement (print.statement) ------------------------------------
+       The sheet the subscriber is handed: five columns a normal customer can read, and the
+       remaining amount as the one thing the eye lands on. */
+    table.cstmt-info {
+        margin-top: 4px;
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+    }
+    table.cstmt-info td {
+        padding: 5px 8px;
+        font-size: .95em;
+        border-bottom: 1px solid #e2e8f0;
+        text-align: {{ $isRtl ? 'right' : 'left' }};
+    }
+    table.cstmt-info tr:last-child td { border-bottom: 0; }
+    table.cstmt-info td.k { color: #64748b; width: 18%; }
+    table.cstmt-info td.v { font-weight: bold; width: 32%; }
+
+    table.cstmt { margin-top: 10px; }
+    table.cstmt thead th {
+        background: #0f172a; color: #fff;
+        border: 1px solid #0f172a;
+        padding: 6px 8px;
+        font-size: .88em; font-weight: bold;
+        text-align: {{ $isRtl ? 'right' : 'left' }};
+    }
+    table.cstmt tbody td {
+        border: 1px solid #cbd5e1;
+        padding: 6px 8px;
+        font-size: .95em;
+        line-height: 1.5;
+        text-align: {{ $isRtl ? 'right' : 'left' }};
+    }
+    table.cstmt tbody tr.alt td { background: #f8fafc; }
+    table.cstmt td.num, table.cstmt th.num {
+        text-align: {{ $isRtl ? 'left' : 'right' }};
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    table.cstmt td.kind, table.cstmt th.kind { text-align: center; }
+    table.cstmt td.bal { font-weight: bold; }
+    table.cstmt tr.opening td { background: #f1f5f9; color: #475569; font-weight: bold; }
+    table.cstmt .line-main { display: block; }
+    table.cstmt .line-meta { display: block; margin-top: 2px; font-size: .84em; color: #64748b; }
+    .chip {
+        display: inline-block;
+        padding: 1px 8px;
+        border: 1px solid #cbd5e1;
+        background: #f1f5f9;
+        color: #475569;
+        font-size: .86em;
+        font-weight: bold;
+        white-space: nowrap;
+    }
+    .chip-bill { border-color: #fcd34d; background: #fef3c7; color: #92400e; }
+    .chip-paid { border-color: #86efac; background: #dcfce7; color: #15803d; }
+
+    table.cstmt-sum td.sum-box {
+        border: 1px solid #cbd5e1;
+        background: #f8fafc;
+        padding: 7px 9px;
+        text-align: {{ $isRtl ? 'right' : 'left' }};
+        vertical-align: middle;
+    }
+    table.cstmt-sum { margin-top: 10px; page-break-inside: avoid; }
+    table.cstmt-sum td.sum-w2 { width: 50%; }
+    table.cstmt-sum td.sum-w3 { width: 33%; }
+    table.cstmt-sum td.sum-w3-wide { width: 34%; }
+    table.cstmt-sum .sum-k { font-size: .85em; color: #475569; }
+    table.cstmt-sum .sum-v {
+        font-size: 1.25em; font-weight: bold;
+        font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+
+    /* The one number the customer came for. */
+    table.cstmt-due { margin-top: 6px; page-break-inside: avoid; }
+    table.cstmt-due td { padding: 10px 12px; color: #fff; vertical-align: middle; }
+    table.cstmt-due td.due-k { font-size: 1.08em; font-weight: bold; text-align: {{ $isRtl ? 'right' : 'left' }}; }
+    table.cstmt-due td.due-v {
+        font-size: {{ $compact ? '15pt' : ($size === 'a4' ? '21pt' : '17pt') }};
+        font-weight: bold;
+        text-align: {{ $isRtl ? 'left' : 'right' }};
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    table.cstmt-due .due-note { display: block; margin-top: 3px; font-size: .72em; font-weight: normal; }
+    table.cstmt-due.due-owed td { background: #0f172a; border: 1px solid #0f172a; }
+    table.cstmt-due.due-owed .due-note { color: #cbd5e1; }
+    table.cstmt-due.due-settled td { background: #15803d; border: 1px solid #15803d; }
+    table.cstmt-due.due-settled .due-note { color: #dcfce7; }
+    table.cstmt-due.due-credit td { background: #b45309; border: 1px solid #b45309; }
+    table.cstmt-due.due-credit .due-note { color: #fef3c7; }
+
     .muted { color: #64748b; }
     .strong { font-weight: bold; }
     .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    /* The operator's own closing line: a courtesy note, not a panel. */
+    .cstmt-foot { margin-top: 10px; text-align: center; font-size: .9em; color: #475569; }
     /* LTR island inside RTL text: mPDF ignores `isolate`, so force the run
        character-by-character or neutrals like "#" and "−" flip to the far side. */
     .ltr { direction: ltr; unicode-bidi: bidi-override; display: inline-block; }

@@ -205,9 +205,14 @@ class CollectionService
      * The closing balance always equals Subscriber::outstanding(), because a
      * bill's total already includes any debt rolled over from earlier periods.
      *
+     * `description` stays the whole sentence it always was — screens and tests read it — and the
+     * consumer-facing print view uses the extra display-only keys (`invoice_no` on a bill line,
+     * `method`, `collector_name` and `invoices` on a payment line) to lay the same facts out in
+     * columns instead of one run-on sentence. None of them feeds the arithmetic.
+     *
      * @return array{
      *     rows: array<int, array<string, mixed>>,
-     *     totals: array{debit: float, credit: float, closing: float},
+     *     totals: array{opening: float, debit: float, credit: float, closing: float},
      *     rows_shown: int,
      *     rows_total: int
      * }
@@ -228,6 +233,7 @@ class CollectionService
             'settled' => 0.0,
             'ref' => 'B'.$bill->id,
             'id' => $bill->id,
+            'invoice_no' => self::invoiceNumber($bill),
         ])->concat($payments->map(fn (Payment $payment) => [
             'date' => $payment->collectedOn(),
             'kind' => 'payment',
@@ -237,9 +243,18 @@ class CollectionService
             'settled' => (float) $payment->amount,
             'ref' => 'P'.$payment->id,
             'id' => $payment->id,
+            'method' => $payment->methodLabel(),
+            'collector_name' => $payment->collector?->name ?? __('col.unknown_collector'),
+            'invoices' => self::settledInvoiceNumbers($payment),
         ]))->values();
 
         return self::foldEntries($entries, $from, $bills->count() + $payments->count());
+    }
+
+    /** The invoice number a bill is known by, falling back to its period. */
+    public static function invoiceNumber(Bill $bill): string
+    {
+        return $bill->number ?: 'INV-'.$bill->period;
     }
 
     /**
@@ -752,15 +767,25 @@ class CollectionService
             'collector' => $payment->collector?->name ?? __('col.unknown_collector'),
         ]);
 
-        $invoices = $payment->settledBills()
-            ->map(fn (Bill $bill) => $bill->number ?: 'INV-'.$bill->period)
-            ->all();
+        $invoices = self::settledInvoiceNumbers($payment);
 
         if ($invoices !== []) {
             $description .= ' — '.__('col.st_payment_for', ['invoices' => implode('، ', $invoices)]);
         }
 
         return $description;
+    }
+
+    /**
+     * The invoice numbers a payment settled, oldest first.
+     *
+     * @return array<int, string>
+     */
+    public static function settledInvoiceNumbers(Payment $payment): array
+    {
+        return $payment->settledBills()
+            ->map(fn (Bill $bill) => self::invoiceNumber($bill))
+            ->all();
     }
 
     private static function billDescription(Bill $bill): string
@@ -778,11 +803,14 @@ class CollectionService
             return __('col.st_flat_bill', ['period' => $period]);
         }
 
+        // The two amounts sit inside Arabic prose, so they are isolated: without it the bidi
+        // algorithm strands the "$" on the far side of the digits and the printed line reads
+        // "(9.00$)" instead of "($9.00)".
         return __('col.st_metered_bill', [
             'period' => $period,
             'consumption' => number_format((float) $bill->consumption, 1),
-            'usage' => money($bill->usage_amount),
-            'maintenance' => money($bill->maintenance_fee),
+            'usage' => money_ltr($bill->usage_amount),
+            'maintenance' => money_ltr($bill->maintenance_fee),
         ]);
     }
 
