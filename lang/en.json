@@ -1264,5 +1264,7 @@
     "imp.rd_note": "Imported reading",
     "imp.rd_template": "Readings template",
     "imp.rd_preview_hint": "Every ready row records a reading and its bill for the month on the file — look before you apply.",
-    "imp.rd_done": "Imported — :count readings and bills"
+    "imp.rd_done": "Imported — :count readings and bills",
+    "a.rd_previous": "Previous reading: :previous",
+    "a.rd_consumption": "Consumption: :kwh kWh"
 }

@@ -9,6 +9,7 @@ use App\Models\Subscriber;
 use App\Models\User;
 use App\Services\BillingService;
 use App\Services\SubscriberImport;
+use Livewire\Livewire;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
@@ -128,6 +129,23 @@ class OpeningReadingTest extends TestCase
 
         $this->assertNotNull($row);
         $this->assertSame(12500.0, (float) $row['previous']);
+    }
+
+    public function test_the_reading_form_shows_the_previous_reading_and_the_consumption_as_he_types(): void
+    {
+        // «عند تسجيل قراءة أريد أن تظهر القراءة السابقة لتسهيل الإدخال» — the number he is measuring
+        // FROM sits beside the field, and the consumption appears as he types, before anything is saved.
+        $subscriber = $this->subscriber(['opening_reading' => 12500, 'opening_period' => now()->subMonth()->format('Y-m')]);
+
+        Livewire::actingAs($this->admin)
+            ->test(\App\Livewire\Admin\ActionForm::class, [
+                'action' => \App\Admin\Actions\RecordReading::class,
+                'subjectId' => $subscriber->id,
+            ])
+            ->call('openModal')                       // the action is a button; the form is the modal
+            ->assertSee(__('a.rd_previous', ['previous' => '12500']))
+            ->set('state.current_reading', '12600')
+            ->assertSee(__('a.rd_consumption', ['kwh' => '100']));
     }
 
     public function test_the_importer_carries_the_reading_and_its_month(): void

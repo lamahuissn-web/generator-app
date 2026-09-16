@@ -4,6 +4,7 @@ namespace App\Admin\Actions;
 
 use App\Admin\ActionDefinition;
 use App\Models\Subscriber;
+use App\Services\BillingService;
 use App\Services\ReadingService;
 use Illuminate\Database\Eloquent\Model;
 
@@ -58,11 +59,67 @@ class RecordReading extends ActionDefinition
         return $subject->status === Subscriber::STATUS_ACTIVE;
     }
 
+    /**
+     * The reading form — with the number he is measuring FROM shown beside the field.
+     *
+     * The office asked for it plainly: «عند تسجيل قراءة أريد أن تظهر القراءة السابقة لتسهيل الإدخال».
+     * Typing a reading blind meant guessing whether 4,150 continues 4,090 or 4,090 is a typo for 4,190.
+     * The previous value comes from the one method every other screen asks (BillingService::previousValue),
+     * so what is shown here and what the bill will use cannot drift apart — and because the field is
+     * `live`, the consumption appears as he types, before anything is saved.
+     */
     public function sections(): array
     {
+        $subject = $this->subject instanceof Subscriber ? $this->subject : null;
+
+        $fields = array_map(function (array $field) use ($subject): array {
+            $key = $field['key'] ?? null;
+
+            if ($key === 'period') {
+                // A month change moves where the cycle starts, so the helper must re-read it.
+                return array_merge($field, ['live' => true]);
+            }
+
+            if ($key !== 'current_reading' || $subject === null) {
+                return $field;
+            }
+
+            return array_merge($field, [
+                'live' => true,
+                'helper_from' => function (array $state) use ($subject): ?string {
+                    $who = $subject ?? ($this->subject instanceof Subscriber ? $this->subject : null);
+
+                    if ($who === null || $who->getKey() === null) {
+                        return null;
+                    }
+
+                    $period = BillingService::cleanPeriod($state['period'] ?? null);
+
+                    if ($period === null) {
+                        return null;
+                    }
+
+                    $previous = BillingService::previousValue($who, $period);
+                    $line = __('a.rd_previous', ['previous' => number_format($previous, 0, '.', '')]);
+
+                    $typed = $state['current_reading'] ?? null;
+
+                    if ($typed === null || $typed === '') {
+                        return $line;
+                    }
+
+                    $consumption = round((float) $typed - $previous, 2);
+
+                    return $line.' · '.__('a.rd_consumption', [
+                        'kwh' => number_format($consumption, 0, '.', ''),
+                    ]);
+                },
+            ]);
+        }, ReadingService::modeFields(withSubject: false));
+
         return [[
             'title' => '',
-            'fields' => ReadingService::modeFields(withSubject: false),
+            'fields' => $fields,
         ]];
     }
 

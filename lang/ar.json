@@ -1264,5 +1264,7 @@
     "imp.rd_note": "استيراد قراءات",
     "imp.rd_template": "قالب القراءات",
     "imp.rd_preview_hint": "كل سطر جاهز بيعمل قراءة وفاتورة بالشهر المذكور — شوف قبل ما تنفّذ.",
-    "imp.rd_done": "تمّ — :count قراءة وفاتورة"
+    "imp.rd_done": "تمّ — :count قراءة وفاتورة",
+    "a.rd_previous": "القراءة السابقة: :previous",
+    "a.rd_consumption": "الاستهلاك: :kwh kWh"
 }
