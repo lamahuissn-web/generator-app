@@ -139,7 +139,7 @@ class BillingServiceTest extends TestCase
         $this->assertSame(0.0, $sub->outstanding());
     }
 
-    public function test_flat_collect_creates_bill_and_rolls_unpaid_periods(): void
+    public function test_flat_collect_pays_the_oldest_bill_and_never_issues_one(): void
     {
         $route = Route::create(['name' => 'Test Area']);
         $sub = Subscriber::create([
@@ -154,16 +154,65 @@ class BillingServiceTest extends TestCase
         // June bill exists but was never paid.
         BillingService::ensureFlatBill($sub, '2026-06');
 
-        // July payment: ensures July bill (60), allocation clears June first (FIFO).
+        // July collection: it must NOT raise a July invoice, and the money clears June (FIFO).
         $result = BillingService::collect($sub, 60, $this->admin->id, null, '2026-07');
 
-        $june = $sub->bills()->where('period', '2026-06')->first();
-        $july = $sub->bills()->where('period', '2026-07')->first();
-        $this->assertNotNull($july);
-        $this->assertSame(60.0, (float) $july->prev_debt); // rolled-over June debt
-        $this->assertSame(60.0, (float) $june->paid_amount);
-        $this->assertSame(0.0, (float) $july->paid_amount);
-        $this->assertSame(60.0, $sub->outstanding());
+        $this->assertSame(60.0, $result['applied']);
+        $this->assertNull($sub->bills()->where('period', '2026-07')->first());
+        $this->assertSame(60.0, (float) $sub->bills()->where('period', '2026-06')->first()->paid_amount);
+        $this->assertSame(1, $sub->bills()->count());
+        $this->assertSame(0.0, $sub->outstanding());
+    }
+
+    public function test_a_collection_can_never_raise_the_balance(): void
+    {
+        // The bug this pins: collecting from a flat-rate house used to issue the cycle's invoice
+        // on the spot, so the receipt itself grew the debt — the office took $80 from a subscriber
+        // owing $140 and the screen then showed $150 (see the September bills raised by a payment).
+        $route = Route::create(['name' => 'Test Area']);
+        $sub = Subscriber::create([
+            'route_id' => $route->id,
+            'name' => 'Flat Sub',
+            'type' => Subscriber::TYPE_FLAT,
+            'flat_fee' => 90,
+            'status' => Subscriber::STATUS_ACTIVE,
+            'created_by' => $this->admin->id,
+        ]);
+        BillingService::ensureFlatBill($sub, '2026-07');
+        BillingService::ensureFlatBill($sub, '2026-08');
+        $before = $sub->outstanding();
+        $this->assertSame(180.0, $before);
+
+        BillingService::collect($sub, 80, $this->admin->id, null, '2026-09');
+
+        $this->assertSame(100.0, $sub->outstanding()); // 180 − 80, never 180 + 90 − 80
+        $this->assertLessThan($before, $sub->outstanding());
+        $this->assertSame(2, $sub->bills()->count()); // no September invoice conjured by the receipt
+        $this->assertNull($sub->bills()->where('period', '2026-09')->first());
+    }
+
+    public function test_collecting_a_cycle_that_was_never_billed_is_refused(): void
+    {
+        $route = Route::create(['name' => 'Test Area']);
+        $sub = Subscriber::create([
+            'route_id' => $route->id,
+            'name' => 'Flat Sub',
+            'type' => Subscriber::TYPE_FLAT,
+            'flat_fee' => 60,
+            'status' => Subscriber::STATUS_ACTIVE,
+            'created_by' => $this->admin->id,
+        ]);
+
+        try {
+            BillingService::collect($sub, 60, $this->admin->id, null, '2026-09');
+            $this->fail('Collecting a cycle with no invoice must be refused.');
+        } catch (\RuntimeException $e) {
+            $this->assertSame(__('refuse.period_not_invoiced', ['period' => '2026-09']), $e->getMessage());
+        }
+
+        $this->assertDatabaseCount('bills', 0);
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertSame(0.0, $sub->outstanding());
     }
 
     public function test_collect_with_nothing_due_throws(): void

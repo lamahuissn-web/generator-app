@@ -922,6 +922,7 @@
     "refuse.estimate_policy": "تقديرية وحدة مسموحة لكل بلاغ عدّاد معطّل (من :since) وقد استُعملت. القرار صار مطلوب: تبديل عدّاد، أو رسم ثابت، أو تمديد استثنائي.",
     "refuse.flat_bill_only_for_flat": "فاتورة الرسم الثابت تُصدَر لمشتركي الرسم الثابت فقط.",
     "refuse.nothing_to_collect": "لا يوجد رصيد متأخّر على هذا المشترك.",
+    "refuse.period_not_invoiced": "لم تُصدر فاتورة الدورة :period بعد — لا يوجد ما يُحصَّل عليها.",
     "refuse.no_bill_for_reading": "لا توجد فاتورة مرتبطة بهذه القراءة.",
     "refuse.bill_paid_delete_reading": "هذه الفاتورة مسدَّدة (:amount). اعكس الدفعات المرتبطة قبل حذف القراءة.",
     "refuse.closed_cycle_reason": "دورة :period مقفلة — التصحيح بده سبب مكتوب.",

@@ -922,6 +922,7 @@
     "refuse.estimate_policy": "One estimate is allowed per dead-meter report (since :since) and it has been used. A decision is required: replace the meter, move to a flat rate, or grant an exceptional extension.",
     "refuse.flat_bill_only_for_flat": "Flat bills only apply to flat-rate subscribers.",
     "refuse.nothing_to_collect": "This subscriber has no outstanding balance to collect.",
+    "refuse.period_not_invoiced": "The invoice for :period has not been raised yet — there is nothing to collect against it.",
     "refuse.no_bill_for_reading": "No bill found for this reading.",
     "refuse.bill_paid_delete_reading": "This bill has been paid (:amount). Reverse the related payments before deleting the reading.",
     "refuse.closed_cycle_reason": "Cycle :period is closed — a correction needs a written reason.",

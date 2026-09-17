@@ -387,6 +387,20 @@ class DemoSeeder extends Seeder
 
     private function collectRaw(Subscriber $sub, float $amount, int $collectorId, string $note, ?string $period, Carbon $date, string $method = 'cash_usd'): array
     {
+        // The office raises the month's invoice first, then takes the money: a collection can no
+        // longer issue one (see BillingService::collect). A flat-rate demo row paying a cycle that
+        // was never billed gets its bill here, dated before the receipt, so the seeded books read
+        // like a month's real work instead of money recorded against nothing. The running month's
+        // collections name no cycle, so resolve it exactly as collect() does.
+        $period ??= BillingService::currentPeriod();
+
+        if ($sub->isFlat()) {
+            $bill = BillingService::ensureFlatBill($sub, $period);
+            if ($bill->wasRecentlyCreated) {
+                $this->touchDates([$bill], $date->copy()->subDays(2));
+            }
+        }
+
         try {
             return BillingService::collect($sub, $amount, $collectorId, $note, $period, $method);
         } catch (\RuntimeException $e) {

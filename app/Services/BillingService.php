@@ -644,6 +644,20 @@ class BillingService
         });
     }
 
+    /**
+     * The cycle's subscription invoice, if it is already on the books.
+     *
+     * Special invoices are not the subscription bill: ignore them here, or one October part
+     * would stop October's subscription bill from ever being raised.
+     */
+    private static function billFor(Subscriber $subscriber, string $period): ?Bill
+    {
+        return $subscriber->bills()
+            ->where('period', $period)
+            ->where('type', '!=', Bill::TYPE_SPECIAL)
+            ->first();
+    }
+
     /** Create (or return existing) flat-rate bill for the period. */
     public static function ensureFlatBill(Subscriber $subscriber, string $period): Bill
     {
@@ -653,11 +667,7 @@ class BillingService
 
         // Special invoices are not the subscription bill: ignore them here, or one
         // October part would stop October's subscription bill from ever being raised.
-        $existing = $subscriber->bills()
-            ->where('period', $period)
-            ->where('type', '!=', Bill::TYPE_SPECIAL)
-            ->first();
-        if ($existing) {
+        if ($existing = self::billFor($subscriber, $period)) {
             return $existing;
         }
 
@@ -773,12 +783,17 @@ class BillingService
     }
 
     /**
-     * Record a collection. Flat-rate subscribers get their current-period bill
-     * created on the spot. The amount is capped at the outstanding balance and
+     * Record a collection. The amount is capped at the outstanding balance and
      * allocated oldest-bill-first (FIFO). $method records how the money arrived
      * (cash USD/LBP, Whish, OMT) — each method is its own cash box.
      *
-     * @return array{payment: Payment, applied: float, excess: float, remaining: float, bill: ?Bill}
+     * Collecting NEVER issues an invoice. Money taken at the door may only reduce
+     * what is owed, so a receipt can never make the balance grow: a cycle whose
+     * invoice has not been raised yet has nothing to collect against until the
+     * billing run issues it. $period stays in the signature because callers state
+     * the cycle they are collecting, and it is named in the refusal below.
+     *
+     * @return array{payment: Payment, applied: float, excess: float, remaining: float}
      *
      * @throws \RuntimeException when the subscriber has nothing outstanding
      */
@@ -793,17 +808,19 @@ class BillingService
     ): array {
         $period ??= self::currentPeriod();
         $amount = round(max(0, (float) $amount), 2);
-        $bill = null;
-
-        if ($subscriber->isFlat()) {
-            $bill = self::ensureFlatBill($subscriber, $period);
-        }
 
         $outstanding = $subscriber->outstanding();
         $applied = min($amount, $outstanding);
         $excess = round($amount - $applied, 2);
 
         if ($applied <= 0) {
+            // A flat-rate house whose cycle has not been billed yet is the everyday shape of
+            // "nothing to collect" — and the one case worth naming, or the collector walks away
+            // believing the account is settled when the office has simply not raised the invoice.
+            if ($subscriber->isFlat() && ! self::billFor($subscriber, $period)) {
+                throw new \RuntimeException(__('refuse.period_not_invoiced', ['period' => $period]));
+            }
+
             throw new \RuntimeException(__('refuse.nothing_to_collect'));
         }
 
