@@ -69,3 +69,42 @@ as something smaller and plainer than what was rejected. The work itself is park
 repository: `~/Downloads/002-ledger-integrity-rejected.patch`, and in a git stash named
 *"002 ledger integrity + audit trail (rejected by the office: too much complexity)"*. Nothing of it is
 in the program.
+
+---
+
+## Deferred: making the panel easier day to day (2026-09-15)
+
+The office asked what would make the program easier to use, and said «نصائح جيدة بس لبعدين» — good
+advice, but later. Recorded here so it is picked up deliberately rather than rediscovered. Ordered by
+what it costs the office today, not by what is interesting to build.
+
+**Three small things that are risky to leave:**
+
+- **The nightly backup never runs.** The schedule is registered but the crontab is empty, so nothing
+  scheduled has ever fired: `* * * * * cd <project> && php artisan schedule:run >> /dev/null 2>&1`.
+- **Action buttons on the panel need a sweep.** In the office's browser a `wire:click` never reached
+  Livewire (twenty clicks, no request, no error) while the same page's file input worked; the import's
+  apply was moved to a native form for that reason. If the fault is general, every action button is
+  dead for him — exports, editing a handover, saving settings. One minute to check: press «تصدير CSV»
+  on the subscriber list.
+- **A restore has never succeeded.** The dump is written and verified, but restoring died on MySQL
+  permissions (the app's user cannot create a database). A backup that has never been restored is a
+  hope, not a backup.
+
+**Small work, large daily saving:**
+
+- **Focus + Enter on the reading field.** The office enters dozens of slips a day; today each one is a
+  click into the field and a click on save.
+- **A daily summary to Telegram.** One message at closing: collected today, handed in, in the office,
+  spent, how many households are behind. The bot and the schedule already exist.
+- **WhatsApp reminders for the overdue list**, with the amount and the date, and a record of who was
+  sent what so nobody is chased twice. The WhatsApp service already exists.
+- **Order the reading list the way the street is walked**, not alphabetically, so a collector does not
+  double back.
+
+**Bigger, but the street asks for it:**
+
+- **A data-entry role.** One role exists, so the computer cannot be handed to an employee without also
+  handing over the money settings, the expenses and deletion.
+- **The collector app working without a signal** — save the reading or the payment locally and sync
+  when the phone finds the network again.
