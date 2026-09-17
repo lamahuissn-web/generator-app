@@ -71,7 +71,7 @@
                         <div class="kt-input">
                             <i class="ki-filled ki-sms"></i>
                             <input id="email" type="email" name="email" value="{{ old('email') }}" required autofocus
-                                   autocomplete="username">
+                                   autocomplete="username" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false">
                         </div>
                     </div>
 

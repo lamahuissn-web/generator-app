@@ -26,6 +26,10 @@ class AuthController extends Controller
 
     public function login(Request $request): RedirectResponse
     {
+        // The address as the phone keyboard meant it: an invisible bidi mark or a space left by
+        // autofill must not decide whether the office can sign in (see clean_email()).
+        $request->merge(['email' => clean_email($request->input('email'))]);
+
         $credentials = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],

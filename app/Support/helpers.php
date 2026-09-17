@@ -229,3 +229,31 @@ if (! function_exists('periods_with_data')) {
             ->all();
     }
 }
+
+if (! function_exists('clean_email')) {
+    /**
+     * An email as the phone keyboard meant it.
+     *
+     * Android keyboards and autofill insert invisible characters into a typed address: bidi marks
+     * and isolates (U+200E/U+200F/U+2066–U+2069), zero-width spaces, a non-breaking space, a space
+     * after an accepted suggestion. Nothing looks wrong on screen, and the browser's own email
+     * check refuses to submit — blaming a character the operator cannot see. Everything that
+     * cannot legally appear in an address is stripped here, so "looks identical" becomes "is
+     * identical" before the address is validated or used.
+     */
+    function clean_email(string|int|float|null $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $stripped = preg_replace(
+            '/[\x{0000}-\x{0020}\x{007F}-\x{009F}\x{00A0}\x{1680}\x{180E}\x{2000}-\x{200F}'
+            .'\x{2028}-\x{202F}\x{205F}\x{2060}-\x{206F}\x{3000}\x{FEFF}]/u',
+            '',
+            (string) $value
+        );
+
+        return mb_strtolower($stripped ?? '', 'UTF-8');
+    }
+}

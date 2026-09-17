@@ -17,6 +17,10 @@ class AuthController extends Controller
 
     public function login(Request $request): RedirectResponse
     {
+        // A collector types on a phone: strip the invisible characters a keyboard or autofill
+        // leaves behind before the address is validated (see clean_email()).
+        $request->merge(['email' => clean_email($request->input('email'))]);
+
         $credentials = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required'],
