@@ -184,11 +184,15 @@ class CreditBalanceTest extends TestCase
         // cash — so the balance has to be named separately or his 40 cents are invisible here.
         $this->assertSame(0.40, $statement['totals']['held']);
 
+        // The sheet is rendered in the SIGNED-IN user's locale, so the label is read in that same
+        // locale explicitly — and the label, unlike a CSS class name, appears only when the box does.
+        // The box's own markup, not a translated label: the label depends on whether the close is a
+        // credit or a carried balance, and the CSS ships the class name on every page either way.
         $this->actingAs($this->admin)
             ->get(route('print.statement', ['subscriber' => $sub->id, 'size' => 'a4']))
             ->assertOk()
-            ->assertSee(__('col.cst_held'), false)
-            ->assertSee(__('col.cst_held_note'), false);
+            ->assertSee('sum-box sum-held', false)
+            ->assertSee('$0.40', false);
     }
 
     public function test_a_subscriber_carrying_nothing_gets_no_such_line(): void
@@ -202,7 +206,7 @@ class CreditBalanceTest extends TestCase
         $this->actingAs($this->admin)
             ->get(route('print.statement', ['subscriber' => $sub->id, 'size' => 'a4']))
             ->assertOk()
-            ->assertDontSee(__('col.cst_held'), false);
+            ->assertDontSee('sum-box sum-held', false);
     }
 
     // ---- the fairness proof ---------------------------------------------------------------

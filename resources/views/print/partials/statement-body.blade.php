@@ -151,54 +151,60 @@
     // Three boxes when there is a carried-over balance, two when the sheet covers everything.
     $hasOpening = $opening != 0.0;
 @endphp
+@php
+    /*
+     * The balance we hold belongs BESIDE the sums, not under them, and the heavy band is for the one
+     * number the customer came for: what he still owes, or the fact that nothing is owed. Money in
+     * HIS favour is not an alarm — it gets a box in the same row, the same weight as the two figures
+     * the office reads every time, and never a long sentence underneath. One mention, never two.
+     */
+    $held = (float) ($t['held'] ?? 0);
+    $credit = $due < 0 ? round(abs($due), 2) : $held;
+    $creditLabel = $due < 0 ? __('col.cst_credit') : __('col.cst_held');
+    /*
+     * WHY the balance exists, in one short line of small print under the figure. The two cases are
+     * not interchangeable: a NEGATIVE close can only mean receipts took more than the invoices asked
+     * for (money paid at the door), while a balance carried beside a close that is not negative came
+     * from the invoice's own rounding — the only other way a subscriber's money comes to rest here.
+     */
+    $creditReason = $due < 0 ? __('col.cst_held_reason') : __('col.cst_credit_reason');
+    $cells = 2 + ($hasOpening ? 1 : 0) + ($credit > 0 ? 1 : 0);
+    $w = match ($cells) { 4 => 'sum-w4', 3 => 'sum-w3', default => 'sum-w2' };
+@endphp
 <table class="cstmt-sum">
     <tr>
         @if ($hasOpening)
-            <td class="sum-box sum-opening sum-w3">
+            <td class="sum-box sum-opening {{ $w }}">
                 <div class="sum-k">{{ __('col.cst_opening') }}</div>
                 <div class="sum-v">{!! $amount($opening) !!}</div>
             </td>
         @endif
-        <td class="sum-box sum-inv {{ $hasOpening ? 'sum-w3-wide' : 'sum-w2' }}">
+        <td class="sum-box sum-inv {{ $w }}">
             <div class="sum-k">{{ __('col.cst_total_bills') }}</div>
             <div class="sum-v">{!! $amount((float) $t['debit']) !!}</div>
         </td>
-        <td class="sum-box sum-paid {{ $hasOpening ? 'sum-w3' : 'sum-w2' }}">
+        <td class="sum-box sum-paid {{ $w }}">
             <div class="sum-k">{{ __('col.cst_total_paid') }}</div>
             <div class="sum-v">{!! $amount((float) $t['credit']) !!}</div>
         </td>
+        @if ($credit > 0)
+            <td class="sum-box sum-held {{ $w }}">
+                <div class="sum-k">{{ $creditLabel }}</div>
+                <div class="sum-v">{!! $amount($credit) !!}</div>
+                <div class="sum-reason">{{ $creditReason }}</div>
+            </td>
+        @endif
     </tr>
 </table>
 
-@php
-    $dueClass = $due > 0 ? 'due-owed' : ($due < 0 ? 'due-credit' : 'due-settled');
-    $dueLabel = $due > 0 ? __('col.cst_due') : ($due < 0 ? __('col.cst_credit') : __('col.cst_settled'));
-    $dueNote = $due > 0
-        ? __('col.cst_due_note')
-        : ($due < 0 ? __('col.cst_credit_note') : __('col.cst_settled_note'));
-@endphp
-
-<table class="cstmt-due {{ $dueClass }}">
-    <tr>
-        <td class="due-k">
-            {{ $dueLabel }}
-            <span class="due-note">{{ $dueNote }}</span>
-        </td>
-        <td class="due-v">{!! $amount($due) !!}</td>
-    </tr>
-</table>
-
-@if (($t['held'] ?? 0) > 0)
-    {{-- His own money, waiting with the office. Named on the paper because a balance nobody can see
-         is a balance nobody returns, and because the collector at the door needs to know that the
-         next invoice is already partly paid. Reuses the due band's own credit colour. --}}
-    <table class="cstmt-due due-credit">
+@if ($due >= 0)
+    <table class="cstmt-due {{ $due > 0 ? 'due-owed' : 'due-settled' }}">
         <tr>
             <td class="due-k">
-                {{ __('col.cst_held') }}
-                <span class="due-note">{{ __('col.cst_held_note') }}</span>
+                {{ $due > 0 ? __('col.cst_due') : __('col.cst_settled') }}
+                <span class="due-note">{{ $due > 0 ? __('col.cst_due_note') : __('col.cst_settled_note') }}</span>
             </td>
-            <td class="due-v">{!! $amount((float) $t['held']) !!}</td>
+            <td class="due-v">{!! $amount($due) !!}</td>
         </tr>
     </table>
 @endif
@@ -207,7 +213,9 @@
     <div class="note">{{ __('col.cst_earlier', ['count' => $hidden, 'from' => $from]) }}</div>
 @endif
 
-@if (collect($rows)->contains(fn ($row) => (float) $row['balance'] < 0))
+@if ($credit <= 0 && collect($rows)->contains(fn ($row) => (float) $row['balance'] < 0))
+    {{-- Only when the box above is not already saying it: the long explanation and the quiet box
+         are two ways of telling the customer the same thing. --}}
     <div class="note">{{ __('col.cst_negative_note') }}</div>
 @endif
 

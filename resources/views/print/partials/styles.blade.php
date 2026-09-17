@@ -142,11 +142,15 @@
         text-align: {{ $isRtl ? 'right' : 'left' }};
         vertical-align: middle;
     }
-    table.cstmt-sum { margin-top: 10px; page-break-inside: avoid; }
+    table.cstmt-sum { margin-top: 10px; page-break-inside: avoid; table-layout: fixed; }
     table.cstmt-sum td.sum-w2 { width: 50%; }
     table.cstmt-sum td.sum-w3 { width: 33%; }
-    table.cstmt-sum td.sum-w3-wide { width: 34%; }
+    table.cstmt-sum td.sum-w4 { width: 25%; }
     table.cstmt-sum .sum-k { font-size: .85em; color: #475569; }
+    /* Same box as the two figures beside it — the tint is on the box, not on the number, so the
+       three read as one family and the balance is not a different kind of thing. */
+    table.cstmt-sum td.sum-held { border-color: #a5f3fc; background: #ecfeff; padding-bottom: 9px; }
+    table.cstmt-sum .sum-reason { margin-top: 2px; font-size: .78em; line-height: 1.3; color: #475569; }
     table.cstmt-sum .sum-v {
         font-size: 1.25em; font-weight: bold;
         font-variant-numeric: tabular-nums; white-space: nowrap;
@@ -168,8 +172,10 @@
     table.cstmt-due.due-owed .due-note { color: #cbd5e1; }
     table.cstmt-due.due-settled td { background: #15803d; border: 1px solid #15803d; }
     table.cstmt-due.due-settled .due-note { color: #dcfce7; }
-    table.cstmt-due.due-credit td { background: #b45309; border: 1px solid #b45309; }
-    table.cstmt-due.due-credit .due-note { color: #fef3c7; }
+    /* Money in HIS favour: calm and positive, not the alarm the owed band carries. A credit is good
+       news to the customer, and it must not shout as loudly as the one number above it. */
+    table.cstmt-due.due-credit td { background: #0e7490; border: 1px solid #0e7490; }
+    table.cstmt-due.due-credit .due-note { color: #cffafe; }
 
     .muted { color: #64748b; }
     .strong { font-weight: bold; }
