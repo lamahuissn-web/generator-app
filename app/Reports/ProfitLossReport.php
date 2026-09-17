@@ -46,13 +46,20 @@ final class ProfitLossReport
         $end = $start->copy()->endOfMonth();
 
         $invoiced = (float) Bill::where('period', $this->month)->sum('total');
-        $collected = (float) Payment::whereBetween('created_at', [$start, $end])->sum('amount');
+
+        $from = $start->toDateString();
+        $to = $end->toDateString();
+
+        // Cash and earnings are counted on the day the money was COLLECTED, not the day it was typed
+        // in: a receipt written on the 2nd for the 31st is the earlier month's money. This is the
+        // scope the collection reports already use (Payment::scopeCollectedInRange).
+        $collected = (float) Payment::query()->collectedInRange($from, $to)->sum('amount');
 
         // What of that cash was actually the office's. A receipt carries the money that settled
         // invoices AND the money that is simply the subscriber's — the collector takes a whole
         // number and the difference waits on his account — so the two are read apart, or the office
         // counts a liability as income and prints a profit it cannot touch.
-        $earned = (float) Payment::whereBetween('created_at', [$start, $end])
+        $earned = (float) Payment::query()->collectedInRange($from, $to)
             ->selectRaw('COALESCE(SUM(COALESCE(applied, amount)), 0) as earned')
             ->value('earned');
         $heldForSubscribers = (float) Subscriber::query()
@@ -63,7 +70,7 @@ final class ProfitLossReport
             ->selectRaw('COALESCE(SUM(credit_applied), 0) as used')
             ->value('used');
 
-        $expensesTotal = (float) Expense::whereBetween('expense_date', [$start->toDateString(), $end->toDateString()])
+        $expensesTotal = (float) Expense::whereBetween('expense_date', [$from, $to])
             ->sum('amount');
 
         return [

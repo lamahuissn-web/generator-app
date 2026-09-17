@@ -122,4 +122,27 @@ class ProfitLossSeparationTest extends TestCase
             ->assertSee(__('pl.earned'), false)
             ->assertSee(__('pl.held'), false);
     }
+
+    public function test_a_back_dated_receipt_lands_in_the_month_it_was_collected(): void
+    {
+        $sub = $this->flatSub(20.00);
+        $lastMonth = now()->subMonthNoOverflow();
+
+        Payment::create([
+            'number' => 'REC-LAST-0001',
+            'subscriber_id' => $sub->id,
+            'collector_id' => $this->admin->id,
+            'amount' => 20.00,
+            'applied' => 20.00,
+            'method' => Payment::METHOD_CASH_USD,
+            'collected_on' => $lastMonth->copy()->endOfMonth()->toDateString(),
+        ]);
+
+        $this->assertSame(20.00, ProfitLossReport::forMonth($lastMonth->format('Y-m'))->data()['earned']);
+        $this->assertSame(
+            0.00,
+            ProfitLossReport::forMonth(now()->format('Y-m'))->data()['earned'],
+            'money collected for last month is not this month\'s earning'
+        );
+    }
 }
