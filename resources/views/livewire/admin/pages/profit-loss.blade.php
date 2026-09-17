@@ -6,23 +6,52 @@
     {{-- A single month, so there is nothing to reset back to. --}}
     <x-admin.filters :fields="$this->filterSchema()" :values="$filters" id-prefix="pl" :reset="false" />
 
-    {{-- The four figures the month comes down to, in the order they are reasoned about:
-         what was billed, what came in, what that rate is, what was spent. --}}
+    {{-- The figures the month comes down to, in the order they are reasoned about: what was billed,
+         what came in, how much of what came in was actually ours, and what was spent. The drawer's
+         cash and the office's earning are two different questions, so they get two different cards. --}}
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <x-admin.stat :label="__('pl.invoiced')" :value="money($report['invoiced'])" icon="ki-receipt-square"
                       :hint="$report['label']" />
-        <x-admin.stat :label="__('pl.income')" :value="money($report['collected'])" icon="ki-wallet" tone="success" />
-        <x-admin.stat :label="__('pl.rate')" :value="ltr_isolate(number_format($report['rate'], 1).'%')" icon="ki-percentage"
-                      :tone="$report['rate'] >= 80 ? 'success' : ($report['rate'] >= 50 ? 'warning' : 'danger')" />
+        <x-admin.stat :label="__('pl.income')" :value="money($report['collected'])" icon="ki-wallet"
+                      :hint="__('pl.rate_sub', ['rate' => number_format($report['rate'], 1)])" />
+        <x-admin.stat :label="__('pl.earned')" :value="money($report['earned'])" icon="ki-chart-line-up"
+                      tone="success" :hint="__('pl.earned_hint')" />
         <x-admin.stat :label="__('pl.expenses_total')" :value="money($report['expenses'])" icon="ki-chart-line-down"
                       tone="danger" />
+    </div>
+
+    {{-- What the office holds FOR subscribers: their own money, waiting. It is a liability and not
+         income, and the month moves it in two directions — receipts add to it, invoices spend it. --}}
+    <div class="kt-card">
+        <div class="kt-card-content grid gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <span class="flex flex-wrap items-center gap-2 text-sm font-medium text-mono">
+                    {{ __('pl.held') }}
+                    <span class="text-xs text-muted-foreground">{{ __('pl.held_hint') }}</span>
+                </span>
+                <span class="amount-cell text-xl font-semibold text-mono">{{ money($report['held_for_subscribers']) }}</span>
+            </div>
+            <div class="grid gap-2 text-sm sm:grid-cols-2">
+                <div class="flex items-baseline justify-between gap-3">
+                    <span class="text-muted-foreground">{{ __('pl.credit_added') }}</span>
+                    <span class="amount-cell font-medium text-mono">{{ money($report['credit_added']) }}</span>
+                </div>
+                <div class="flex items-baseline justify-between gap-3">
+                    <span class="text-muted-foreground">{{ __('pl.credit_spent') }}</span>
+                    <span class="amount-cell font-medium text-mono">{{ money($report['credit_spent']) }}</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     {{-- Net is called out on its own: it is the number that decides whether the month worked,
          and it is the only figure here that can legitimately be negative. --}}
     <div class="kt-card">
         <div class="kt-card-content flex flex-wrap items-center justify-between gap-3">
-            <span class="text-sm font-medium text-mono">{{ __('pl.net') }}</span>
+            <span class="grid gap-0.5">
+                <span class="text-sm font-medium text-mono">{{ __('pl.net') }}</span>
+                <span class="text-xs text-muted-foreground">{{ __('pl.net_sub') }}</span>
+            </span>
             <span @class([
                 'amount-cell text-3xl font-semibold',
                 'text-green-700 dark:text-green-500' => $report['net'] >= 0,

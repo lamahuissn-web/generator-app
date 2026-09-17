@@ -66,6 +66,10 @@ class ProfitLoss extends Component
         fputcsv($handle, []);
         fputcsv($handle, [__('pl.invoiced'), number_format($data['invoiced'], 2, '.', '')]);
         fputcsv($handle, [__('pl.income'), number_format($data['collected'], 2, '.', '')]);
+        fputcsv($handle, [__('pl.earned'), number_format($data['earned'], 2, '.', '')]);
+        fputcsv($handle, [__('pl.held'), number_format($data['held_for_subscribers'], 2, '.', '')]);
+        fputcsv($handle, [__('pl.credit_added'), number_format($data['credit_added'], 2, '.', '')]);
+        fputcsv($handle, [__('pl.credit_spent'), number_format($data['credit_spent'], 2, '.', '')]);
         fputcsv($handle, [__('pl.rate'), number_format($data['rate'], 1, '.', '').'%']);
         fputcsv($handle, [__('pl.expenses_total'), number_format($data['expenses'], 2, '.', '')]);
         fputcsv($handle, [__('pl.net'), number_format($data['net'], 2, '.', '')]);
