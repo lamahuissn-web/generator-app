@@ -96,6 +96,16 @@ class SubscribersTable extends TableDefinition
                 ])->filter()->implode(' · ') ?: null,
             ],
             [
+                // His own money, waiting with the office. Shown on the list because a balance nobody
+                // can see is a balance nobody returns: it comes off his next invoice (credit_applied),
+                // and a subscriber who leaves is owed it at the door.
+                'key' => 'credit',
+                'label' => __('t.credit'),
+                'type' => 'money',
+                'sortable' => true,
+                'render' => fn (Subscriber $r): ?string => (float) $r->credit > 0 ? money($r->credit) : null,
+            ],
+            [
                 'key' => 'route.name',
                 'label' => __('t.route'),
                 'sortable' => true,

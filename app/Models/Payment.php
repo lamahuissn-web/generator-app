@@ -31,11 +31,12 @@ class Payment extends Model
         self::METHOD_OTHER => 'Other',
     ];
 
-    protected $fillable = ['number', 'subscriber_id', 'collector_id', 'amount', 'method', 'collected_on', 'note', 'lbp_amount', 'lbp_rate'];
+    protected $fillable = ['number', 'subscriber_id', 'collector_id', 'amount', 'applied', 'method', 'collected_on', 'note', 'lbp_amount', 'lbp_rate'];
 
     protected function casts(): array
     {
         return [
+            'applied' => 'float',
             'lbp_amount' => 'float',
             'lbp_rate' => 'float',
             'collected_on' => 'date',

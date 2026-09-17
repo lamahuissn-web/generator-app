@@ -236,8 +236,8 @@ class CollectPayment extends ActionDefinition
             'method' => $result['payment']->methodLabel(),
         ]);
 
-        if (($result['excess'] ?? 0) > 0) {
-            $message .= ' '. __('a.collect_excess', ['excess' => money_ltr($result['excess'])]);
+        if (($result['credited'] ?? 0) > 0) {
+            $message .= ' '. __('a.collect_excess', ['excess' => money_ltr($result['credited'])]);
         }
 
         return ['ok' => true, 'message' => $message];

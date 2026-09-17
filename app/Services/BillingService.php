@@ -297,18 +297,22 @@ class BillingService
         $usage = round($consumption * $price, 2);
         $maintenance = $subscriber->effectiveMaintenanceFee();
         $prevDebt = self::outstandingBefore($subscriber, $period);
-        $total = self::roundedTotal($usage + $maintenance);
 
         // The rounding is CARRIED BY THE CHARGE, not by a line of its own: the printed invoice has
         // to add up on its own terms (usage + fees = total), and the office asked for no mention of
         // rounding anywhere on the paper. What was measured does not move: the readings and the
         // consumption above stay exactly what the meter said — the money line is where the office's
-        // rule lands.
-        $usage = round($total - $maintenance, 2);
+        // rule lands. The credit he carries rides in the same line and is named as itself:
+        // usage + fees − the credit on the invoice = the total below it.
+        $credit = self::billCredit($subscriber, round($usage + $maintenance, 2));
+        $creditApplied = $credit['applied'];
+        $total = $credit['total'];
+        $usage = round($total + $creditApplied - $maintenance, 2);
+        self::saveCredit($subscriber, $credit['balance']);
 
         return DB::transaction(function () use (
             $subscriber, $period, $currentReading, $prevValue, $consumption,
-            $userId, $note, $price, $usage, $maintenance, $prevDebt, $total,
+            $userId, $note, $price, $usage, $maintenance, $prevDebt, $total, $creditApplied,
             $estimated, $estimateReason, $swap, $caseOpen, $extension,
         ) {
             $reading = Reading::create([
@@ -355,6 +359,7 @@ class BillingService
                 'maintenance_fee' => $maintenance,
                 'flat_amount' => 0,
                 'prev_debt' => $prevDebt,
+                'credit_applied' => $creditApplied,
                 'total' => $total,
                 'paid_amount' => 0,
             ]);
@@ -581,12 +586,13 @@ class BillingService
         // The charge as the meter and the tariff produced it: what "is there anything to bill here"
         // must be answered on (a rounded-up $0.30 is still a charge of 30 cents, not a real invoice).
         $charged = round($usage + $maintenance + $flat, 2);
-        $total = self::roundedTotal($charged);
+        $credit = self::billCredit($subscriber, $charged);
+        $total = $credit['total'];
 
         // …and the rounding lands on the line that carries the charge — consumption for a metered
         // house, the agreed fee for a flat one — so the invoice's own addition still comes out:
-        // usage + maintenance + flat = the total, on the paper and in the books.
-        $absorbed = round($total - $charged, 2);
+        // usage + maintenance + flat − the credit he carries = the total, on paper and in the books.
+        $absorbed = round($total + $credit['applied'] - $charged, 2);
         if ($subscriber->isMetered()) {
             $usage = round($usage + $absorbed, 2);
         } else {
@@ -597,6 +603,8 @@ class BillingService
         $row['usage'] = $usage;
         $row['maintenance'] = $maintenance;
         $row['flat'] = $flat;
+        $row['credit_applied'] = $credit['applied'];
+        $row['credit_balance'] = $credit['balance'];
         $row['total'] = $total;
 
         $state = match (true) {
@@ -627,9 +635,14 @@ class BillingService
                 'maintenance_fee' => $row['maintenance'],
                 'flat_amount' => $row['flat'],
                 'prev_debt' => $row['prev_debt'],
+                'credit_applied' => $row['credit_applied'] ?? 0,
                 'total' => $row['total'],
                 'paid_amount' => 0,
             ]);
+
+            // The bill's own credit balance was computed when the row was prepared; the run writes it
+            // with the bill, so a preview and the invoice it becomes can never disagree.
+            self::saveCredit($subscriber, (float) ($row['credit_balance'] ?? $subscriber->credit));
 
             Audit::log('bill.generated', $bill, [
                 'period' => $period,
@@ -674,11 +687,16 @@ class BillingService
         $flatFee = (float) ($subscriber->flat_fee ?? 0);
         $prevDebt = self::outstandingBefore($subscriber, $period);
 
-        // The agreed fee carries the office's rounding, so the printed line and the total below it
-        // are the same figure: an invoice whose lines do not add up is an argument at the door.
-        $total = self::roundedTotal($flatFee);
+        // The agreed fee carries the office's rounding — and the credit he carries with it — so the
+        // printed line and the total below it are the same figure: an invoice whose lines do not add
+        // up is an argument at the door.
+        $credit = self::billCredit($subscriber, $flatFee);
+        $creditApplied = $credit['applied'];
+        $total = $credit['total'];
+        $flat = round($total + $creditApplied, 2);
+        self::saveCredit($subscriber, $credit['balance']);
 
-        return DB::transaction(function () use ($subscriber, $period, $total, $prevDebt) {
+        return DB::transaction(function () use ($subscriber, $period, $total, $flat, $creditApplied, $prevDebt) {
             return Bill::create([
                 'number' => self::billNumber($period, $subscriber->id),
                 'subscriber_id' => $subscriber->id,
@@ -689,8 +707,9 @@ class BillingService
                 'kwh_price' => null,
                 'usage_amount' => 0,
                 'maintenance_fee' => 0,
-                'flat_amount' => $total,
+                'flat_amount' => $flat,
                 'prev_debt' => $prevDebt,
+                'credit_applied' => $creditApplied,
                 'total' => $total,
                 'paid_amount' => 0,
             ]);
@@ -717,6 +736,69 @@ class BillingService
         return Setting::get(self::ROUNDING_KEY, self::ROUND_NONE) === self::ROUND_CEIL_DOLLAR
             ? ceil($total)
             : $total;
+    }
+
+    /**
+     * The credit a bill leaves behind, and what that bill charges.
+     *
+     * The office's reality, in his words: a bill of 51.60 and a collector who has no change takes
+     * 52 — a whole number, every month. Money taken above the exact charge is the SUBSCRIBER'S, not
+     * the office's, and it has to come back to him: so what he carries with the office is read
+     * BEFORE the rounding is applied, and the bill puts back whatever the rounding added.
+     *
+     *   total   = the rounding rule applied to (this cycle's charge − the credit he carries)
+     *   applied = the part of his credit the paper can name (0 when the rounding swallowed it)
+     *   balance = his credit AFTER this bill: what he carried + total − exact
+     *
+     * That last line is the whole ledger in one subtraction. A cycle that cost 51.60 billed at 52.00
+     * leaves him 40 cents; a later cycle where the rounding lands under — 51.00 for the same 51.60 —
+     * spends them. It can never go negative, and that is arithmetic rather than hope: the ceiling
+     * that produced `total` is what stops it (total >= exact − carrying).
+     *
+     * Reading the plan changes nothing — a preview may show it, only a bill saves it (saveCredit).
+     *
+     * @return array{total: float, applied: float, balance: float}
+     */
+    public static function billCredit(Subscriber $subscriber, float $exact): array
+    {
+        $exact = round($exact, 2);
+        $carrying = round(max(0, (float) ($subscriber->credit ?? 0)), 2);
+        $total = self::roundedTotal(round(max(0, $exact - $carrying), 2));
+
+        return [
+            'total' => $total,
+            'applied' => round(max(0, $exact - $total), 2),
+            'balance' => round($carrying + $total - $exact, 2),
+        ];
+    }
+
+    /** Put a computed balance on the subscriber: a bill and the credit it moves land together, or not at all. */
+    public static function saveCredit(Subscriber $subscriber, float $balance): void
+    {
+        $subscriber->forceFill(['credit' => round(max(0, $balance), 2)])->save();
+    }
+
+    /**
+     * Money that arrived above the exact charge waits on the subscriber's own account.
+     *
+     * The collector takes a whole number at the door because he carries no change, so this is the
+     * ordinary case and not an accident: the receipt records the CASH in `amount` (what the drawer
+     * holds) and what settled bills in `applied` (what was earned), and the difference is credited
+     * here instead of disappearing into a pocket and out of the books.
+     *
+     * @return float the amount added to his balance
+     */
+    public static function accrueCredit(Subscriber $subscriber, float $paid, float $exact): float
+    {
+        $extra = round($paid - $exact, 2);
+
+        if ($extra <= 0) {
+            return 0.0;
+        }
+
+        self::saveCredit($subscriber, (float) ($subscriber->credit ?? 0) + $extra);
+
+        return $extra;
     }
 
     /**
@@ -762,7 +844,9 @@ class BillingService
         $usd = round($lbp / $rate, 2);
 
         $result = DB::transaction(function () use ($subscriber, $usd, $collectorId, $note, $period, $method, $lbp, $rate, $collectedOn): array {
-            $result = self::collect($subscriber, $usd, $collectorId, $note, $period, $method, $collectedOn);
+            // holdExtra=false: the lira above the balance is change handed back, and change is not
+            // money received (see the docblock above) — so it is neither recorded nor credited.
+            $result = self::collect($subscriber, $usd, $collectorId, $note, $period, $method, $collectedOn, false);
 
             $appliedLbp = round($result['applied'] * $rate, 0);
 
@@ -805,6 +889,7 @@ class BillingService
         ?string $period = null,
         string $method = Payment::METHOD_CASH_USD,
         ?CarbonInterface $collectedOn = null,
+        bool $holdExtra = true,
     ): array {
         $period ??= self::currentPeriod();
         $amount = round(max(0, (float) $amount), 2);
@@ -824,11 +909,18 @@ class BillingService
             throw new \RuntimeException(__('refuse.nothing_to_collect'));
         }
 
-        return DB::transaction(function () use ($subscriber, $collectorId, $applied, $note, $excess, $outstanding, $method, $collectedOn) {
+        return DB::transaction(function () use ($subscriber, $collectorId, $amount, $applied, $note, $excess, $outstanding, $method, $collectedOn, $holdExtra) {
             $payment = Payment::create([
                 'subscriber_id' => $subscriber->id,
                 'collector_id' => $collectorId,
-                'amount' => $applied,
+                // The cash that changed hands — what the collector hands over and the drawer counts.
+                // A lira collection passes holdExtra=false: there the lira above the settling amount
+                // is CHANGE HANDED BACK (its own rule, see collectInLira), so the receipt records
+                // what was kept, not what passed through his hand.
+                'amount' => $holdExtra ? $amount : $applied,
+                // …and the part of it that settled bills: the money actually earned. The difference is
+                // the subscriber's own balance (see accrueCredit), which is why the books still balance.
+                'applied' => $applied,
                 'method' => $method,
                 // Left empty unless the operator SAID which day the money was collected: everything
                 // that reads it falls back to the entry day, so the ordinary case is unchanged and
@@ -862,10 +954,16 @@ class BillingService
                 $remainingToAllocate = round($remainingToAllocate - $take, 2);
             }
 
+            // Taken above the exact charge — the ordinary case, since the collector carries no change
+            // — and it belongs to the subscriber rather than to the office. It waits on his account.
+            $credited = $holdExtra ? self::accrueCredit($subscriber, $amount, $applied) : 0.0;
+
             Audit::log('payment.created', $payment, [
                 'subscriber_id' => $subscriber->id,
+                'cash' => $amount,
                 'applied' => $applied,
                 'excess' => $excess,
+                'credited' => $credited,
                 'remaining' => round($outstanding - $applied, 2),
                 'method' => $method,
                 'note' => $note,
@@ -875,6 +973,7 @@ class BillingService
                 'payment' => $payment,
                 'applied' => $applied,
                 'excess' => $excess,
+                'credited' => $credited,
                 'remaining' => round($outstanding - $applied, 2),
             ];
         });
@@ -891,6 +990,16 @@ class BillingService
         $payment->loadMissing('allocations');
 
         DB::transaction(function () use ($payment) {
+            // Money this receipt took above the charge was credited to the subscriber (see collect):
+            // taking the receipt back has to take that credit back too, or reversing a mistyped
+            // amount leaves a balance on the books that nobody ever handed over.
+            $subscriber = $payment->subscriber;
+            $extra = round((float) $payment->amount - (float) ($payment->applied ?? $payment->amount), 2);
+
+            if ($subscriber !== null && $extra > 0) {
+                self::saveCredit($subscriber, max(0, (float) ($subscriber->credit ?? 0) - $extra));
+            }
+
             foreach ($payment->allocations as $allocation) {
                 $bill = Bill::find($allocation->bill_id);
                 if ($bill) {

@@ -404,8 +404,8 @@ class SubscriberShow extends Component
                 } else {
                     $this->flashMessage($message);
                 }
-            } elseif ($result['excess'] > 0) {
-                $this->flashMessage(__('portal.flash_collected', ['amount' => money($result['applied']), 'excess' => money($result['excess'])]), 'warning');
+            } elseif (($result['credited'] ?? 0) > 0) {
+                $this->flashMessage(__('portal.flash_collected', ['amount' => money($result['applied']), 'excess' => money($result['credited'])]), 'warning');
             } else {
                 $this->flashMessage(__('portal.flash_payment_ok'));
             }

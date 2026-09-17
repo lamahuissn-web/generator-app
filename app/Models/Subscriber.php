@@ -28,7 +28,7 @@ class Subscriber extends Model
     protected $fillable = [
         'opening_reading', 'opening_period',
         'route_id', 'name', 'phone', 'address', 'meter_no', 'type',
-        'amperage', 'maintenance_fee', 'maintenance_mode', 'flat_fee', 'status', 'notes', 'created_by',
+        'amperage', 'maintenance_fee', 'credit', 'maintenance_mode', 'flat_fee', 'status', 'notes', 'created_by',
         'meter_broken_reported_at', 'meter_broken_note', 'meter_broken_estimates', 'meter_broken_reported_by',
     ];
 
@@ -37,6 +37,7 @@ class Subscriber extends Model
         return [
             'meter_broken_reported_at' => 'datetime',
             'opening_reading' => 'float',
+            'credit' => 'float',
         ];
     }
 

@@ -164,6 +164,14 @@
                 <td class="num">{{ money($bill->flat_amount) }}</td>
             </tr>
         @endif
+        @if ((float) $bill->credit_applied > 0)
+            {{-- His own money, spent on this invoice: named so the addition below still comes out. --}}
+            <tr>
+                <td>{{ __('prt.credit_from_before') }}</td>
+                <td class="num"></td>
+                <td class="num"><span class="ltr">− {{ money($bill->credit_applied) }}</span></td>
+            </tr>
+        @endif
     </tbody>
     <tfoot>
         @php

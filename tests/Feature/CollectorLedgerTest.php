@@ -192,8 +192,11 @@ class CollectorLedgerTest extends TestCase
         $this->assertNotNull($handover);
         $this->assertSame(15.0, (float) $handover->amount);
         $this->assertSame('quick settlement', $handover->note);
-        // Collected 25 (capped at the 25 owed), handed 15 -> 10 still in hand.
-        $this->assertSame(10.0, CollectionService::inHand($this->collector->id));
+        // He took 40 at the door for a 25 debt: the 15 above it is the subscriber's own balance
+        // (BillingService::accrueCredit), and it is still CASH in the collector's hand until he
+        // hands it over — 40 taken, 15 handed -> 25 in hand. The old figure, 10, was the applied
+        // amount: the drawer counted money the collector was not carrying.
+        $this->assertSame(25.0, CollectionService::inHand($this->collector->id));
         $this->assertSame(1, AuditLog::where('action', 'handover.created')->count());
     }
 
