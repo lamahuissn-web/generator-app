@@ -13,7 +13,7 @@ class Bill extends Model
 
     protected $fillable = [
         'number', 'subscriber_id', 'period', 'type', 'title', 'note', 'reading_id', 'consumption', 'kwh_price',
-        'usage_amount', 'maintenance_fee', 'flat_amount', 'items_amount', 'prev_debt', 'credit_applied', 'total', 'paid_amount',
+        'usage_amount', 'maintenance_fee', 'flat_amount', 'items_amount', 'prev_debt', 'credit_applied', 'credit_created', 'total', 'paid_amount',
     ];
 
     public function subscriber(): BelongsTo

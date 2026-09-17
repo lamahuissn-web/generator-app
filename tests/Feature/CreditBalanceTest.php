@@ -312,6 +312,36 @@ class CreditBalanceTest extends TestCase
         $this->assertSame(0.80, $this->creditOf($sub), 'the balance comes back with the paper it was spent on');
     }
 
+    public function test_deleting_a_bill_takes_back_the_rounding_it_added(): void
+    {
+        $this->roundUp();
+        $sub = $this->flatSub(51.60);
+
+        $bill = BillingService::ensureFlatBill($sub, '2026-11'); // 52.00 charged for a 51.60 cycle
+        $this->assertSame(52.00, (float) $bill->total);
+        $this->assertSame(0.40, (float) $bill->credit_created, 'the ceiling is written on the invoice');
+        $this->assertSame(0.40, $this->creditOf($sub));
+
+        BillingService::deleteFlatBill($bill->fresh());
+
+        $this->assertSame(0.0, $this->creditOf($sub), 'the ceiling that invoice granted goes with it');
+        $this->assertDatabaseCount('bills', 0);
+    }
+
+    public function test_deleting_a_bill_never_drives_the_balance_below_zero(): void
+    {
+        $this->roundUp();
+        $sub = $this->flatSub(51.60);
+        $bill = BillingService::ensureFlatBill($sub, '2026-11'); // adds 0.40 to his balance
+
+        // Part of what that ceiling granted has already been spent on a later, issued invoice.
+        BillingService::saveCredit($sub->fresh(), 0.20);
+
+        BillingService::deleteFlatBill($bill->fresh());
+
+        $this->assertSame(0.0, $this->creditOf($sub), 'the balance stops at zero, never under it');
+    }
+
     // ---- a receipt cannot be taken back after its money has been spent -----------------------
 
     public function test_reversing_a_receipt_whose_balance_was_already_spent_is_refused(): void

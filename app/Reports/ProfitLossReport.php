@@ -16,8 +16,9 @@ use Illuminate\Support\Collection;
  * which markup is displaying it.
  *
  * Three deliberate choices:
- *  - money IN is cash actually collected in the window (Payment.created_at), not what was
- *    invoiced — invoicing is a promise, collection is the fact.
+ *  - money IN is cash actually collected in the window, counted by the day it was COLLECTED
+ *    (Payment::scopeCollectedInRange), not what was invoiced — invoicing is a promise, collection is
+ *    the fact, and a receipt written on the 2nd for the 31st belongs to the 31st.
  *  - what was EARNED is the part of that cash which settled invoices (payments.applied, falling
  *    back to the whole receipt for rows written before the column existed). The rest is the
  *    subscriber's own balance, which the office is holding and will spend on his next invoice —

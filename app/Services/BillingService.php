@@ -359,6 +359,7 @@ class BillingService
                 'flat_amount' => 0,
                 'prev_debt' => $prevDebt,
                 'credit_applied' => $creditApplied,
+                'credit_created' => $credit['created'],
                 'total' => $total,
                 'paid_amount' => 0,
             ]);
@@ -608,6 +609,7 @@ class BillingService
         $row['maintenance'] = $maintenance;
         $row['flat'] = $flat;
         $row['credit_applied'] = $credit['applied'];
+        $row['credit_created'] = $credit['created'];
         $row['credit_balance'] = $credit['balance'];
         $row['credit_carried'] = $credit['carried'];
         $row['total'] = $total;
@@ -641,6 +643,7 @@ class BillingService
                 'flat_amount' => $row['flat'],
                 'prev_debt' => $row['prev_debt'],
                 'credit_applied' => $row['credit_applied'] ?? 0,
+                'credit_created' => $row['credit_created'] ?? 0,
                 'total' => $row['total'],
                 'paid_amount' => 0,
             ]);
@@ -719,6 +722,7 @@ class BillingService
                 'flat_amount' => $flat,
                 'prev_debt' => $prevDebt,
                 'credit_applied' => $creditApplied,
+                'credit_created' => $credit['created'],
                 'total' => $total,
                 'paid_amount' => 0,
             ]);
@@ -764,6 +768,7 @@ class BillingService
      *
      *   total   = the rounding rule applied to (this cycle's charge − the credit he carries)
      *   applied = the part of his credit the paper can name (0 when the rounding swallowed it)
+     *   created = the rounding this invoice ADDS to his balance (0 when the ceiling did not fire)
      *   balance = his credit AFTER this bill: what he carried + total − exact
      *
      * That last line is the whole ledger in one subtraction. A cycle that cost 51.60 billed at 52.00
@@ -773,7 +778,7 @@ class BillingService
      *
      * Reading the plan changes nothing — a preview may show it, only a bill saves it (saveCredit).
      *
-     * @return array{total: float, applied: float, balance: float, carried: float}
+     * @return array{total: float, applied: float, created: float, balance: float, carried: float}
      */
     public static function billCredit(Subscriber $subscriber, float $exact): array
     {
@@ -784,6 +789,9 @@ class BillingService
         return [
             'total' => $total,
             'applied' => round(max(0, $exact - $total), 2),
+            // What this invoice owes him back for the ceiling: stored on the bill so removing the
+            // invoice can undo it exactly (see undoBillCredit).
+            'created' => round(max(0, $total - $exact), 2),
             'balance' => round($carrying + $total - $exact, 2),
             // What he was carrying when the plan was read, so the writer can apply the DIFFERENCE
             // rather than overwrite a balance that a receipt may have moved in the meantime.
@@ -814,28 +822,39 @@ class BillingService
     }
 
     /**
-     * An invoice being removed gives back the balance it spent.
+     * An invoice being removed undoes the balance it moved — both directions of it.
      *
-     * Deleting a bill used to leave subscribers.credit where the invoice had left it, so the part of
-     * his money that invoice had consumed vanished along with the paper. The inverse is exact whenever
-     * the invoice spent something (`applied = exact − total`); nothing is owed back otherwise, because
-     * a bill that spent nothing is a bill whose ceiling swallowed the balance instead.
+     * Deleting a bill used to leave subscribers.credit exactly where the invoice had left it, so the
+     * part of his money that invoice had spent vanished along with the paper. The movement is
+     * `created − spent` (the ceiling it added to his account, less the balance it used), and BOTH
+     * halves are stored on the row precisely so this inverse can be exact.
+     *
+     * If the ceiling's part has already been spent on a later, issued invoice the balance simply
+     * stops at zero: the office cannot claw back a discount it has already given, and the audit row
+     * records how much was left unclawed.
+     *
+     * @return float what actually moved on his account (negative when credit was taken away)
      */
-    private static function giveBackSpentCredit(Bill $bill): float
+    private static function undoBillCredit(Bill $bill): float
     {
-        $spent = round((float) $bill->credit_applied, 2);
+        $moved = round((float) $bill->credit_created - (float) $bill->credit_applied, 2);
 
-        if ($spent <= 0) {
+        if ($moved === 0.0) {
             return 0.0;
         }
 
         $subscriber = Subscriber::whereKey($bill->subscriber_id)->lockForUpdate()->first();
 
-        if ($subscriber !== null) {
-            self::saveCredit($subscriber, round((float) ($subscriber->credit ?? 0) + $spent, 2));
+        if ($subscriber === null) {
+            return 0.0;
         }
 
-        return $spent;
+        $balance = round((float) ($subscriber->credit ?? 0), 2);
+        $undone = round(max(0, $balance - $moved), 2);
+
+        self::saveCredit($subscriber, $undone);
+
+        return round($undone - $balance, 2);
     }
 
     /** Put a computed balance on the subscriber: a bill and the credit it moves land together, or not at all. */
@@ -1136,16 +1155,16 @@ class BillingService
             'consumption' => $reading->consumption,
             'bill_id' => $bill->id,
             'bill_total' => $bill->total,
-            // The balance this invoice had spent is part of what removing it must undo.
-            'credit_restored' => round((float) $bill->credit_applied, 2),
             // Why a month that was already closed was opened again, and by whom.
             'cycle_closed' => CycleLock::isClosed($reading->period),
             'reason' => $reason,
         ];
 
         DB::transaction(function () use ($reading, $bill, $snapshot) {
-            Audit::log('reading.deleted', $reading, $snapshot);
-            self::giveBackSpentCredit($bill);
+            // Removing the paper undoes the balance the paper moved — both directions of it — and
+            // the figure that actually moved goes into the trail beside the reading it belonged to.
+            $undone = self::undoBillCredit($bill);
+            Audit::log('reading.deleted', $reading, $snapshot + ['credit_undone' => $undone]);
             $bill->delete(); // cascades nothing here (unpaid)
             $reading->delete();
         });
@@ -1173,13 +1192,12 @@ class BillingService
             'period' => $bill->period,
             'flat_amount' => $bill->flat_amount,
             'total' => $bill->total,
-            // The balance this invoice had spent is part of what removing it must undo.
-            'credit_restored' => round((float) $bill->credit_applied, 2),
         ];
 
         DB::transaction(function () use ($bill, $snapshot) {
-            Audit::log('bill.deleted', $bill, $snapshot);
-            self::giveBackSpentCredit($bill);
+            // Removing the paper undoes the balance the paper moved — both directions of it.
+            $undone = self::undoBillCredit($bill);
+            Audit::log('bill.deleted', $bill, $snapshot + ['credit_undone' => $undone]);
             $bill->delete();
         });
     }
@@ -1314,12 +1332,14 @@ class BillingService
         }
 
         DB::transaction(function () use ($bill) {
+            $undone = self::undoBillCredit($bill);
+
             Audit::log('bill.special_deleted', $bill, [
                 'subscriber_id' => $bill->subscriber_id,
                 'number' => $bill->number,
                 'title' => $bill->title,
                 'total' => $bill->total,
-                'credit_restored' => round((float) $bill->credit_applied, 2),
+                'credit_undone' => $undone,
                 'items' => $bill->items->map(fn (BillItem $item) => [
                     'description' => $item->description,
                     'quantity' => $item->quantity,
@@ -1328,7 +1348,6 @@ class BillingService
                 ])->all(),
             ]);
 
-            self::giveBackSpentCredit($bill);
             $bill->delete();   // bill_items cascade
         });
     }
