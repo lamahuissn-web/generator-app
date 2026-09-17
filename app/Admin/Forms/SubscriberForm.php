@@ -146,12 +146,78 @@ class SubscriberForm extends FormDefinition
                 ],
             ],
             [
+                'title' => __('s.exempt_section'),
+                'description' => __('s.exempt_section_hint'),
+                'fields' => [
+                    [
+                        'key' => 'is_exempt',
+                        'label' => __('s.is_exempt'),
+                        'type' => 'checkbox',
+                        'default' => false,
+                    ],
+                    [
+                        'key' => 'exempt_reason',
+                        'label' => __('s.exempt_reason'),
+                        'span' => 'full',
+                        'helper' => __('s.exempt_reason_hint'),
+                        'visible_when' => fn (array $state): bool => ! empty($state['is_exempt']),
+                        'required_when' => fn (array $state): bool => ! empty($state['is_exempt']),
+                        'rules' => ['nullable', 'string', 'max:200'],
+                    ],
+                    [
+                        'key' => 'exempt_category',
+                        'label' => __('s.exempt_category'),
+                        'type' => 'select',
+                        'placeholder' => __('t.select_placeholder'),
+                        'options_from' => fn (): array => discount_category_options(),
+                        'visible_when' => fn (array $state): bool => ! empty($state['is_exempt']),
+                        'rules' => ['nullable', 'string', 'max:40'],
+                    ],
+                    [
+                        'key' => 'discount_percent',
+                        'label' => __('s.discount_percent'),
+                        'type' => 'number',
+                        'min' => 0,
+                        'max' => 100,
+                        'default' => 0,
+                        'helper' => __('s.discount_percent_hint'),
+                        'rules' => ['nullable', 'numeric', 'min:0', 'max:100'],
+                    ],
+                ],
+            ],
+            [
                 'title' => __('s.notes'),
                 'fields' => [
                     ['key' => 'notes', 'label' => __('s.notes'), 'type' => 'textarea', 'span' => 'full', 'rules' => ['nullable', 'string', 'max:1000']],
                 ],
             ],
         ];
+    }
+
+    public function defaults(?\Illuminate\Database\Eloquent\Model $subject = null): array
+    {
+        $state = parent::defaults($subject);
+
+        $state['is_exempt'] = false;
+        $state['exempt_reason'] = null;
+        $state['exempt_category'] = null;
+        $state['discount_percent'] = 0;
+
+        return $state;
+    }
+
+    public function stateFrom(\Illuminate\Database\Eloquent\Model $record): array
+    {
+        // Start from the plain column mapping, then overlay the exemption's computed checkbox.
+        $state = parent::stateFrom($record);
+
+        /** @var \App\Models\Subscriber $record */
+        $state['is_exempt'] = $record->isExempt();
+        $state['exempt_reason'] = $record->exempt_reason;
+        $state['exempt_category'] = $record->exempt_category;
+        $state['discount_percent'] = $record->discount_percent ?? 0;
+
+        return $state;
     }
 
     public function save(array $state, ?Model $record): Model
@@ -188,12 +254,41 @@ class SubscriberForm extends FormDefinition
             ? 0
             : ($attributes['maintenance_mode'] === Subscriber::MAINT_CUSTOM ? (float) ($state['maintenance_fee'] ?? 0) : 0);
         $attributes['flat_fee'] = $isFlat ? (float) ($state['flat_fee'] ?? 0) : null;
+        // A permanent subsidy: 0 means none, 100 means the whole charge — applied before the credit.
+        $attributes['discount_percent'] = round(min(100, max(0, (float) ($state['discount_percent'] ?? 0))), 2);
+
+        // The exemption is a standing decision (is_exempt + reason), not a fee mode: it changes
+        // whether the house is invoiced at all, while the meter is still read. The RULE — a reason is
+        // required, the fields and the audit row are written together — lives in BillingService, so
+        // there is one place to change it; the form only states the decision.
+        $isExempt = ! empty($state['is_exempt']);
+        $exemptReason = trim((string) ($state['exempt_reason'] ?? ''));
+        $exemptCategory = ($state['exempt_category'] ?? '') !== '' ? trim((string) $state['exempt_category']) : null;
+
+        if ($isExempt && $exemptReason === '') {
+            throw new \RuntimeException(__('refuse.exempt_reason'));
+        }
 
         if ($record === null) {
             $attributes['created_by'] = auth()->id();
             $record = Subscriber::create($attributes);
+            if ($isExempt) {
+                BillingService::exemptSubscriber($record, $exemptReason, $exemptCategory, auth()->id());
+            }
         } else {
+            $wasExempt = $record->isExempt();
             $record->fill($attributes)->save();
+
+            if ($isExempt) {
+                // Re-stating the same reason is not an event; another reason or category is.
+                if (! $wasExempt
+                    || $record->exempt_reason !== $exemptReason
+                    || $record->exempt_category !== $exemptCategory) {
+                    BillingService::exemptSubscriber($record, $exemptReason, $exemptCategory, auth()->id());
+                }
+            } elseif ($wasExempt) {
+                BillingService::unexemptSubscriber($record, auth()->id());
+            }
         }
 
         return $record;

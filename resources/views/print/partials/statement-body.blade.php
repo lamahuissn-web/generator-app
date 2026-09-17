@@ -209,6 +209,12 @@
     </table>
 @endif
 
+@if ($subscriber->isExempt())
+    {{-- A permanently exempt house receives no invoice: the statement is the only paper that can
+         tell him — and the collector — that nothing is claimed, and why. --}}
+    <div class="note">{{ __('prt.exempt_note') }}@if ($subscriber->exempt_reason) — {{ $subscriber->exempt_reason }}@endif</div>
+@endif
+
 @if ($hidden = $statement['rows_total'] - $statement['rows_shown'])
     <div class="note">{{ __('col.cst_earlier', ['count' => $hidden, 'from' => $from]) }}</div>
 @endif

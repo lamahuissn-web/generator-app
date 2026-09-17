@@ -60,6 +60,26 @@
         </div>
     </div>
 
+    {{-- What the office gave away: disclosure beside the profit, never inside it. --}}
+    <div class="kt-card">
+        <div class="kt-card-content grid gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <span class="flex flex-wrap items-center gap-2 text-sm font-medium text-mono">
+                    {{ __('pl.discounts') }}
+                    <span class="text-xs text-muted-foreground">{{ __('pl.discounts_hint') }}</span>
+                </span>
+                <span class="amount-cell text-xl font-semibold text-mono">{{ money($report['discounts'] ?? 0) }}</span>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <span class="flex flex-wrap items-center gap-2 text-sm font-medium text-mono">
+                    {{ __('pl.exempt_value') }}
+                    <span class="text-xs text-muted-foreground">{{ __('pl.exempt_hint') }}</span>
+                </span>
+                <span class="amount-cell text-xl font-semibold text-mono">{{ money($report['exempt_value'] ?? 0) }}</span>
+            </div>
+        </div>
+    </div>
+
     <div class="grid gap-4 lg:grid-cols-2">
         <x-admin.card :title="__('pl.by_category')">
             @if ($report['byCategory']->isEmpty())

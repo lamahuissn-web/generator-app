@@ -88,6 +88,7 @@ final class OverdueReport
 
         $rows = Subscriber::query()
             ->with('route:id,name')
+            ->whereNull('exempt_at')
             ->when($this->routeId, fn ($query) => $query->where('route_id', $this->routeId))
             ->get()
             ->map(function (Subscriber $subscriber) use ($dues, $current): array {

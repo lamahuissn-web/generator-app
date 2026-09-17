@@ -287,3 +287,36 @@ if (! function_exists('clean_username')) {
         return mb_strtolower($stripped ?? '', 'UTF-8');
     }
 }
+
+if (! function_exists('discount_categories')) {
+    /**
+     * The categories offered for exemptions and discounts.
+     *
+     * Stored as a single comma-separated setting so the office can keep its own
+     * vocabulary («مسجد، قريب — عندهم اثنين، عندنا ثلاثة») without a code change,
+     * and defaulted to the four the spec names — every office has one of them.
+     *
+     * @return array<int, string>
+     */
+    function discount_categories(): array
+    {
+        $raw = (string) \App\Models\Setting::get('discount_categories', 'مسجد,قريب,حالة إنسانية,أخرى');
+
+        return collect(explode(',', $raw))
+            ->map(fn (string $c): string => trim($c))
+            ->filter(fn (string $c): bool => $c !== '')
+            ->values()
+            ->all() ?: ['مسجد', 'قريب', 'حالة إنسانية', 'أخرى'];
+    }
+}
+
+if (! function_exists('discount_category_options')) {
+    /** discount_categories() as a value => label map for a select. */
+    function discount_category_options(): array
+    {
+        $cats = discount_categories();
+
+        return array_combine($cats, $cats);
+    }
+}
+

@@ -42,6 +42,7 @@ class Settings extends Component
             'default_maintenance_fee' => '0',
             'lbp_rate' => '0',
             'bill_rounding' => BillingService::ROUND_NONE,
+            'discount_categories' => 'مسجد,قريب,حالة إنسانية,أخرى',
         ];
     }
 
@@ -57,6 +58,7 @@ class Settings extends Component
             // Only the two rules the billing service knows how to apply: a stored third option
             // would be a setting the panel silently ignores.
             'state.bill_rounding' => ['required', Rule::in([BillingService::ROUND_NONE, BillingService::ROUND_CEIL_DOLLAR])],
+            'state.discount_categories' => ['required', 'string', 'max:200'],
             'state.company_name' => ['nullable', 'string', 'max:120'],
             'state.company_phone' => ['nullable', 'string', 'max:40'],
             'state.company_address' => ['nullable', 'string', 'max:180'],
@@ -82,6 +84,7 @@ class Settings extends Component
                 'rules' => ['required'],
             ],
             'lbp_rate' => ['key' => 'lbp_rate', 'label' => __('set.lbp_label'), 'type' => 'number', 'helper' => __('set.lbp_helper'), 'rules' => ['required'], 'min' => 0],
+            'discount_categories' => ['key' => 'discount_categories', 'label' => __('set.discount_categories_label'), 'helper' => __('set.discount_categories_helper'), 'placeholder' => 'مسجد,قريب,حالة إنسانية,أخرى', 'span' => 'full', 'rules' => ['required']],
             'company_name' => ['key' => 'company_name', 'label' => __('set.company_name'), 'placeholder' => __('prt.company_default'), 'rules' => ['nullable']],
             'company_phone' => ['key' => 'company_phone', 'label' => __('set.company_phone'), 'type' => 'tel', 'rules' => ['nullable']],
             'company_address' => ['key' => 'company_address', 'label' => __('set.company_address'), 'rules' => ['nullable']],
