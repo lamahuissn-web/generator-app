@@ -155,3 +155,23 @@ the office under-reported its own generosity. The question is now asked of **sub
 
 Also: the invoice list shows the standing subsidy beside the hand waiver, so an operator scanning the list
 can see both kinds of waived money without opening the paper.
+
+## Amendment 3 — the guarantee now exists where the writes happen (2026-09-17)
+
+The third audit passed the feature and left three doors open, all reachable only by code that no path in the
+app uses: `saveQuietly()`/`withoutEvents()` (skips model events), a query builder or raw SQL, and a giveaway
+(a charge with a zero total and no waiver recorded). A money invariant that a single quiet save can walk past
+is a convention, not an invariant, so:
+
+- **`bills_total_matches_its_lines`** — a CHECK constraint on MySQL/MariaDB: a row may not be written whose
+  `total` differs from its own lines, unless nothing is charged to add up. It is deliberately engine-specific
+  (SQLite cannot attach a constraint to an existing table, and the suite runs on SQLite), so **this half is
+  verified by hand against MySQL and the migration says so** — any future change that writes `bills.total`
+  must be checked live on MySQL, not only by the suite.
+- The model guard lost its `total <= 0` escape: a charge of 60 with a total of 0 is a giveaway with nothing on
+  paper explaining it. (An exempt invoice is not that case: its waiver makes the charge itself zero.)
+
+Verified live on MySQL, in one rolled-back transaction: the ceiling rounding 51.60 → 52.00, a hand discount on
+top of a subsidy, an exempt zero invoice, a metered reading chain and a bare-total legacy row all save; a
+contradicting total is refused by the model; `saveQuietly()` and a raw `DB::table` update are refused by the
+database.

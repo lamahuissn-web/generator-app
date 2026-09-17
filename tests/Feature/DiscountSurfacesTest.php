@@ -168,7 +168,7 @@ class DiscountSurfacesTest extends TestCase
         // A part he bought this month: a special invoice, not the month's subscription bill.
         Bill::create([
             'number' => 'INV-2026-09-8888', 'subscriber_id' => $exempt->id, 'period' => $month,
-            'type' => Bill::TYPE_SPECIAL, 'title' => 'قطعة', 'items_amount' => 10, 'paid_amount' => 0,
+            'type' => Bill::TYPE_SPECIAL, 'title' => 'قطعة', 'items_amount' => 10, 'total' => 10, 'paid_amount' => 0,
         ]);
 
         $data = ProfitLossReport::forMonth($month)->data();
