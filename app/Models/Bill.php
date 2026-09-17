@@ -65,10 +65,14 @@ class Bill extends Model
         static::saving(function (Bill $bill): void {
             $charge = $bill->charges();
 
-            if ($charge <= 0 || (float) $bill->total <= 0) {
+            // An invoice with nothing charged states no breakdown to contradict (a legacy row, the office's
+            // paper fixtures, a month fully covered by the credit he carried).
+            if ($charge <= 0) {
                 return;
             }
 
+            // Everything else must add up: a charge of 60 with a total of 0 is a giveaway with nothing on
+            // paper explaining it, and a charge of 40 with a total of 999 is money never charged.
             if (abs($charge - (float) $bill->total) > 0.0001) {
                 throw new \RuntimeException(__('refuse.bill_out_of_balance', [
                     'charge' => money_ltr($charge),
