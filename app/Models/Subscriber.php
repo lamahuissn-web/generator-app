@@ -30,6 +30,7 @@ class Subscriber extends Model
         'route_id', 'name', 'phone', 'address', 'meter_no', 'type',
         'amperage', 'maintenance_fee', 'credit', 'maintenance_mode', 'flat_fee', 'status', 'notes', 'created_by',
         'meter_broken_reported_at', 'meter_broken_note', 'meter_broken_estimates', 'meter_broken_reported_by',
+        'exempt_at', 'exempt_reason', 'exempt_category', 'discount_percent',
     ];
 
     protected function casts(): array
@@ -38,6 +39,8 @@ class Subscriber extends Model
             'meter_broken_reported_at' => 'datetime',
             'opening_reading' => 'float',
             'credit' => 'float',
+            'exempt_at' => 'datetime',
+            'discount_percent' => 'float',
         ];
     }
 
@@ -45,6 +48,18 @@ class Subscriber extends Model
     protected $attributes = [
         'maintenance_mode' => self::MAINT_CUSTOM,
     ];
+
+    /** Is this house exempt from billing altogether? (مسجد، قريب — a standing decision, with a reason.) */
+    public function isExempt(): bool
+    {
+        return $this->exempt_at !== null;
+    }
+
+    /** The permanent subsidy on this house, as a percent of the charge (0 = none). */
+    public function effectiveDiscountPercent(): float
+    {
+        return round(min(100.0, max(0.0, (float) ($this->discount_percent ?? 0))), 2);
+    }
 
     public function route(): BelongsTo
     {
