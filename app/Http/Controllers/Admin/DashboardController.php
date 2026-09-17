@@ -32,7 +32,10 @@ class DashboardController extends Controller
             ->sum('amount');
         $rate = $invoiced > 0 ? round($collected / $invoiced * 100, 1) : 0.0;
 
+        // Exempt houses are outside the chase (see Feature 004): the office said it does not claim from
+        // them, so their old debt is not part of what the panel is working on. It stays on their own file.
         $outstanding = (float) Bill::query()
+            ->whereHas('subscriber', fn ($query) => $query->whereNull('exempt_at'))
             ->selectRaw('COALESCE(SUM(total - paid_amount), 0) as o')
             ->whereRaw('paid_amount < total')
             ->value('o');
@@ -41,7 +44,7 @@ class DashboardController extends Controller
         // VI), but money nobody is chasing is money the panel is quietly not working on, and the
         // office cannot decide about a figure it cannot see.
         $inactiveOutstanding = (float) Bill::query()
-            ->whereHas('subscriber', fn ($query) => $query->where('status', Subscriber::STATUS_INACTIVE))
+            ->whereHas('subscriber', fn ($query) => $query->where('status', Subscriber::STATUS_INACTIVE)->whereNull('exempt_at'))
             ->selectRaw('COALESCE(SUM(total - paid_amount), 0) as o')
             ->whereRaw('paid_amount < total')
             ->value('o');
@@ -136,6 +139,7 @@ class DashboardController extends Controller
             ->leftJoin('routes', 'routes.id', '=', 'subscribers.route_id')
             ->selectRaw('subscribers.id as subscriber_id, subscribers.name as subscriber_name, routes.name as route_name, COALESCE(SUM(bills.total - bills.paid_amount), 0) as owed, COUNT(*) as bills_open')
             ->whereRaw('bills.paid_amount < bills.total')
+            ->whereNull('subscribers.exempt_at')
             ->groupBy('subscribers.id', 'subscribers.name', 'routes.name')
             ->orderByDesc('owed')
             ->limit(8)

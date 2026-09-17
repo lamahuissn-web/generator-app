@@ -102,7 +102,8 @@ class ExemptionAndDiscountTest extends TestCase
 
         $this->assertSame(40.0, (float) $result['reading']->consumption, 'the meter is on record as always');
         $this->assertSame(0.0, (float) $bill->total, 'and nothing is claimed from the house');
-        $this->assertSame((float) $bill->usage_amount + (float) $bill->maintenance_fee, (float) $bill->discount_amount);
+        $this->assertSame((float) $bill->usage_amount + (float) $bill->maintenance_fee, (float) $bill->subsidy_amount);
+        $this->assertSame(0.0, (float) $bill->discount_amount, 'nobody waived anything by hand: the exemption is arithmetic');
         $this->assertSame(0.0, round($bill->charges(), 2), 'the invoice adds up to nothing');
         $this->assertSame(0.0, $sub->fresh()->outstanding());
         $this->assertSame(__('f.discount_exempt', ['reason' => 'قريب صاحب المكتب']), $bill->discount_note);
@@ -129,7 +130,7 @@ class ExemptionAndDiscountTest extends TestCase
 
         $bill = BillingService::ensureFlatBill($sub->fresh(), '2026-09');
 
-        $this->assertSame(15.0, (float) $bill->discount_amount);
+        $this->assertSame(15.0, (float) $bill->subsidy_amount);
         $this->assertSame(45.0, (float) $bill->total);
         $this->assertSame((float) $bill->total, round($bill->charges(), 2));
         $this->assertSame(__('f.discount_permanent', ['percent' => '25.00']), $bill->discount_note);
@@ -145,7 +146,7 @@ class ExemptionAndDiscountTest extends TestCase
         $bill = BillingService::ensureFlatBill($sub->fresh(), '2026-09');
 
         // 60 − 30 (subsidy) = 30 charged, less the 10 he carries = 20.
-        $this->assertSame(30.0, (float) $bill->discount_amount);
+        $this->assertSame(30.0, (float) $bill->subsidy_amount);
         $this->assertSame(10.0, (float) $bill->credit_applied);
         $this->assertSame(20.0, (float) $bill->total);
         $this->assertSame(0.0, $this->creditOf($sub), 'and his balance was spent exactly as usual');
@@ -203,6 +204,48 @@ class ExemptionAndDiscountTest extends TestCase
         $this->expectExceptionMessage(__('refuse.discount_reason'));
 
         BillingService::discountBill($bill, 10.00, '  ');
+    }
+
+    // ---- two kinds of waived money, two columns (see the split migration) --------------------
+
+    public function test_a_discount_sits_on_top_of_the_subsidy_and_never_raises_the_total(): void
+    {
+        $sub = $this->flatSub(60.00);
+        $sub->forceFill(['discount_percent' => 25])->save();
+
+        $bill = BillingService::ensureFlatBill($sub->fresh(), '2026-09');
+        $this->assertSame(15.0, (float) $bill->subsidy_amount, 'the standing subsidy has a column of its own');
+        $this->assertSame(0.0, (float) $bill->discount_amount, 'and nobody waived anything by hand yet');
+        $this->assertSame(45.0, (float) $bill->total);
+
+        $discounted = BillingService::discountBill($bill, 5.00, 'خصم صغير', 'أخرى', $this->admin->id);
+
+        // The office's own waiver grows ON TOP of the subsidy: granting a discount must never charge more.
+        $this->assertSame(5.0, (float) $discounted->discount_amount);
+        $this->assertSame(15.0, (float) $discounted->subsidy_amount, 'the subsidy is untouched');
+        $this->assertSame(40.0, (float) $discounted->total, '60 − 15 (subsidy) − 5 (waiver)');
+        $this->assertSame((float) $discounted->total, round($discounted->charges(), 2), 'charges() still equals total');
+        $this->assertLessThanOrEqual(45.0, (float) $discounted->total, 'a discount never raises a total');
+
+        // Taking it back leaves the subsidy exactly where it was.
+        $back = BillingService::discountBill($discounted, 0, '', null, $this->admin->id);
+        $this->assertSame(0.0, (float) $back->discount_amount);
+        $this->assertSame(15.0, (float) $back->subsidy_amount);
+        $this->assertSame(45.0, (float) $back->total);
+    }
+
+    public function test_an_exempt_houses_waiver_is_arithmetic_not_a_decision(): void
+    {
+        $sub = $this->flatSub(60.00);
+        BillingService::exemptSubscriber($sub, 'مسجد', 'مسجد', $this->admin->id);
+
+        $bill = BillingService::ensureFlatBill($sub->fresh(), '2026-09');
+
+        $this->assertSame(60.0, (float) $bill->subsidy_amount, 'the waiver is arithmetic written into the invoice');
+        $this->assertSame(0.0, (float) $bill->discount_amount, 'nobody decided anything, so nobody is named');
+        $this->assertNull($bill->discount_by);
+        $this->assertSame(0.0, (float) $bill->total);
+        $this->assertSame((float) $bill->total, round($bill->charges(), 2));
     }
 
     public function test_a_discount_cannot_exceed_the_invoice_charge(): void

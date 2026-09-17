@@ -74,6 +74,7 @@ class ProfitLoss extends Component
         fputcsv($handle, [__('pl.expenses_total'), number_format($data['expenses'], 2, '.', '')]);
         fputcsv($handle, [__('pl.net'), number_format($data['net'], 2, '.', '')]);
         fputcsv($handle, [__('pl.discounts'), number_format($data['discounts'] ?? 0, 2, '.', '')]);
+        fputcsv($handle, [__('pl.subsidies'), number_format($data['subsidies'] ?? 0, 2, '.', '')]);
         fputcsv($handle, [__('pl.exempt_value'), number_format($data['exempt_value'] ?? 0, 2, '.', '')]);
         fputcsv($handle, []);
 

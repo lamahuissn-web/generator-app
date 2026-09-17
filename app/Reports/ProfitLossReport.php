@@ -81,11 +81,24 @@ final class ProfitLossReport
             ->selectRaw('COALESCE(SUM(discount_amount), 0) as d')
             ->value('d');
 
+        // The standing subsidies written into this month's invoices (an exempt house that was read, or a
+        // house on a permanent percent) — the second kind of money given away, and a column of its own
+        // since the split migration. Without it the subsidies would be invisible here.
+        $subsidies = (float) Bill::where('period', $this->month)
+            ->selectRaw('COALESCE(SUM(subsidy_amount), 0) as d')
+            ->value('d');
+
+        // And the third kind: houses that were never invoiced at all because they are exempt. The value is
+        // the run's own preview — the same arithmetic that would have billed them — counted ONLY for the
+        // houses this month did not bill: one that WAS billed already carries its waiver in subsidy_amount
+        // above, and counting it twice would inflate what the office gave away.
         $exemptValue = 0.0;
         try {
+            $billed = Bill::where('period', $this->month)->pluck('subscriber_id')->all();
             $preview = BillingService::periodRun($this->month, null, false);
             foreach ($preview['rows'] as $row) {
-                if (($row['state'] ?? null) === BillingService::RUN_EXEMPT) {
+                if (($row['state'] ?? null) === BillingService::RUN_EXEMPT
+                    && ! in_array($row['subscriber_id'] ?? null, $billed, true)) {
                     $exemptValue += (float) ($row['total'] ?? 0);
                 }
             }
@@ -107,6 +120,7 @@ final class ProfitLossReport
             'expenses' => $expensesTotal,
             'net' => round($earned - $expensesTotal, 2),
             'discounts' => round($discounts, 2),
+            'subsidies' => round($subsidies, 2),
             'exempt_value' => $exemptValue,
             'byCategory' => $this->byCategory($start, $end),
             'recentExpenses' => $this->recentExpenses($start, $end),

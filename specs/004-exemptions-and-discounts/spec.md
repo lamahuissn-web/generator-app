@@ -106,3 +106,34 @@ charge         = exact − (exact × discount_percent)   (permanent, per-subscri
 
 - The energy layer (produced / consumed / losses / cost per kWh) — Feature 005, its own spec.
 - Collector-granted discounts: v1 keeps granting admin-only (the recommendation adopted).
+
+
+## Amendment 1 — two columns of waived money (after the independent audit, 2026-09-17)
+
+The first cut stored BOTH kinds of waived money in `bills.discount_amount`: the arithmetic the invoice was
+produced with (an exemption, or a `subscribers.discount_percent`) and the waiver the office grants by hand on
+one invoice. One column, two acts — so the office's waiver REPLACED the subsidy, and a subsidised invoice
+could come out HIGHER after a discount was granted (60 − 15 = 45, discount 5 → 55). The audit caught it with
+a repro. The fix is the split migration `2026_09_17_160000_split_the_two_kinds_of_waived_money`:
+
+| column | written when | who is named | on the paper |
+|---|---|---|---|
+| `bills.subsidy_amount` | the invoice is produced | nobody — it is arithmetic | «إعانة/إعفاء» + the note |
+| `bills.discount_amount` | the office decides, afterwards | `discount_by` + `discount_at` | «خصم» + the reason |
+
+`charges() = usage + fees + items − credit_applied − subsidy_amount − discount_amount = total`, and a
+one-cycle waiver is refused above what is still charged on that invoice — so it can only ever lower a total.
+
+The month's disclosure therefore has **three** figures, and none of them counts a house twice:
+
+- «الخصومات» = Σ `discount_amount` — what the office waived by hand this month.
+- «الإعانات الدائمة» = Σ `subsidy_amount` — the standing subsidies and exemptions written into this month's invoices.
+- «قيمة الإعفاءات» = the value of the exempt houses the month did **not** bill (read from the run's own
+  preview); a house that WAS billed carries its waiver in the line above.
+
+The office stops chasing what it waived: exempt houses are now absent from the dashboard's outstanding figure
+and its top-debtor list too, not only from the overdue report and today's queue.
+
+Deliberate as designed: the monthly run bills an exempt house **nothing at all** (no invoice), while a reading
+entered by hand produces a **zero invoice** carrying the waiver — the paper only exists when someone visits
+the meter, and in both cases nothing is claimed from the house.

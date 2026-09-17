@@ -172,9 +172,20 @@
                 <td class="num"><span class="ltr">− {{ money($bill->credit_applied) }}</span></td>
             </tr>
         @endif
+        @if ((float) $bill->subsidy_amount > 0)
+            {{-- The standing subsidy this invoice was produced with (an exempt house, or a permanent
+                 percent), named by the note it carries. --}}
+            <tr>
+                <td>{{ __('prt.subsidy') }}
+                    @if ($bill->discount_note)<span class="muted"> — {{ $bill->discount_note }}</span>@endif
+                </td>
+                <td class="num"></td>
+                <td class="num"><span class="ltr">− {{ money($bill->subsidy_amount) }}</span></td>
+            </tr>
+        @endif
         @if ((float) $bill->discount_amount > 0)
-            {{-- The office's waiver on this invoice, with the reason in small print: the paper
-                 still adds up (usage + fees − discount − credit = total) on its own terms. --}}
+            {{-- The office's own waiver on this invoice, with the reason it wrote down. The paper still
+                 adds up (usage + fees − subsidy − discount − credit = total) on its own terms. --}}
             <tr>
                 <td>{{ __('prt.discount') }}
                     @if ($bill->discount_note)<span class="muted"> — {{ $bill->discount_note }}</span>@endif
