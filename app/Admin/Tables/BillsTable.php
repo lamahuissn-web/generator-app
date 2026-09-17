@@ -82,6 +82,15 @@ class BillsTable extends TableDefinition
                 'on_mobile' => false,
             ],
             [
+                'key' => 'discount_amount',
+                'label' => __('t.discount'),
+                'type' => 'money',
+                'sortable' => true,
+                'align' => 'end',
+                'on_mobile' => false,
+                'render' => fn (Bill $r): ?string => (float) $r->discount_amount > 0 ? money($r->discount_amount) : null,
+            ],
+            [
                 'key' => 'total',
                 'label' => __('t.total'),
                 'type' => 'money',
@@ -168,6 +177,14 @@ class BillsTable extends TableDefinition
                 'icon' => 'ki-printer',
                 'new_tab' => true,
                 'url' => fn (Bill $r) => route('print.bill', ['bill' => $r->id, 'size' => config('pdf.default_bill_size')]),
+            ],
+            [
+                'key' => 'discount',
+                'label' => __('a.discount_bill'),
+                'action_form' => \App\Admin\Actions\DiscountBill::class,
+                // A discount is only on an unpaid, non-special invoice — a paid one refuses by
+                // name, and a special invoice cannot be discounted (refuse.discount_special).
+                'hidden' => fn (Bill $r): bool => $r->isSpecial() || (float) $r->paid_amount > 0,
             ],
             [
                 'key' => 'deleteSpecial',

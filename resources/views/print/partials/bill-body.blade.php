@@ -172,6 +172,17 @@
                 <td class="num"><span class="ltr">− {{ money($bill->credit_applied) }}</span></td>
             </tr>
         @endif
+        @if ((float) $bill->discount_amount > 0)
+            {{-- The office's waiver on this invoice, with the reason in small print: the paper
+                 still adds up (usage + fees − discount − credit = total) on its own terms. --}}
+            <tr>
+                <td>{{ __('prt.discount') }}
+                    @if ($bill->discount_note)<span class="muted"> — {{ $bill->discount_note }}</span>@endif
+                </td>
+                <td class="num"></td>
+                <td class="num"><span class="ltr">− {{ money($bill->discount_amount) }}</span></td>
+            </tr>
+        @endif
     </tbody>
     <tfoot>
         @php

@@ -6,6 +6,7 @@ use App\Models\Bill;
 use App\Models\Expense;
 use App\Models\Payment;
 use App\Models\Subscriber;
+use App\Services\BillingService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -74,6 +75,25 @@ final class ProfitLossReport
         $expensesTotal = (float) Expense::whereBetween('expense_date', [$from, $to])
             ->sum('amount');
 
+        // Disclosure: what the office gave away this month — not part of the earnings,
+        // never inside net, but worth seeing beside it (FR-3 / FR-12).
+        $discounts = (float) Bill::where('period', $this->month)
+            ->selectRaw('COALESCE(SUM(discount_amount), 0) as d')
+            ->value('d');
+
+        $exemptValue = 0.0;
+        try {
+            $preview = BillingService::periodRun($this->month, null, false);
+            foreach ($preview['rows'] as $row) {
+                if (($row['state'] ?? null) === BillingService::RUN_EXEMPT) {
+                    $exemptValue += (float) ($row['total'] ?? 0);
+                }
+            }
+            $exemptValue = round($exemptValue, 2);
+        } catch (\Throwable) {
+            $exemptValue = 0.0;
+        }
+
         return [
             'month' => $this->month,
             'label' => period_label_i18n($this->month),
@@ -86,6 +106,8 @@ final class ProfitLossReport
             'rate' => $invoiced > 0 ? round($collected / $invoiced * 100, 1) : 0.0,
             'expenses' => $expensesTotal,
             'net' => round($earned - $expensesTotal, 2),
+            'discounts' => round($discounts, 2),
+            'exempt_value' => $exemptValue,
             'byCategory' => $this->byCategory($start, $end),
             'recentExpenses' => $this->recentExpenses($start, $end),
         ];

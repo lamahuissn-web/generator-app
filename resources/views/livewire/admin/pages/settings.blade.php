@@ -19,6 +19,11 @@
         <x-admin.field :field="$this->keys()['lbp_rate']" model="state" :values="$state" id-prefix="set" />
     </x-admin.card>
 
+    {{-- Categories the office uses for «لماذا معفى / لماذا خصم» — one setting, shared by the exemption and the discount. --}}
+    <x-admin.card :title="__('set.discount_section')" :description="__('set.discount_section_hint')" content-class="sm:grid-cols-2">
+        <x-admin.field :field="$this->keys()['discount_categories']" model="state" :values="$state" id-prefix="set" />
+    </x-admin.card>
+
     <div class="flex flex-wrap items-center gap-2.5">
         <button type="submit" class="kt-btn kt-btn-lg" wire:loading.attr="disabled" wire:target="save">
             <i class="ki-filled ki-check"></i>

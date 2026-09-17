@@ -148,6 +148,19 @@ class SubscribersTable extends TableDefinition
                 'render' => fn (Subscriber $r): string => $r->status === Subscriber::STATUS_ACTIVE
                     ? __('portal.active') : __('portal.inactive'),
             ],
+            // An exemption is a standing decision: the office waives the charge with a reason,
+            // and it must be visible at a glance in the list — not only when the file is opened.
+            [
+                'key' => 'is_exempt',
+                'label' => __('t.exempt'),
+                'type' => 'badge',
+                'badge' => 'warning',
+                'align' => 'start',
+                'on_mobile' => false,
+                'render' => fn (Subscriber $r): string => $r->isExempt()
+                    ? ($r->exempt_category ?: __('t.exempt')) : '',
+                'color' => fn (Subscriber $r): string => $r->isExempt() ? 'warning' : 'muted',
+            ],
             // An exception column: it is empty for every healthy subscriber, so it sits
             // after the figures the operator actually scans rather than taking position 2.
             [
@@ -210,6 +223,16 @@ class SubscribersTable extends TableDefinition
                     ? $query->whereNotNull('meter_broken_reported_at')
                     : $query->whereNull('meter_broken_reported_at'),
             ],
+            [
+                'key' => 'exempt',
+                'label' => __('t.exempt'),
+                'type' => 'ternary',
+                'true_label' => __('f.exempt_only'),
+                'false_label' => __('f.non_exempt_only'),
+                'apply' => fn (Builder $query, $value) => $value
+                    ? $query->whereNotNull('exempt_at')
+                    : $query->whereNull('exempt_at'),
+            ],
         ];
     }
 
@@ -225,6 +248,18 @@ class SubscribersTable extends TableDefinition
                 // The rule lives on the action and is read from it, so the row and the file can
                 // never disagree about who is collectable.
                 'hidden' => fn (Subscriber $r): bool => ! app(\App\Admin\Actions\CollectPayment::class)->visible($r),
+            ],
+            [
+                'key' => 'exempt',
+                'label' => __('a.exempt'),
+                'action_form' => \App\Admin\Actions\ExemptSubscriber::class,
+                'hidden' => fn (Subscriber $r): bool => $r->isExempt() || ! auth()->user()?->isAdmin(),
+            ],
+            [
+                'key' => 'unexempt',
+                'label' => __('a.unexempt'),
+                'action_form' => \App\Admin\Actions\UnexemptSubscriber::class,
+                'hidden' => fn (Subscriber $r): bool => ! $r->isExempt() || ! auth()->user()?->isAdmin(),
             ],
             [
                 'key' => 'statement',
@@ -250,6 +285,8 @@ class SubscribersTable extends TableDefinition
             ],
         ];
     }
+
+
 
     /**
      * A subscriber who exists in the ledger CANNOT be deleted — the history is the money.

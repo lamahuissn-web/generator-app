@@ -386,7 +386,7 @@ final class TodayQueue
      */
     private function bills(): ?array
     {
-        $subscribers = Subscriber::query()->active()->get(['id', 'type']);
+        $subscribers = Subscriber::query()->active()->whereNull('exempt_at')->get(['id', 'type']);
         $billed = Bill::query()->where('period', $this->period)->pluck('subscriber_id')->flip();
         $read = Reading::query()->where('period', $this->period)->pluck('subscriber_id')->flip();
 
