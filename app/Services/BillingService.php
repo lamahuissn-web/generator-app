@@ -306,14 +306,14 @@ class BillingService
         // usage + fees − the credit on the invoice = the total below it.
         $credit = self::billCredit($subscriber, round($usage + $maintenance, 2));
         $creditApplied = $credit['applied'];
+        $creditBalance = $credit['balance'];
         $total = $credit['total'];
         $usage = round($total + $creditApplied - $maintenance, 2);
-        self::saveCredit($subscriber, $credit['balance']);
 
         return DB::transaction(function () use (
             $subscriber, $period, $currentReading, $prevValue, $consumption,
             $userId, $note, $price, $usage, $maintenance, $prevDebt, $total, $creditApplied,
-            $estimated, $estimateReason, $swap, $caseOpen, $extension,
+            $creditBalance, $estimated, $estimateReason, $swap, $caseOpen, $extension,
         ) {
             $reading = Reading::create([
                 'subscriber_id' => $subscriber->id,
@@ -363,6 +363,10 @@ class BillingService
                 'total' => $total,
                 'paid_amount' => 0,
             ]);
+
+            // His balance moves WITH the invoice that spends it, inside this transaction: a bill that
+            // cannot be raised must not have touched his money (see saveCredit).
+            self::saveCredit($subscriber, $creditBalance);
 
             Audit::log('reading.created', $reading, [
                 'period' => $period,
@@ -692,12 +696,12 @@ class BillingService
         // up is an argument at the door.
         $credit = self::billCredit($subscriber, $flatFee);
         $creditApplied = $credit['applied'];
+        $creditBalance = $credit['balance'];
         $total = $credit['total'];
         $flat = round($total + $creditApplied, 2);
-        self::saveCredit($subscriber, $credit['balance']);
 
-        return DB::transaction(function () use ($subscriber, $period, $total, $flat, $creditApplied, $prevDebt) {
-            return Bill::create([
+        return DB::transaction(function () use ($subscriber, $period, $total, $flat, $creditApplied, $creditBalance, $prevDebt) {
+            $bill = Bill::create([
                 'number' => self::billNumber($period, $subscriber->id),
                 'subscriber_id' => $subscriber->id,
                 'period' => $period,
@@ -713,6 +717,12 @@ class BillingService
                 'total' => $total,
                 'paid_amount' => 0,
             ]);
+
+            // His balance moves WITH the invoice that spends it, inside this transaction: a bill that
+            // cannot be raised must not have touched his money (see saveCredit).
+            self::saveCredit($subscriber, $creditBalance);
+
+            return $bill;
         });
     }
 

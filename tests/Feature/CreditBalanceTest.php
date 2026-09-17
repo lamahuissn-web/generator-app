@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Bill;
+use App\Models\Reading;
 use App\Models\Route;
 use App\Models\Setting;
 use App\Models\Subscriber;
@@ -199,5 +200,64 @@ class CreditBalanceTest extends TestCase
         $this->assertSame(51.60 * 24, round($exact, 2));
         $this->assertLessThan(1.00, $highest, 'his balance never reaches a dollar');
         $this->assertLessThan(1.00, abs($paid - $exact), 'and he ends up paying the exact sum, within his own balance');
+    }
+
+    // ---- a bill that cannot be raised must not move his money ------------------------------
+
+    public function test_a_flat_bill_that_cannot_be_raised_leaves_his_balance_untouched(): void
+    {
+        $this->roundUp();
+        $sub = $this->flatSub(51.60);
+        BillingService::saveCredit($sub, 0.80);
+
+        // The insert itself fails, exactly as a duplicate number or a dying connection would.
+        Bill::creating(fn () => throw new \RuntimeException('the bill could not be raised'));
+
+        try {
+            BillingService::ensureFlatBill($sub->fresh(), '2026-11');
+            $this->fail('an invoice that was never raised must not return as if it had been');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('the bill could not be raised', $e->getMessage());
+        }
+
+        $this->assertSame(0.80, $this->creditOf($sub), 'his money did not move without its invoice');
+        $this->assertDatabaseCount('bills', 0);
+    }
+
+    public function test_a_metered_bill_that_cannot_be_raised_leaves_his_balance_untouched(): void
+    {
+        $this->roundUp();
+        $route = Route::create(['name' => 'Test Area']);
+        $sub = Subscriber::create([
+            'route_id' => $route->id,
+            'name' => 'بيت الرصيد',
+            'meter_no' => 'M-9',
+            'type' => Subscriber::TYPE_METERED,
+            'amperage' => 15,
+            'maintenance_fee' => 51.60, // a real charge, so his balance genuinely moves this cycle
+            'status' => Subscriber::STATUS_ACTIVE,
+            'created_by' => $this->admin->id,
+        ]);
+        Reading::create([
+            'subscriber_id' => $sub->id,
+            'period' => '2026-06',
+            'current_reading' => 1000,
+            'previous_reading' => 0,
+            'consumption' => 0,
+        ]);
+        BillingService::saveCredit($sub, 0.80);
+
+        Bill::creating(fn () => throw new \RuntimeException('the bill could not be raised'));
+
+        try {
+            BillingService::enterMeteredReading($sub->fresh(), '2026-07', 1040, $this->admin->id);
+            $this->fail('an invoice that was never raised must not return as if it had been');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('the bill could not be raised', $e->getMessage());
+        }
+
+        $this->assertSame(0.80, $this->creditOf($sub), 'his money did not move without its invoice');
+        $this->assertDatabaseCount('bills', 0);
+        $this->assertDatabaseCount('readings', 1); // only the baseline: the failed reading rolled back
     }
 }
