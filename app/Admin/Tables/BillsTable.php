@@ -91,6 +91,15 @@ class BillsTable extends TableDefinition
                 'render' => fn (Bill $r): ?string => (float) $r->discount_amount > 0 ? money($r->discount_amount) : null,
             ],
             [
+                'key' => 'subsidy_amount',
+                'label' => __('t.subsidy'),
+                'type' => 'money',
+                'sortable' => true,
+                'align' => 'end',
+                'on_mobile' => false,
+                'render' => fn (Bill $r): ?string => (float) $r->subsidy_amount > 0 ? money($r->subsidy_amount) : null,
+            ],
+            [
                 'key' => 'total',
                 'label' => __('t.total'),
                 'type' => 'money',

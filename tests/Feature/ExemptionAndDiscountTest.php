@@ -248,6 +248,44 @@ class ExemptionAndDiscountTest extends TestCase
         $this->assertSame((float) $bill->total, round($bill->charges(), 2));
     }
 
+    public function test_a_bill_cannot_be_written_out_of_balance(): void
+    {
+        $sub = $this->flatSub(60.00);
+
+        // An invoice that states its own breakdown cannot contradict it. This is the door the audit found
+        // open: Bill::create with a real charge of 40 and a total of 999 (money never charged).
+        $this->expectException(\RuntimeException::class);
+
+        Bill::create([
+            'number' => 'INV-2026-09-7777', 'subscriber_id' => $sub->id, 'period' => '2026-09',
+            'type' => Subscriber::TYPE_FLAT, 'flat_amount' => 60, 'subsidy_amount' => 15,
+            'discount_amount' => 5, 'total' => 999, 'paid_amount' => 0,
+        ]);
+    }
+
+    public function test_an_invoice_whose_own_lines_add_up_is_written_normally(): void
+    {
+        $sub = $this->flatSub(60.00);
+
+        $bill = Bill::create([
+            'number' => 'INV-2026-09-7778', 'subscriber_id' => $sub->id, 'period' => '2026-09',
+            'type' => Subscriber::TYPE_FLAT, 'flat_amount' => 60, 'subsidy_amount' => 15,
+            'discount_amount' => 5, 'total' => 40, 'paid_amount' => 0,
+        ]);
+
+        $this->assertSame(40.0, (float) $bill->total);
+        $this->assertSame((float) $bill->total, round($bill->charges(), 2));
+
+        // An invoice written as a total alone states no breakdown, so there is nothing to contradict —
+        // legacy rows and the office's own paper fixtures keep working.
+        $bare = Bill::create([
+            'number' => 'INV-2026-09-7779', 'subscriber_id' => $sub->id, 'period' => '2026-09',
+            'type' => Subscriber::TYPE_FLAT, 'total' => 60, 'paid_amount' => 0,
+        ]);
+
+        $this->assertSame(60.0, (float) $bare->total);
+    }
+
     public function test_a_discount_cannot_exceed_the_invoice_charge(): void
     {
         $sub = $this->flatSub(60.00);

@@ -51,6 +51,33 @@ class Bill extends Model
      * Bill::subsidy_amount and Bill::discount_amount), and all three come OFF here so the printed invoice
      * adds up on its own terms and `charges()` never disagrees with `total`.
      */
+    /**
+     * An invoice that states its own breakdown cannot contradict it.
+     *
+     * Every legitimate writer satisfies this — the service, the run, a screen filling the charge lines — so
+     * the guard refuses nothing in normal use. What it stops is the other kind of write: a bare total typed
+     * onto an invoice that already says what it is made of, which is how money the office never charged
+     * would appear on the books (an invoice written as a total alone carries no breakdown to check, and is
+     * left alone — the tests' fixtures and any legacy row).
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (Bill $bill): void {
+            $charge = $bill->charges();
+
+            if ($charge <= 0 || (float) $bill->total <= 0) {
+                return;
+            }
+
+            if (abs($charge - (float) $bill->total) > 0.0001) {
+                throw new \RuntimeException(__('refuse.bill_out_of_balance', [
+                    'charge' => money_ltr($charge),
+                    'total' => money_ltr((float) $bill->total),
+                ]));
+            }
+        });
+    }
+
     public function charges(): float
     {
         return round((float) $this->usage_amount + (float) $this->maintenance_fee

@@ -94,7 +94,12 @@ final class ProfitLossReport
         // above, and counting it twice would inflate what the office gave away.
         $exemptValue = 0.0;
         try {
-            $billed = Bill::where('period', $this->month)->pluck('subscriber_id')->all();
+            // A special invoice (a part, a technician's trip) is not the month's subscription bill: it must
+            // not hide the value of an exempt house the month did not bill.
+            $billed = Bill::where('period', $this->month)
+                ->where('type', '!=', Bill::TYPE_SPECIAL)
+                ->pluck('subscriber_id')
+                ->all();
             $preview = BillingService::periodRun($this->month, null, false);
             foreach ($preview['rows'] as $row) {
                 if (($row['state'] ?? null) === BillingService::RUN_EXEMPT
