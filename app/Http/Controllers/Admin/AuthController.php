@@ -26,18 +26,20 @@ class AuthController extends Controller
 
     public function login(Request $request): RedirectResponse
     {
-        // The address as the phone keyboard meant it: an invisible bidi mark or a space left by
-        // autofill must not decide whether the office can sign in (see clean_email()).
-        $request->merge(['email' => clean_email($request->input('email'))]);
-
-        $credentials = $request->validate([
-            'email' => ['required', 'email'],
+        // One field, one identity: the office types the username it signs in with, or the address it
+        // was given. Both are read the same way here (see User::credentialFor()), because two doors
+        // that disagree about who a person is are how a name stops meaning an account.
+        $request->validate([
+            'identity' => ['required', 'string', 'max:255'],
             'password' => ['required', 'string'],
         ]);
 
-        if (! Auth::attempt($credentials, $request->boolean('remember'))) {
+        $credential = User::credentialFor((string) $request->input('identity'));
+
+        if ($credential === null
+            || ! Auth::attempt($credential + ['password' => (string) $request->input('password')], $request->boolean('remember'))) {
             throw ValidationException::withMessages([
-                'email' => __('auth.failed'),
+                'identity' => __('auth.failed'),
             ]);
         }
 
@@ -49,7 +51,7 @@ class AuthController extends Controller
             $request->session()->regenerateToken();
 
             throw ValidationException::withMessages([
-                'email' => __('auth.account_disabled'),
+                'identity' => __('auth.account_disabled'),
             ]);
         }
 
@@ -59,7 +61,7 @@ class AuthController extends Controller
             $request->session()->regenerateToken();
 
             throw ValidationException::withMessages([
-                'email' => __('portal.err_admin_only'),
+                'identity' => __('portal.err_admin_only'),
             ]);
         }
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Collector;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -17,19 +18,19 @@ class AuthController extends Controller
 
     public function login(Request $request): RedirectResponse
     {
-        // A collector types on a phone: strip the invisible characters a keyboard or autofill
-        // leaves behind before the address is validated (see clean_email()).
-        $request->merge(['email' => clean_email($request->input('email'))]);
-
-        $credentials = $request->validate([
-            'email' => ['required', 'email'],
+        // A collector types on a phone: a username, an address, an invisible character his keyboard
+        // left behind — one identity, read the same way the panel reads it (User::credentialFor()).
+        $request->validate([
+            'identity' => ['required', 'string', 'max:255'],
             'password' => ['required'],
         ]);
 
-        if (! Auth::attempt($credentials)) {
+        $credential = User::credentialFor((string) $request->input('identity'));
+
+        if ($credential === null || ! Auth::attempt($credential + ['password' => (string) $request->input('password')])) {
             return back()
-                ->withInput($request->only('email'))
-                ->withErrors(['email' => __('portal.auth_failed')]);
+                ->withInput($request->only('identity'))
+                ->withErrors(['identity' => __('portal.auth_failed')]);
         }
 
         $user = Auth::user();
@@ -38,13 +39,13 @@ class AuthController extends Controller
             Auth::logout();
             $request->session()->invalidate();
 
-            return redirect()->route('login')->withErrors(['email' => __('auth.account_disabled')]);
+            return redirect()->route('login')->withErrors(['identity' => __('auth.account_disabled')]);
         }
 
         if ($user->isAdmin()) {
             Auth::logout();
 
-            return redirect()->route('login')->withErrors(['email' => __('portal.auth_admin')]);
+            return redirect()->route('login')->withErrors(['identity' => __('portal.auth_admin')]);
         }
 
         $request->session()->regenerate();

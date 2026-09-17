@@ -64,12 +64,13 @@
                     @endif
 
                     <div class="flex flex-col gap-1">
-                        <label for="email" class="kt-form-label font-normal text-mono">{{ __('portal.email') }}</label>
+                        <label for="identity" class="kt-form-label font-normal text-mono">{{ __('t.username') }}</label>
                         <div class="kt-input">
-                            <i class="ki-filled ki-sms"></i>
-                            <input id="email" type="email" name="email" value="{{ old('email') }}" required autofocus
-                                   autocomplete="username" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false">
+                            <i class="ki-filled ki-user"></i>
+                            <input id="identity" type="text" name="identity" value="{{ old('identity') }}" required autofocus
+                                   autocomplete="username" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false">
                         </div>
+                        <span class="text-xs text-muted-foreground">{{ __('t.username_hint') }}</span>
                     </div>
 
                     <div class="flex flex-col gap-1">

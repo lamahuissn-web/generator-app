@@ -6,6 +6,7 @@ use App\Admin\FormDefinition;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 
 /**
  * A panel or portal account.
@@ -29,6 +30,13 @@ class UserForm extends FormDefinition
                     'key' => 'name',
                     'label' => __('t.full_name'),
                     'rules' => ['required', 'string', 'max:255'],
+                ],
+                [
+                    'key' => 'username',
+                    'label' => __('t.username'),
+                    'unique' => 'users,username',
+                    'helper' => __('t.username_hint_form'),
+                    'rules' => ['nullable', 'string', 'max:60', 'regex:/^[\p{L}\p{N}._-]+$/u'],
                 ],
                 [
                     'key' => 'email',
@@ -102,9 +110,25 @@ class UserForm extends FormDefinition
 
     public function save(array $state, ?Model $record): Model
     {
+        // The name he signs in with: what the office typed, or — left empty — the address's own
+        // local part, made free. A name already spoken for is refused here rather than renamed
+        // behind the operator's back, because a silent rename is a person who cannot sign in and
+        // does not know why.
+        $email = (string) clean_email($state['email'] ?? '');
+        $username = clean_username($state['username'] ?? '') ?: User::usernameFor($email, $record?->getKey());
+
+        if (User::query()->where('username', $username)
+            ->when($record !== null, fn ($query) => $query->whereKeyNot($record->getKey()))
+            ->exists()) {
+            throw ValidationException::withMessages([
+                'state.username' => __('t.username_taken', ['username' => $username]),
+            ]);
+        }
+
         $attributes = [
             'name' => $state['name'],
-            'email' => $state['email'],
+            'username' => $username,
+            'email' => $email,
             'role' => $state['role'],
             'status' => $state['status'] ?? User::STATUS_ACTIVE,
             'phone' => $state['phone'] ?: null,

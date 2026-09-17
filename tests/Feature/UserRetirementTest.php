@@ -57,8 +57,8 @@ class UserRetirementTest extends TestCase
     {
         $retired = $this->user('مدير سابق', User::ROLE_ADMIN, User::STATUS_INACTIVE);
 
-        $this->post('/admin/login', ['email' => $retired->email, 'password' => 'secret'])
-            ->assertSessionHasErrors('email');
+        $this->post('/admin/login', ['identity' => $retired->email, 'password' => 'secret'])
+            ->assertSessionHasErrors('identity');
 
         $this->assertGuest();
     }
@@ -68,8 +68,8 @@ class UserRetirementTest extends TestCase
         $retired = $this->user('جابي سابق', User::ROLE_COLLECTOR, User::STATUS_INACTIVE);
 
         $this->from('/collector/login')
-            ->post('/collector/login', ['email' => $retired->email, 'password' => 'secret'])
-            ->assertSessionHasErrors('email');
+            ->post('/collector/login', ['identity' => $retired->email, 'password' => 'secret'])
+            ->assertSessionHasErrors('identity');
 
         $this->assertGuest();
     }
@@ -94,7 +94,7 @@ class UserRetirementTest extends TestCase
 
     public function test_an_active_account_is_untouched(): void
     {
-        $this->post('/admin/login', ['email' => $this->admin->email, 'password' => 'secret']);
+        $this->post('/admin/login', ['identity' => $this->admin->email, 'password' => 'secret']);
         $this->assertAuthenticatedAs($this->admin);
 
         $this->get('/admin')->assertOk();

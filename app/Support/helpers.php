@@ -230,29 +230,59 @@ if (! function_exists('periods_with_data')) {
     }
 }
 
-if (! function_exists('clean_email')) {
+if (! function_exists('strip_invisible')) {
     /**
-     * An email as the phone keyboard meant it.
+     * Everything that cannot legally appear in a typed identifier.
      *
-     * Android keyboards and autofill insert invisible characters into a typed address: bidi marks
-     * and isolates (U+200E/U+200F/U+2066–U+2069), zero-width spaces, a non-breaking space, a space
-     * after an accepted suggestion. Nothing looks wrong on screen, and the browser's own email
-     * check refuses to submit — blaming a character the operator cannot see. Everything that
-     * cannot legally appear in an address is stripped here, so "looks identical" becomes "is
-     * identical" before the address is validated or used.
+     * Android keyboards and autofill insert characters nobody can see: bidi marks and isolates
+     * (U+200E/U+200F/U+2066–U+2069), zero-width spaces, a non-breaking space, the space an accepted
+     * suggestion leaves behind. Nothing looks wrong on screen, and the browser's own check refuses
+     * to submit — blaming a character the operator cannot see. Stripping happens here, once, so
+     * "looks identical" becomes "is identical" before anything is validated, compared or stored.
      */
-    function clean_email(string|int|float|null $value): ?string
+    function strip_invisible(string|int|float|null $value): string
     {
         if ($value === null) {
-            return null;
+            return '';
         }
 
+        // Every code point that cannot legally appear in a typed identifier: controls, spaces of
+        // every width, bidi marks and isolates, the zero-width family, and the BOM.
         $stripped = preg_replace(
             '/[\x{0000}-\x{0020}\x{007F}-\x{009F}\x{00A0}\x{1680}\x{180E}\x{2000}-\x{200F}'
             .'\x{2028}-\x{202F}\x{205F}\x{2060}-\x{206F}\x{3000}\x{FEFF}]/u',
             '',
             (string) $value
         );
+
+        return $stripped ?? '';
+    }
+}
+
+if (! function_exists('clean_email')) {
+    /** An email as the phone keyboard meant it: visible characters only, one case. */
+    function clean_email(string|int|float|null $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return mb_strtolower(strip_invisible($value), 'UTF-8');
+    }
+}
+
+if (! function_exists('clean_username')) {
+    /**
+     * A username as the keyboard meant it.
+     *
+     * Letters and digits survive — Arabic ones included, so a collector can sign in with his own
+     * name — with the three marks a name is allowed to carry (. _ -). Everything else is dropped,
+     * spaces and invisible characters among it: a username is typed on a phone, and it has to mean
+     * one thing on every keyboard.
+     */
+    function clean_username(string|int|float|null $value): string
+    {
+        $stripped = preg_replace('/[^\p{L}\p{N}._-]+/u', '', strip_invisible($value));
 
         return mb_strtolower($stripped ?? '', 'UTF-8');
     }

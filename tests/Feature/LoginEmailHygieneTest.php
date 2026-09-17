@@ -75,7 +75,7 @@ class LoginEmailHygieneTest extends TestCase
         $collector = $this->user('collector1@example.com', User::ROLE_COLLECTOR);
 
         $response = $this->from('/collector/login')->post('/collector/login', [
-            'email' => "collector1@example.com\u{2069}",
+            'identity' => "collector1@example.com\u{2069}",
             'password' => 'secret',
         ]);
 
@@ -88,7 +88,7 @@ class LoginEmailHygieneTest extends TestCase
         $collector = $this->user('collector1@example.com', User::ROLE_COLLECTOR);
 
         $this->from('/collector/login')->post('/collector/login', [
-            'email' => " Collector1@Example.com\u{00A0}",
+            'identity' => " Collector1@Example.com\u{00A0}",
             'password' => 'secret',
         ])->assertRedirect(route('collector.dashboard'));
 
@@ -100,9 +100,9 @@ class LoginEmailHygieneTest extends TestCase
         $this->user('collector1@example.com', User::ROLE_COLLECTOR);
 
         $this->from('/collector/login')->post('/collector/login', [
-            'email' => "collector1@example.com\u{2069}",
+            'identity' => "collector1@example.com\u{2069}",
             'password' => 'not-the-password',
-        ])->assertSessionHasErrors('email');
+        ])->assertSessionHasErrors('identity');
 
         $this->assertGuest();
     }
@@ -114,7 +114,7 @@ class LoginEmailHygieneTest extends TestCase
         $admin = $this->user('admin@example.com', User::ROLE_ADMIN);
 
         $this->post('/admin/login', [
-            'email' => "\u{200F}admin@\u{200E}example.com ",
+            'identity' => "\u{200F}admin@\u{200E}example.com ",
             'password' => 'secret',
         ])->assertRedirect(route('admin.dashboard'));
 
@@ -124,9 +124,9 @@ class LoginEmailHygieneTest extends TestCase
     public function test_an_address_of_nothing_but_invisibles_is_a_validation_error_not_a_crash(): void
     {
         $this->post('/admin/login', [
-            'email' => "\u{200F}\u{2069} ",
+            'identity' => "\u{200F}\u{2069} ",
             'password' => 'secret',
-        ])->assertSessionHasErrors('email');
+        ])->assertSessionHasErrors('identity');
 
         $this->assertGuest();
     }

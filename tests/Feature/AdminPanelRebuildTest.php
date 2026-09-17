@@ -79,7 +79,7 @@ class AdminPanelRebuildTest extends TestCase
     public function test_admin_can_sign_in_and_reaches_the_dashboard(): void
     {
         $this->post(route('admin.login.attempt'), [
-            'email' => 'admin@panel.test',
+            'identity' => 'admin@panel.test',
             'password' => 'secret',
         ])->assertRedirect(route('admin.dashboard'));
 
@@ -90,9 +90,9 @@ class AdminPanelRebuildTest extends TestCase
     public function test_collector_credentials_are_refused_at_the_panel_login(): void
     {
         $this->post(route('admin.login.attempt'), [
-            'email' => 'jad@panel.test',
+            'identity' => 'jad@panel.test',
             'password' => 'secret',
-        ])->assertSessionHasErrors('email');
+        ])->assertSessionHasErrors('identity');
 
         $this->assertGuest();
     }

@@ -27,7 +27,7 @@ class EnsureUserIsActive
 
             return redirect()->guest(
                 $request->is('admin', 'admin/*') ? route('admin.login') : route('login'),
-            )->withErrors(['email' => __('auth.account_disabled')]);
+            )->withErrors(['identity' => __('auth.account_disabled')]);
         }
 
         return $next($request);

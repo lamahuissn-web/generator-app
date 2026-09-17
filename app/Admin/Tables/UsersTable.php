@@ -27,7 +27,7 @@ class UsersTable extends TableDefinition
 
     public function searchable(): array
     {
-        return ['name', 'email', 'phone'];
+        return ['name', 'username', 'email', 'phone'];
     }
 
     public function defaultSort(): array
@@ -46,6 +46,13 @@ class UsersTable extends TableDefinition
                 'sortable' => true,
                 'color' => fn (User $r): string => $r->isActive() ? 'success' : 'muted',
                 'render' => fn (User $r): string => $r->isActive() ? __('t.account_active') : __('t.account_inactive'),
+            ],
+            [
+                'key' => 'username',
+                'label' => __('t.username'),
+                'sortable' => true,
+                'searchable' => true,
+                'render' => fn (User $r): string => ltr_isolate((string) $r->username),
             ],
             [
                 'key' => 'email',
@@ -147,6 +154,7 @@ class UsersTable extends TableDefinition
     {
         Audit::log('user.deleted', $row, [
             'name' => $row->name,
+            'username' => $row->username,
             'email' => $row->email,
             'role' => $row->role,
         ]);

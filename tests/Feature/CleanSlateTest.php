@@ -78,7 +78,7 @@ class CleanSlateTest extends TestCase
 
         // The door, through HTTP: the form posts to the panel's own login route.
         $this->post('/admin/login', [
-            'email' => 'admin@example.com',
+            'identity' => 'admin@example.com',
             'password' => 'admin123',
         ])->assertRedirect(route('admin.dashboard'))->assertSessionHasNoErrors();
 
@@ -95,12 +95,12 @@ class CleanSlateTest extends TestCase
             'password' => 'collector123', 'role' => User::ROLE_COLLECTOR, 'locale' => 'ar',
         ]);
 
-        $this->post('/admin/login', ['email' => 'admin@example.com', 'password' => 'wrong'])
-            ->assertSessionHasErrors('email');
+        $this->post('/admin/login', ['identity' => 'admin@example.com', 'password' => 'wrong'])
+            ->assertSessionHasErrors('identity');
         $this->assertGuest();
 
-        $this->post('/admin/login', ['email' => 'c@example.com', 'password' => 'collector123'])
-            ->assertSessionHasErrors('email');
+        $this->post('/admin/login', ['identity' => 'c@example.com', 'password' => 'collector123'])
+            ->assertSessionHasErrors('identity');
         $this->assertGuest();
     }
 

@@ -65,7 +65,7 @@ class CollectorPortalTest extends TestCase
     public function test_collector_can_log_in_with_credentials(): void
     {
         $this->post(route('collector.login.attempt'), [
-            'email' => 'jad@x.com',
+            'identity' => 'jad@x.com',
             'password' => 'x',
         ])->assertRedirect(route('collector.dashboard'));
 
@@ -287,9 +287,9 @@ class CollectorPortalTest extends TestCase
         $admin = User::where('email', 'admin@x.com')->first();
 
         $this->post(route('collector.login.attempt'), [
-            'email' => $admin->email,
+            'identity' => $admin->email,
             'password' => 'x',
-        ])->assertSessionHasErrors('email');
+        ])->assertSessionHasErrors('identity');
 
         $this->assertGuest();
     }
