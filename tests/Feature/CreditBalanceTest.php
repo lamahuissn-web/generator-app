@@ -260,4 +260,106 @@ class CreditBalanceTest extends TestCase
         $this->assertDatabaseCount('bills', 0);
         $this->assertDatabaseCount('readings', 1); // only the baseline: the failed reading rolled back
     }
+
+    // ---- an invoice that is removed gives back what it spent ---------------------------------
+
+    public function test_deleting_a_bill_gives_back_the_balance_it_spent(): void
+    {
+        $this->roundUp();
+        $sub = $this->flatSub(51.60);
+        BillingService::saveCredit($sub, 0.80);
+
+        $bill = BillingService::ensureFlatBill($sub->fresh(), '2026-11'); // 51.00, spends 0.60 of it
+        $this->assertSame(0.60, (float) $bill->credit_applied);
+        $this->assertSame(0.20, $this->creditOf($sub));
+
+        BillingService::deleteFlatBill($bill->fresh());
+
+        $this->assertSame(0.80, $this->creditOf($sub), 'deleting the invoice gives back what it spent');
+        $this->assertDatabaseCount('bills', 0);
+    }
+
+    public function test_deleting_a_reading_and_its_bill_gives_back_the_balance_it_spent(): void
+    {
+        $this->actingAs($this->admin);
+        $this->roundUp();
+        $route = Route::create(['name' => 'Test Area']);
+        $sub = Subscriber::create([
+            'route_id' => $route->id,
+            'name' => 'بيت الرصيد',
+            'meter_no' => 'M-9',
+            'type' => Subscriber::TYPE_METERED,
+            'amperage' => 15,
+            'maintenance_fee' => 51.60,
+            'status' => Subscriber::STATUS_ACTIVE,
+            'created_by' => $this->admin->id,
+        ]);
+        Reading::create([
+            'subscriber_id' => $sub->id,
+            'period' => '2026-06',
+            'current_reading' => 1000,
+            'previous_reading' => 0,
+            'consumption' => 0,
+        ]);
+        BillingService::saveCredit($sub, 0.80);
+
+        $result = BillingService::enterMeteredReading($sub->fresh(), '2026-07', 1040, $this->admin->id);
+        $this->assertSame(0.60, (float) $result['bill']->credit_applied);
+        $this->assertSame(0.20, $this->creditOf($sub));
+
+        BillingService::deleteReadingAndBill($result['reading'], 'تصحيح اختبار');
+
+        $this->assertSame(0.80, $this->creditOf($sub), 'the balance comes back with the paper it was spent on');
+    }
+
+    // ---- a receipt cannot be taken back after its money has been spent -----------------------
+
+    public function test_reversing_a_receipt_whose_balance_was_already_spent_is_refused(): void
+    {
+        $sub = $this->flatSub(51.60);
+        BillingService::ensureFlatBill($sub, '2026-09');
+        $first = BillingService::collect($sub->fresh(), 52.00, $this->admin->id); // credits 0.40
+        $this->assertSame(0.40, $this->creditOf($sub));
+
+        // The next invoice spends 0.60 of a balance that has since grown to 0.80.
+        $this->roundUp();
+        BillingService::saveCredit($sub->fresh(), 0.80);
+        BillingService::ensureFlatBill($sub->fresh(), '2026-10'); // 51.00 -> spends 0.60
+        $this->assertSame(0.20, $this->creditOf($sub));
+
+        try {
+            BillingService::reversePayment($first['payment']->fresh());
+            $this->fail('a receipt whose money is already spent on an invoice must not be reversed');
+        } catch (\RuntimeException $e) {
+            $this->assertSame(
+                __('refuse.credit_already_spent', ['amount' => money_ltr(0.40), 'balance' => money_ltr(0.20)]),
+                $e->getMessage()
+            );
+        }
+
+        $this->assertDatabaseCount('payments', 1); // nothing was reversed
+        $this->assertSame(0.20, $this->creditOf($sub), 'and the balance is exactly where it was');
+    }
+
+    // ---- a receipt recorded while the run is committing ---------------------------------------
+
+    public function test_a_receipt_taken_while_the_run_commits_is_not_overwritten(): void
+    {
+        $sub = $this->flatSub(51.60);
+        BillingService::saveCredit($sub->fresh(), 0.80); // the balance the preview will plan around
+
+        // The office saw the preview (51.60 − 0.80 = 50.80 for the invoice), and between that screen
+        // and this commit a collector took a receipt for 0.40 over the charge. The write must apply
+        // the invoice's own movement to the balance as it stands, not overwrite it with the figure
+        // the screen saw.
+        Bill::creating(function () use ($sub) {
+            BillingService::saveCredit($sub->fresh(), 1.20);
+        });
+
+        $result = BillingService::periodRun('2026-09', null, true, $this->admin->id);
+
+        $this->assertSame(1, $result['created']);
+        $this->assertSame(50.80, (float) Bill::first()->total, 'the invoice keeps what the office previewed');
+        $this->assertSame(0.40, $this->creditOf($sub), 'the receipt taken mid-run is still his money');
+    }
 }

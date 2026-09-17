@@ -306,14 +306,13 @@ class BillingService
         // usage + fees − the credit on the invoice = the total below it.
         $credit = self::billCredit($subscriber, round($usage + $maintenance, 2));
         $creditApplied = $credit['applied'];
-        $creditBalance = $credit['balance'];
         $total = $credit['total'];
         $usage = round($total + $creditApplied - $maintenance, 2);
 
         return DB::transaction(function () use (
             $subscriber, $period, $currentReading, $prevValue, $consumption,
             $userId, $note, $price, $usage, $maintenance, $prevDebt, $total, $creditApplied,
-            $creditBalance, $estimated, $estimateReason, $swap, $caseOpen, $extension,
+            $credit, $estimated, $estimateReason, $swap, $caseOpen, $extension,
         ) {
             $reading = Reading::create([
                 'subscriber_id' => $subscriber->id,
@@ -364,9 +363,10 @@ class BillingService
                 'paid_amount' => 0,
             ]);
 
-            // His balance moves WITH the invoice that spends it, inside this transaction: a bill that
-            // cannot be raised must not have touched his money (see saveCredit).
-            self::saveCredit($subscriber, $creditBalance);
+            // His balance moves WITH the invoice that spends it, inside this transaction and as a
+            // delta on the locked row: a bill that cannot be raised must not have touched his money,
+            // and a receipt taken in the meantime must not be overwritten (see moveCredit).
+            self::moveCredit($subscriber, $credit);
 
             Audit::log('reading.created', $reading, [
                 'period' => $period,
@@ -609,6 +609,7 @@ class BillingService
         $row['flat'] = $flat;
         $row['credit_applied'] = $credit['applied'];
         $row['credit_balance'] = $credit['balance'];
+        $row['credit_carried'] = $credit['carried'];
         $row['total'] = $total;
 
         $state = match (true) {
@@ -644,9 +645,14 @@ class BillingService
                 'paid_amount' => 0,
             ]);
 
-            // The bill's own credit balance was computed when the row was prepared; the run writes it
-            // with the bill, so a preview and the invoice it becomes can never disagree.
-            self::saveCredit($subscriber, (float) ($row['credit_balance'] ?? $subscriber->credit));
+            // The bill's own movement was computed when the row was prepared, and it is applied to the
+            // balance as it stands NOW (see moveCredit): a receipt recorded between the preview and
+            // this commit is the subscriber's money, and the figure the screen showed must not
+            // overwrite it.
+            self::moveCredit($subscriber, [
+                'balance' => (float) ($row['credit_balance'] ?? $subscriber->credit),
+                'carried' => (float) ($row['credit_carried'] ?? $subscriber->credit),
+            ]);
 
             Audit::log('bill.generated', $bill, [
                 'period' => $period,
@@ -696,11 +702,10 @@ class BillingService
         // up is an argument at the door.
         $credit = self::billCredit($subscriber, $flatFee);
         $creditApplied = $credit['applied'];
-        $creditBalance = $credit['balance'];
         $total = $credit['total'];
         $flat = round($total + $creditApplied, 2);
 
-        return DB::transaction(function () use ($subscriber, $period, $total, $flat, $creditApplied, $creditBalance, $prevDebt) {
+        return DB::transaction(function () use ($subscriber, $period, $total, $flat, $creditApplied, $credit, $prevDebt) {
             $bill = Bill::create([
                 'number' => self::billNumber($period, $subscriber->id),
                 'subscriber_id' => $subscriber->id,
@@ -718,9 +723,10 @@ class BillingService
                 'paid_amount' => 0,
             ]);
 
-            // His balance moves WITH the invoice that spends it, inside this transaction: a bill that
-            // cannot be raised must not have touched his money (see saveCredit).
-            self::saveCredit($subscriber, $creditBalance);
+            // His balance moves WITH the invoice that spends it, inside this transaction and as a
+            // delta on the locked row: a bill that cannot be raised must not have touched his money,
+            // and a receipt taken in the meantime must not be overwritten (see moveCredit).
+            self::moveCredit($subscriber, $credit);
 
             return $bill;
         });
@@ -767,7 +773,7 @@ class BillingService
      *
      * Reading the plan changes nothing — a preview may show it, only a bill saves it (saveCredit).
      *
-     * @return array{total: float, applied: float, balance: float}
+     * @return array{total: float, applied: float, balance: float, carried: float}
      */
     public static function billCredit(Subscriber $subscriber, float $exact): array
     {
@@ -779,7 +785,57 @@ class BillingService
             'total' => $total,
             'applied' => round(max(0, $exact - $total), 2),
             'balance' => round($carrying + $total - $exact, 2),
+            // What he was carrying when the plan was read, so the writer can apply the DIFFERENCE
+            // rather than overwrite a balance that a receipt may have moved in the meantime.
+            'carried' => $carrying,
         ];
+    }
+
+    /**
+     * Move the balance a bill implies, inside that bill's transaction.
+     *
+     * The figures the screen computed are applied as a DELTA to the balance as it stands right now,
+     * with the row locked: a receipt recorded between the preview and the commit is the subscriber's
+     * money too, and the number the operator saw on screen must not overwrite it.
+     *
+     * @param  array{balance: float, carried: float}  $credit
+     */
+    private static function moveCredit(Subscriber $subscriber, array $credit): void
+    {
+        $moved = round((float) $credit['balance'] - (float) $credit['carried'], 2);
+
+        if ($moved === 0.0) {
+            return;
+        }
+
+        $locked = Subscriber::whereKey($subscriber->getKey())->lockForUpdate()->first() ?? $subscriber;
+
+        self::saveCredit($locked, round((float) ($locked->credit ?? 0) + $moved, 2));
+    }
+
+    /**
+     * An invoice being removed gives back the balance it spent.
+     *
+     * Deleting a bill used to leave subscribers.credit where the invoice had left it, so the part of
+     * his money that invoice had consumed vanished along with the paper. The inverse is exact whenever
+     * the invoice spent something (`applied = exact − total`); nothing is owed back otherwise, because
+     * a bill that spent nothing is a bill whose ceiling swallowed the balance instead.
+     */
+    private static function giveBackSpentCredit(Bill $bill): float
+    {
+        $spent = round((float) $bill->credit_applied, 2);
+
+        if ($spent <= 0) {
+            return 0.0;
+        }
+
+        $subscriber = Subscriber::whereKey($bill->subscriber_id)->lockForUpdate()->first();
+
+        if ($subscriber !== null) {
+            self::saveCredit($subscriber, round((float) ($subscriber->credit ?? 0) + $spent, 2));
+        }
+
+        return $spent;
     }
 
     /** Put a computed balance on the subscriber: a bill and the credit it moves land together, or not at all. */
@@ -1007,7 +1063,21 @@ class BillingService
             $extra = round((float) $payment->amount - (float) ($payment->applied ?? $payment->amount), 2);
 
             if ($subscriber !== null && $extra > 0) {
-                self::saveCredit($subscriber, max(0, (float) ($subscriber->credit ?? 0) - $extra));
+                $balance = round((float) ($subscriber->credit ?? 0), 2);
+
+                // Part of what this receipt put on his account has already been spent on an invoice
+                // that was issued with the discount (bills.credit_applied). Taking the receipt back
+                // cannot claw that out of a month he has already been charged less for, and clamping
+                // the balance at zero would leave the discount unfunded — money invented. Refuse by
+                // name: deleting the later invoice gives the balance back, and then this works.
+                if (round($balance - $extra, 2) < 0) {
+                    throw new \RuntimeException(__('refuse.credit_already_spent', [
+                        'amount' => money_ltr($extra),
+                        'balance' => money_ltr($balance),
+                    ]));
+                }
+
+                self::saveCredit($subscriber, round($balance - $extra, 2));
             }
 
             foreach ($payment->allocations as $allocation) {
@@ -1066,6 +1136,8 @@ class BillingService
             'consumption' => $reading->consumption,
             'bill_id' => $bill->id,
             'bill_total' => $bill->total,
+            // The balance this invoice had spent is part of what removing it must undo.
+            'credit_restored' => round((float) $bill->credit_applied, 2),
             // Why a month that was already closed was opened again, and by whom.
             'cycle_closed' => CycleLock::isClosed($reading->period),
             'reason' => $reason,
@@ -1073,6 +1145,7 @@ class BillingService
 
         DB::transaction(function () use ($reading, $bill, $snapshot) {
             Audit::log('reading.deleted', $reading, $snapshot);
+            self::giveBackSpentCredit($bill);
             $bill->delete(); // cascades nothing here (unpaid)
             $reading->delete();
         });
@@ -1100,10 +1173,13 @@ class BillingService
             'period' => $bill->period,
             'flat_amount' => $bill->flat_amount,
             'total' => $bill->total,
+            // The balance this invoice had spent is part of what removing it must undo.
+            'credit_restored' => round((float) $bill->credit_applied, 2),
         ];
 
         DB::transaction(function () use ($bill, $snapshot) {
             Audit::log('bill.deleted', $bill, $snapshot);
+            self::giveBackSpentCredit($bill);
             $bill->delete();
         });
     }
@@ -1243,6 +1319,7 @@ class BillingService
                 'number' => $bill->number,
                 'title' => $bill->title,
                 'total' => $bill->total,
+                'credit_restored' => round((float) $bill->credit_applied, 2),
                 'items' => $bill->items->map(fn (BillItem $item) => [
                     'description' => $item->description,
                     'quantity' => $item->quantity,
@@ -1251,6 +1328,7 @@ class BillingService
                 ])->all(),
             ]);
 
+            self::giveBackSpentCredit($bill);
             $bill->delete();   // bill_items cascade
         });
     }
