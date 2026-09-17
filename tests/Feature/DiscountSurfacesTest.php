@@ -158,6 +158,24 @@ class DiscountSurfacesTest extends TestCase
         $this->assertSame(40.0, $data['invoiced'], 'only the discounted invoice is in SUM(total)');
     }
 
+    public function test_a_special_invoice_does_not_hide_an_exempt_houses_waived_value(): void
+    {
+        $month = '2026-09';
+
+        $exempt = $this->flatSub(60);
+        BillingService::exemptSubscriber($exempt, 'مسجد', 'مسجد', $this->admin->id);
+
+        // A part he bought this month: a special invoice, not the month's subscription bill.
+        Bill::create([
+            'number' => 'INV-2026-09-8888', 'subscriber_id' => $exempt->id, 'period' => $month,
+            'type' => Bill::TYPE_SPECIAL, 'title' => 'قطعة', 'items_amount' => 10, 'paid_amount' => 0,
+        ]);
+
+        $data = ProfitLossReport::forMonth($month)->data();
+
+        $this->assertSame(60.0, $data['exempt_value'], 'the subscription he was not billed is still waived value');
+    }
+
     public function test_exempt_houses_are_absent_from_the_overdue_chase(): void
     {
         $sub = $this->flatSub(60);

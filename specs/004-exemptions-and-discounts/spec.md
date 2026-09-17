@@ -137,3 +137,21 @@ and its top-debtor list too, not only from the overdue report and today's queue.
 Deliberate as designed: the monthly run bills an exempt house **nothing at all** (no invoice), while a reading
 entered by hand produces a **zero invoice** carrying the waiver — the paper only exists when someone visits
 the meter, and in both cases nothing is claimed from the house.
+
+## Amendment 2 — two doors the second audit found (2026-09-17)
+
+**(أ) An invoice could contradict itself.** `total` and the charge lines are all mass-assignable, so a write
+that bypassed `BillingService` (a console command, a future importer, a screen) could put money on the books
+that the office never charged: `Bill::create([... 'flat_amount' => 60, 'total' => 999])`. `Bill` now refuses
+to save an invoice whose own lines add up to one figure and whose total says another, and the refusal names
+both numbers (`refuse.bill_out_of_balance`). An invoice written as a total alone states no breakdown, so
+there is nothing to contradict — legacy rows and the office's paper fixtures keep working. The rule, in one
+line: **an invoice that states its own breakdown cannot contradict it.**
+
+**(ب) A part is not a subscription month.** The month's «قيمة الإعفاءات» asked "did the month bill this
+exempt house?" by looking at any invoice for the period — including a **special** invoice (a part, a
+technician's trip). An exempt house that bought a part therefore stopped being counted as waived value, and
+the office under-reported its own generosity. The question is now asked of **subscription** invoices only.
+
+Also: the invoice list shows the standing subsidy beside the hand waiver, so an operator scanning the list
+can see both kinds of waived money without opening the paper.
