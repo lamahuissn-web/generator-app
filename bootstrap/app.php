@@ -20,6 +20,11 @@ return Application::configure(basePath: dirname(__DIR__))
         },
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // The app listens on 127.0.0.1 only and is reached through the Cloudflare
+        // tunnel, which terminates TLS and forwards X-Forwarded-* headers. Without
+        // this the panel redirects to http:// and prints http:// links.
+        $middleware->trustProxies(at: '*');
+
         // Two portals share the `auth` middleware, and Laravel's default guest redirect is
         // route('login') — which is the COLLECTOR sign-in. An unauthenticated visitor to the
         // panel must be sent to the panel's own door.
