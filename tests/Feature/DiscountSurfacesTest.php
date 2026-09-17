@@ -138,14 +138,21 @@ class DiscountSurfacesTest extends TestCase
         $billA = BillingService::ensureFlatBill($a->fresh(), $month);
         BillingService::discountBill($billA, 20, 'حالة إنسانية', 'حالة إنسانية', $this->admin->id);
 
-        // One exempt flat house of 60 — never invoiced; its 60 is waived value.
+        // One exempt flat house of 60 — the month does not bill it; its 60 is waived value.
         $b = $this->flatSub(60);
         BillingService::exemptSubscriber($b, 'مسجد', 'مسجد', $this->admin->id);
 
+        // A third house, exempt AND invoiced: its waiver is written into an invoice as a subsidy, so it
+        // must be counted there and NOT again as waived value (or the month would report it twice).
+        $c = $this->flatSub(60);
+        BillingService::exemptSubscriber($c, 'مسجد', 'مسجد', $this->admin->id);
+        BillingService::ensureFlatBill($c->fresh(), $month);
+
         $data = ProfitLossReport::forMonth($month)->data();
 
-        $this->assertSame(20.0, $data['discounts'], 'SUM(bills.discount_amount) this month');
-        $this->assertSame(60.0, $data['exempt_value'], 'what the exempt house would have been charged');
+        $this->assertSame(20.0, $data['discounts'], 'the waiver the office granted by hand, SUM(bills.discount_amount)');
+        $this->assertSame(60.0, $data['subsidies'], 'the exempt house that WAS invoiced carries its waiver on the invoice');
+        $this->assertSame(60.0, $data['exempt_value'], 'only the house the month did not bill is waived value');
         // Net stays earned − expenses, never reduced by the disclosure.
         $this->assertSame(0.0, $data['net'], 'no invoices settled yet, so net is 0');
         $this->assertSame(40.0, $data['invoiced'], 'only the discounted invoice is in SUM(total)');

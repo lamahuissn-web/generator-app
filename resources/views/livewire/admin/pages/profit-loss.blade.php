@@ -72,6 +72,13 @@
             </div>
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <span class="flex flex-wrap items-center gap-2 text-sm font-medium text-mono">
+                    {{ __('pl.subsidies') }}
+                    <span class="text-xs text-muted-foreground">{{ __('pl.subsidies_hint') }}</span>
+                </span>
+                <span class="amount-cell text-xl font-semibold text-mono">{{ money($report['subsidies'] ?? 0) }}</span>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <span class="flex flex-wrap items-center gap-2 text-sm font-medium text-mono">
                     {{ __('pl.exempt_value') }}
                     <span class="text-xs text-muted-foreground">{{ __('pl.exempt_hint') }}</span>
                 </span>

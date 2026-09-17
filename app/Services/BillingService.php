@@ -314,16 +314,16 @@ class BillingService
         // paper explains where the money went, and the office can still show what that month would have
         // cost him.
         $exempt = $subscriber->isExempt();
-        $discount = $exempt ? $subsidy['charge'] : $subsidy['discount'];
+        $subsidyAmount = $exempt ? $subsidy['charge'] : $subsidy['discount'];
         $credit = self::billCredit($subscriber, $exempt ? 0.0 : $subsidy['charge']);
         $creditApplied = $credit['applied'];
         $total = $credit['total'];
-        $usage = round($total + $creditApplied + $discount - $maintenance, 2);
+        $usage = round($total + $creditApplied + $subsidyAmount - $maintenance, 2);
 
         return DB::transaction(function () use (
             $subscriber, $period, $currentReading, $prevValue, $consumption,
             $userId, $note, $price, $usage, $maintenance, $prevDebt, $total, $creditApplied,
-            $credit, $discount, $estimated, $estimateReason, $swap, $caseOpen, $extension,
+            $credit, $subsidyAmount, $estimated, $estimateReason, $swap, $caseOpen, $extension,
         ) {
             $reading = Reading::create([
                 'subscriber_id' => $subscriber->id,
@@ -371,8 +371,8 @@ class BillingService
                 'prev_debt' => $prevDebt,
                 'credit_applied' => $creditApplied,
                 'credit_created' => $credit['created'],
-                'discount_amount' => $discount,
-                'discount_note' => self::discountNote($subscriber, $discount),
+                'subsidy_amount' => $subsidyAmount,
+                'discount_note' => self::discountNote($subscriber, $subsidyAmount),
                 'total' => $total,
                 'paid_amount' => 0,
             ]);
@@ -632,7 +632,8 @@ class BillingService
         $row['credit_created'] = $credit['created'];
         $row['credit_balance'] = $credit['balance'];
         $row['credit_carried'] = $credit['carried'];
-        $row['discount_amount'] = $subsidy['discount'];
+        $row['subsidy_amount'] = $subsidy['discount'];
+        $row['subscriber_id'] = $subscriber->id;
         $row['total'] = $total;
 
         $state = match (true) {
@@ -666,8 +667,8 @@ class BillingService
                 'prev_debt' => $row['prev_debt'],
                 'credit_applied' => $row['credit_applied'] ?? 0,
                 'credit_created' => $row['credit_created'] ?? 0,
-                'discount_amount' => $row['discount_amount'] ?? 0,
-                'discount_note' => self::discountNote($subscriber, (float) ($row['discount_amount'] ?? 0)),
+                'subsidy_amount' => $row['subsidy_amount'] ?? 0,
+                'discount_note' => self::discountNote($subscriber, (float) ($row['subsidy_amount'] ?? 0)),
                 'total' => $row['total'],
                 'paid_amount' => 0,
             ]);
@@ -732,13 +733,13 @@ class BillingService
         // An exempt house is not charged: the agreed fee becomes a waiver line on the invoice, exactly as
         // it does for a metered house that was read (see exemptSubscriber).
         $exempt = $subscriber->isExempt();
-        $discount = $exempt ? $subsidy['charge'] : $subsidy['discount'];
+        $subsidyAmount = $exempt ? $subsidy['charge'] : $subsidy['discount'];
         $credit = self::billCredit($subscriber, $exempt ? 0.0 : $subsidy['charge']);
         $creditApplied = $credit['applied'];
         $total = $credit['total'];
-        $flat = round($total + $creditApplied + $discount, 2);
+        $flat = round($total + $creditApplied + $subsidyAmount, 2);
 
-        return DB::transaction(function () use ($subscriber, $period, $total, $flat, $creditApplied, $credit, $discount, $prevDebt) {
+        return DB::transaction(function () use ($subscriber, $period, $total, $flat, $creditApplied, $credit, $subsidyAmount, $prevDebt) {
             $bill = Bill::create([
                 'number' => self::billNumber($period, $subscriber->id),
                 'subscriber_id' => $subscriber->id,
@@ -753,8 +754,8 @@ class BillingService
                 'prev_debt' => $prevDebt,
                 'credit_applied' => $creditApplied,
                 'credit_created' => $credit['created'],
-                'discount_amount' => $discount,
-                'discount_note' => self::discountNote($subscriber, $discount),
+                'subsidy_amount' => $subsidyAmount,
+                'discount_note' => self::discountNote($subscriber, $subsidyAmount),
                 'total' => $total,
                 'paid_amount' => 0,
             ]);
@@ -933,7 +934,9 @@ class BillingService
      * ceiling or moves the balance the invoice already used: it adjusts the total, and setting it back to
      * zero restores that total exactly while the invoice is still unpaid.
      *
-     * @param  float  $amount  the TOTAL discount on this invoice (0 removes a discount)
+     * @param  float  $amount  the TOTAL of the office's own waiver on this invoice (0 removes it); the
+     *                         standing subsidy the invoice was produced with is a separate column and is
+     *                         left untouched by this call (see Bill::subsidy_amount)
      * @param  string  $reason  required, in the office's own words
      *
      * @throws \RuntimeException when the invoice is paid, when it is a special invoice, when the amount
@@ -954,8 +957,10 @@ class BillingService
             throw new \RuntimeException(__('refuse.discount_reason'));
         }
 
-        // The invoice's own charge, before any discount: what the meter and the tariff produced, less
-        // nothing. A discount may not exceed it — waiving money that was never charged invents it.
+        // What is still charged on this invoice BEFORE the office's own waiver: the charge the meter and
+        // the tariff produced, less the credit he carried and less the standing subsidy already written
+        // into it. It is the ceiling for the waiver — waiving money that was never charged invents it —
+        // and it deliberately does NOT add the subsidy back: a one-cycle discount grows ON TOP of it.
         $undiscounted = round($bill->charges() + (float) $bill->discount_amount, 2);
 
         if ($amount > $undiscounted) {

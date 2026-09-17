@@ -1349,9 +1349,12 @@
     "a.discount_reason_hint": "Required — e.g. hardship, free month.",
     "a.discount_apply": "Apply discount",
     "a.discount_ok": "Discounted :amount — new total :total.",
+    "prt.subsidy": "Subsidy",
     "prt.discount": "Discount",
     "prt.exempt_note": "Exempt — no claim is raised",
     "pl.discounts": "Discounts",
+    "pl.subsidies": "Standing subsidies",
+    "pl.subsidies_hint": "An exemption or a permanent percent written into this month's invoices",
     "pl.discounts_hint": "Waived on invoices this month",
     "pl.exempt_value": "Value of exemptions",
     "pl.exempt_hint": "What exempt houses would have been charged this cycle"
