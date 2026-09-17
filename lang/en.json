@@ -494,6 +494,8 @@
     "col.cst_due_note": "Please settle this amount when the collector visits",
     "col.cst_settled": "Account fully settled",
     "col.cst_settled_note": "Nothing is outstanding on this account",
+    "col.cst_held": "Credit in your favour",
+    "col.cst_held_note": "Your money with us — it comes off your next invoice",
     "col.cst_credit": "Credit in the subscriber's favour",
     "col.cst_credit_note": "The subscriber paid more than was due — the difference is carried forward in their favour",
     "col.cst_payment_line": "Payment for invoices: :invoices",

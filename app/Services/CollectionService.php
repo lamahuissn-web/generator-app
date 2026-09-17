@@ -248,7 +248,14 @@ class CollectionService
             'invoices' => self::settledInvoiceNumbers($payment),
         ]))->values();
 
-        return self::foldEntries($entries, $from, $bills->count() + $payments->count());
+        $statement = self::foldEntries($entries, $from, $bills->count() + $payments->count());
+
+        // His own money, waiting with the office. The statement's own arithmetic (bills − payments)
+        // cannot show it: a receipt now records the CASH that changed hands, so the part of it that
+        // settled nothing is a balance of his rather than a payment (BillingService::accrueCredit).
+        $statement['totals']['held'] = round(max(0, (float) $subscriber->credit), 2);
+
+        return $statement;
     }
 
     /** The invoice number a bill is known by, falling back to its period. */

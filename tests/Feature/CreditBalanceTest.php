@@ -9,6 +9,7 @@ use App\Models\Setting;
 use App\Models\Subscriber;
 use App\Models\User;
 use App\Services\BillingService;
+use App\Services\CollectionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -167,6 +168,41 @@ class CreditBalanceTest extends TestCase
         $this->assertSame(100.00, (float) $payment->amount, 'the lira above the balance is change handed back');
         $this->assertSame(0.0, $this->creditOf($sub), 'change changes hands in cash, so it is not a balance');
         $this->assertSame(0.0, (float) $sub->fresh()->outstanding());
+    }
+
+    // ---- the paper the subscriber is handed ------------------------------------------------
+
+    public function test_the_statement_names_the_balance_the_office_holds_for_him(): void
+    {
+        $sub = $this->flatSub(51.60);
+        BillingService::ensureFlatBill($sub, '2026-09');
+        BillingService::collect($sub->fresh(), 52.00, $this->admin->id);
+
+        $statement = CollectionService::statement($sub->fresh(), null);
+
+        // The statement's own arithmetic (bills − payments) lands on zero — the receipt records the
+        // cash — so the balance has to be named separately or his 40 cents are invisible here.
+        $this->assertSame(0.40, $statement['totals']['held']);
+
+        $this->actingAs($this->admin)
+            ->get(route('print.statement', ['subscriber' => $sub->id, 'size' => 'a4']))
+            ->assertOk()
+            ->assertSee(__('col.cst_held'), false)
+            ->assertSee(__('col.cst_held_note'), false);
+    }
+
+    public function test_a_subscriber_carrying_nothing_gets_no_such_line(): void
+    {
+        $sub = $this->flatSub(40.00);
+        BillingService::ensureFlatBill($sub, '2026-09');
+        BillingService::collect($sub->fresh(), 40.00, $this->admin->id);
+
+        $this->assertSame(0.0, CollectionService::statement($sub->fresh(), null)['totals']['held']);
+
+        $this->actingAs($this->admin)
+            ->get(route('print.statement', ['subscriber' => $sub->id, 'size' => 'a4']))
+            ->assertOk()
+            ->assertDontSee(__('col.cst_held'), false);
     }
 
     // ---- the fairness proof ---------------------------------------------------------------

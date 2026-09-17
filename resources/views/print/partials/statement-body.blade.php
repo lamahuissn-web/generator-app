@@ -188,6 +188,21 @@
     </tr>
 </table>
 
+@if (($t['held'] ?? 0) > 0)
+    {{-- His own money, waiting with the office. Named on the paper because a balance nobody can see
+         is a balance nobody returns, and because the collector at the door needs to know that the
+         next invoice is already partly paid. Reuses the due band's own credit colour. --}}
+    <table class="cstmt-due due-credit">
+        <tr>
+            <td class="due-k">
+                {{ __('col.cst_held') }}
+                <span class="due-note">{{ __('col.cst_held_note') }}</span>
+            </td>
+            <td class="due-v">{!! $amount((float) $t['held']) !!}</td>
+        </tr>
+    </table>
+@endif
+
 @if ($hidden = $statement['rows_total'] - $statement['rows_shown'])
     <div class="note">{{ __('col.cst_earlier', ['count' => $hidden, 'from' => $from]) }}</div>
 @endif
