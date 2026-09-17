@@ -36,6 +36,9 @@ class BillingService
 
     public const RUN_ZERO = 'zero';
 
+    /** Nothing is billed while the house is exempt (see exemptSubscriber). */
+    public const RUN_EXEMPT = 'exempt';
+
     public static function currentPeriod(): string
     {
         return now()->format('Y-m');
@@ -304,15 +307,23 @@ class BillingService
         // consumption above stay exactly what the meter said — the money line is where the office's
         // rule lands. The credit he carries rides in the same line and is named as itself:
         // usage + fees − the credit on the invoice = the total below it.
-        $credit = self::billCredit($subscriber, round($usage + $maintenance, 2));
+        $subsidy = self::chargeAfterSubsidy($subscriber, round($usage + $maintenance, 2));
+
+        // An exempt house is read like anyone else and charged like nobody: the whole (already
+        // subsidised) charge becomes a waiver on the invoice itself, so the reading stays on record, the
+        // paper explains where the money went, and the office can still show what that month would have
+        // cost him.
+        $exempt = $subscriber->isExempt();
+        $discount = $exempt ? $subsidy['charge'] : $subsidy['discount'];
+        $credit = self::billCredit($subscriber, $exempt ? 0.0 : $subsidy['charge']);
         $creditApplied = $credit['applied'];
         $total = $credit['total'];
-        $usage = round($total + $creditApplied - $maintenance, 2);
+        $usage = round($total + $creditApplied + $discount - $maintenance, 2);
 
         return DB::transaction(function () use (
             $subscriber, $period, $currentReading, $prevValue, $consumption,
             $userId, $note, $price, $usage, $maintenance, $prevDebt, $total, $creditApplied,
-            $credit, $estimated, $estimateReason, $swap, $caseOpen, $extension,
+            $credit, $discount, $estimated, $estimateReason, $swap, $caseOpen, $extension,
         ) {
             $reading = Reading::create([
                 'subscriber_id' => $subscriber->id,
@@ -360,6 +371,8 @@ class BillingService
                 'prev_debt' => $prevDebt,
                 'credit_applied' => $creditApplied,
                 'credit_created' => $credit['created'],
+                'discount_amount' => $discount,
+                'discount_note' => self::discountNote($subscriber, $discount),
                 'total' => $total,
                 'paid_amount' => 0,
             ]);
@@ -508,6 +521,7 @@ class BillingService
 
         $summary = array_fill_keys([
             self::RUN_CREATE, self::RUN_EXISTS, self::RUN_NO_READING, self::RUN_INACTIVE, self::RUN_ZERO,
+            self::RUN_EXEMPT,
         ], 0);
 
         $invoiced = 0.0;
@@ -591,13 +605,19 @@ class BillingService
         // The charge as the meter and the tariff produced it: what "is there anything to bill here"
         // must be answered on (a rounded-up $0.30 is still a charge of 30 cents, not a real invoice).
         $charged = round($usage + $maintenance + $flat, 2);
-        $credit = self::billCredit($subscriber, $charged);
+
+        // A subsidised house is a normal month at a lower price: the percent comes off the charge
+        // BEFORE the credit he carries and BEFORE the ceiling, and it is stored on the invoice as a line
+        // of its own (see chargeAfterSubsidy).
+        $subsidy = self::chargeAfterSubsidy($subscriber, $charged);
+        $credit = self::billCredit($subscriber, $subsidy['charge']);
         $total = $credit['total'];
 
         // …and the rounding lands on the line that carries the charge — consumption for a metered
         // house, the agreed fee for a flat one — so the invoice's own addition still comes out:
-        // usage + maintenance + flat − the credit he carries = the total, on paper and in the books.
-        $absorbed = round($total + $credit['applied'] - $charged, 2);
+        // usage + maintenance + flat − the credit he carries − the discount = the total, on paper and in
+        // the books.
+        $absorbed = round($total + $credit['applied'] - $subsidy['charge'], 2);
         if ($subscriber->isMetered()) {
             $usage = round($usage + $absorbed, 2);
         } else {
@@ -612,9 +632,11 @@ class BillingService
         $row['credit_created'] = $credit['created'];
         $row['credit_balance'] = $credit['balance'];
         $row['credit_carried'] = $credit['carried'];
+        $row['discount_amount'] = $subsidy['discount'];
         $row['total'] = $total;
 
         $state = match (true) {
+            $subscriber->isExempt() => self::RUN_EXEMPT,
             $subscriber->status !== Subscriber::STATUS_ACTIVE => self::RUN_INACTIVE,
             $subscriber->isMetered() && $reading === null => self::RUN_NO_READING,
             $charged <= 0 => self::RUN_ZERO,
@@ -644,6 +666,8 @@ class BillingService
                 'prev_debt' => $row['prev_debt'],
                 'credit_applied' => $row['credit_applied'] ?? 0,
                 'credit_created' => $row['credit_created'] ?? 0,
+                'discount_amount' => $row['discount_amount'] ?? 0,
+                'discount_note' => self::discountNote($subscriber, (float) ($row['discount_amount'] ?? 0)),
                 'total' => $row['total'],
                 'paid_amount' => 0,
             ]);
@@ -700,15 +724,21 @@ class BillingService
         $flatFee = (float) ($subscriber->flat_fee ?? 0);
         $prevDebt = self::outstandingBefore($subscriber, $period);
 
-        // The agreed fee carries the office's rounding — and the credit he carries with it — so the
-        // printed line and the total below it are the same figure: an invoice whose lines do not add
-        // up is an argument at the door.
-        $credit = self::billCredit($subscriber, $flatFee);
+        // The agreed fee carries the office's rounding — and the credit he carries, and the subsidy the
+        // office grants him — so the printed line and the total below it are still the same figure: an
+        // invoice whose lines do not add up is an argument at the door.
+        $subsidy = self::chargeAfterSubsidy($subscriber, $flatFee);
+
+        // An exempt house is not charged: the agreed fee becomes a waiver line on the invoice, exactly as
+        // it does for a metered house that was read (see exemptSubscriber).
+        $exempt = $subscriber->isExempt();
+        $discount = $exempt ? $subsidy['charge'] : $subsidy['discount'];
+        $credit = self::billCredit($subscriber, $exempt ? 0.0 : $subsidy['charge']);
         $creditApplied = $credit['applied'];
         $total = $credit['total'];
-        $flat = round($total + $creditApplied, 2);
+        $flat = round($total + $creditApplied + $discount, 2);
 
-        return DB::transaction(function () use ($subscriber, $period, $total, $flat, $creditApplied, $credit, $prevDebt) {
+        return DB::transaction(function () use ($subscriber, $period, $total, $flat, $creditApplied, $credit, $discount, $prevDebt) {
             $bill = Bill::create([
                 'number' => self::billNumber($period, $subscriber->id),
                 'subscriber_id' => $subscriber->id,
@@ -723,6 +753,8 @@ class BillingService
                 'prev_debt' => $prevDebt,
                 'credit_applied' => $creditApplied,
                 'credit_created' => $credit['created'],
+                'discount_amount' => $discount,
+                'discount_note' => self::discountNote($subscriber, $discount),
                 'total' => $total,
                 'paid_amount' => 0,
             ]);
@@ -861,6 +893,150 @@ class BillingService
     public static function saveCredit(Subscriber $subscriber, float $balance): void
     {
         $subscriber->forceFill(['credit' => round(max(0, $balance), 2)])->save();
+    }
+
+    /** Why an invoice shows a discount line: an exemption, or the house's permanent subsidy. */
+    private static function discountNote(Subscriber $subscriber, float $discount): ?string
+    {
+        if ($discount <= 0) {
+            return null;
+        }
+
+        return $subscriber->isExempt()
+            ? __('f.discount_exempt', ['reason' => (string) $subscriber->exempt_reason])
+            : __('f.discount_permanent', ['percent' => number_format($subscriber->effectiveDiscountPercent(), 2, '.', '')]);
+    }
+
+    /**
+     * The charge after the house's permanent subsidy, and the money that subsidy gives away.
+     *
+     * A subsidised subscriber is a normal month at a lower price: the percent comes off the charge the
+     * meter and the tariff produced, BEFORE the balance he carries and BEFORE the office's ceiling — so
+     * a subsidy can never be confused with his own money (see Feature 002) and never re-rounds the paper.
+     *
+     * @return array{charge: float, discount: float}
+     */
+    private static function chargeAfterSubsidy(Subscriber $subscriber, float $exact): array
+    {
+        $exact = round($exact, 2);
+        $percent = $subscriber->effectiveDiscountPercent();
+        $discount = $percent > 0 ? round($exact * $percent / 100, 2) : 0.0;
+
+        return ['charge' => round($exact - $discount, 2), 'discount' => $discount];
+    }
+
+    /**
+     * Waive part — or all — of one invoice: the office's deliberate act, with a reason.
+     *
+     * A discount REDUCES what the office charged. It is never written to the subscriber's balance
+     * (subscribers.credit is money the office is holding — see Feature 002), and it never re-runs the
+     * ceiling or moves the balance the invoice already used: it adjusts the total, and setting it back to
+     * zero restores that total exactly while the invoice is still unpaid.
+     *
+     * @param  float  $amount  the TOTAL discount on this invoice (0 removes a discount)
+     * @param  string  $reason  required, in the office's own words
+     *
+     * @throws \RuntimeException when the invoice is paid, when it is a special invoice, when the amount
+     *                           exceeds the invoice's own charge, or when the reason is empty
+     */
+    public static function discountBill(Bill $bill, float $amount, string $reason, ?string $category = null, ?int $userId = null): Bill
+    {
+        $amount = round(max(0, $amount), 2);
+        $reason = trim($reason);
+
+        if ($bill->isSpecial()) {
+            throw new \RuntimeException(__('refuse.discount_special'));
+        }
+        if ((float) $bill->paid_amount > 0) {
+            throw new \RuntimeException(__('refuse.discount_paid', ['amount' => money_ltr((float) $bill->paid_amount)]));
+        }
+        if ($amount > 0 && $reason === '') {
+            throw new \RuntimeException(__('refuse.discount_reason'));
+        }
+
+        // The invoice's own charge, before any discount: what the meter and the tariff produced, less
+        // nothing. A discount may not exceed it — waiving money that was never charged invents it.
+        $undiscounted = round($bill->charges() + (float) $bill->discount_amount, 2);
+
+        if ($amount > $undiscounted) {
+            throw new \RuntimeException(__('refuse.discount_over', ['charge' => money_ltr($undiscounted)]));
+        }
+
+        return DB::transaction(function () use ($bill, $amount, $reason, $category, $userId, $undiscounted) {
+            $before = [
+                'discount' => (float) $bill->discount_amount,
+                'total' => (float) $bill->total,
+                'note' => $bill->discount_note,
+            ];
+
+            $bill->forceFill([
+                'discount_amount' => $amount,
+                'total' => round(max(0, $undiscounted - $amount), 2),
+                'discount_note' => $amount > 0 ? $reason : null,
+                'discount_category' => $amount > 0 ? $category : null,
+                'discount_by' => $amount > 0 ? $userId : null,
+                'discount_at' => $amount > 0 ? now() : null,
+            ])->save();
+
+            Audit::log('bill.discounted', $bill, [
+                'subscriber_id' => $bill->subscriber_id,
+                'period' => $bill->period,
+                'before' => $before,
+                'charge' => $undiscounted,
+                'discount' => $amount,
+                'total' => (float) $bill->total,
+                'reason' => $reason,
+                'category' => $category,
+            ]);
+
+            return $bill->fresh();
+        });
+    }
+
+    /**
+     * Put a house on the exempt list: no invoice, no claim — with the reason recorded.
+     *
+     * The meter keeps telling the truth about the network (readings are recorded as always); only the
+     * money stops, which is why this is a decision the office states in words.
+     */
+    public static function exemptSubscriber(Subscriber $subscriber, string $reason, ?string $category = null, ?int $userId = null): Subscriber
+    {
+        $reason = trim($reason);
+
+        if ($reason === '') {
+            throw new \RuntimeException(__('refuse.exempt_reason'));
+        }
+
+        $subscriber->forceFill([
+            'exempt_at' => now(),
+            'exempt_reason' => $reason,
+            'exempt_category' => $category,
+        ])->save();
+
+        Audit::log('subscriber.exempted', $subscriber, [
+            'name' => $subscriber->name,
+            'reason' => $reason,
+            'category' => $category,
+            'by' => $userId,
+        ]);
+
+        return $subscriber;
+    }
+
+    /** Take a house off the exempt list: the next cycle bills it again. */
+    public static function unexemptSubscriber(Subscriber $subscriber, ?int $userId = null): Subscriber
+    {
+        $before = [
+            'reason' => $subscriber->exempt_reason,
+            'category' => $subscriber->exempt_category,
+            'since' => $subscriber->exempt_at?->toDateTimeString(),
+        ];
+
+        $subscriber->forceFill(['exempt_at' => null, 'exempt_reason' => null, 'exempt_category' => null])->save();
+
+        Audit::log('subscriber.exemption_removed', $subscriber, $before + ['by' => $userId]);
+
+        return $subscriber;
     }
 
     /**
