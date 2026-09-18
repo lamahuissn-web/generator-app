@@ -3,110 +3,137 @@
 **Status:** draft for the owner's approval (2026-09-18). No code before «نفّذ».
 **Depends on:** 002 (the balance we hold), 004 (exemptions and discounts — an exempt house's consumption is
 already on record and must count as **consumption** here, never as loss).
-**Idea source:** the three reference screens the owner sent (sector energy balance, diesel refuelling, engine
-profitability), read against this app's own model.
-**Name:** the owner's own — «مركز العمليات والأجهزة الهندسية». The month picture is one tab inside it, not the
-whole idea: the centre is about **the machines**.
+**Owner's own name:** the sidebar entry is **«مركز العمليات»**; the page carries **«مركز العمليات والأجهزة الهندسية»**.
 
-## Why an operations centre, not a report
+## The rule this feature is built on (the owner's words)
 
-The office can see the money. It cannot see the machine: which device it owns, how many hours it has run, when
-it was last serviced, how many kWh it produced, what leaked away, what a kWh costs, and what the office's own
-generosity cost it. Those are the questions a generator owner asks about his equipment — and every one of them
-is derivable from data the office already touches, except production, which is recorded with the thing it does
-anyway: buying diesel.
+> «أريد أن يكون النظام سهلاً كي يستطيع صاحب المولّد التعامل معه.»
 
-**The governing rule is Feature 004's, unchanged:** every figure is **fixed / configurable / optional**, and
-**a correct invoice may never depend on optional data**. The whole centre is **disclosure**: it changes no
-invoice, no balance, no profit figure. An office that records no fuel and no equipment still bills exactly as
-it does today — it simply does not see those cards, and never sees a fabricated number in their place.
+The buyer is a **generator owner**, not an engineer. Every design decision below answers one question: *how
+little must he learn and type to get a true picture of his machine?*
 
-## The five areas (tabs)
+### قواعد البساطة (binding, like the fixed/configurable/optional rule)
 
-### 1. لوحة المركز — the centre's board
+1. **The owner's routine is two things**, and nothing else is ever required of him:
+   - **once**, when he starts: three questions with defaults already filled (سعر اللتر · كم كيلوواط يعطي اللتر ·
+     نوع المولّد) — and «لا أعرف» is a valid answer that keeps the defaults;
+   - **each time he buys diesel**: اللترات والسعر — **حقلان، خمس عشرة ثانية**, typed from the pumps receipt.
+2. **Everything the app can work out, the app works out.** He is never asked for kWh produced, engine
+   efficiency, L/kWh, losses or cost per kWh: those are answers, not questions. Measuring production exactly
+   (kWh on the clock, engine hours) stays available as an **advanced** path for the owner who wants precision.
+3. **One device needs no list.** A one-generator office sees «المولّد» — never a registry with a single row —
+   and the equipment screens appear only when he adds a second machine.
+4. **Advanced figures never sit on the first screen.** The board shows six big numbers in plain words; the
+   engineering detail (loss percentage, cost per kWh, per-device efficiency, fuel anomalies) lives behind one
+   «أرقام أكثر» toggle.
+5. **No engineering term without a plain-Arabic explanation beside it**, and no word the office does not use
+   (مثال: «كم كيلوواط يعطي لتر المازوت» — لا «الكفاءة النوعية»).
+6. **Optional means optional, always.** Whatever he does not record, the app hides that card with one line
+   saying what to record — it never blocks a bill, an invoice or a collection, and it never prints a
+   fabricated number (Feature 004's golden rule, unchanged).
+7. **A number the app is unsure of says so**: an estimated figure is labelled «تقديري», and a measurement
+   taken with unread meters says how many are missing.
 
-- **FR-1** One screen per period with the three layers side by side: **الطاقة** (منتج · مستهلك · فاقد ونسبته)
-  · **المال** (مفوتر · مقبوض · مكتسب · متأخرات · رصيد المشتركين — علينا · مصاريف · **صافي = المكتسب − المصاريف**)
-  · **الكلفة** (كلفة الكيلوواط · ربح الكيلوواط · كلفة الإعفاءات).
-- **FR-2** Every card states where its number came from, and a card whose input is missing **hides itself**
-  with one line saying what to record («سجّل الإنتاج مع تعبئة المازوت»). Nothing is guessed.
-- **FR-3** The Feature 004 disclosure figures (الخصومات · الإعانات الدائمة · قيمة الإعفاءات) stay beside the
-  net, never inside it.
+## The two screens (v1)
 
-### 2. الأجهزة الهندسية — the equipment registry
+### 1. مركز العمليات — the board
 
-- **FR-4** A device record per machine: name, kind (مولّد / مضخة / UPS / أخرى), capacity (kVA or kW), serial,
-  install date, opening engine hours, status (يعمل / صيانة / متوقف), notes.
-- **FR-5** Each device gets its own card: hours run, litres burned, L/kWh, kWh produced, cost per kWh, and
-  **the date of its next service** — computed from the service log, not typed by hand.
-- **FR-6** A device that is stopped or under maintenance is a state, not a deletion: its history stays, and the
-  centre says which device is carrying the load this month.
+Six cards, in the office's own words, for the period:
 
-### 3. الوقود — refuelling
+| Card | In plain words | Source |
+|---|---|---|
+| **دخل الشهر** | what came in | `payments` (cash) |
+| **مكتسب** | what the office actually earned | `payments.applied` |
+| **علينا للمشتركين** | money the office holds for customers | `SUM(subscribers.credit)` |
+| **متأخرات** | what is still owed by customers | bills − payments |
+| **مصاريف** | what the office spent (including diesel) | `expenses` |
+| **صافي** | مكتسب − مصاريف | derived (fixed) |
 
-- **FR-7** Production is recorded **with each refuelling** — the default and cheapest source: date, litres,
-  price per litre, engine hours on the clock, and **the kWh produced since the last refuelling**. From this the
-  app derives L/kWh, the real diesel cost per kWh, and the period's production. No extra meter, no daily work.
-- **FR-8** Two alternatives for an office that buys in bulk and cannot fill the sheet every time: a **monthly
-  kWh produced** entered by hand, or an **estimate from litres** at a buyer-set kWh/litre rate. Every estimated
-  figure is labelled as an estimate wherever it appears and is never averaged silently with a measured one.
-- **FR-9** **Fuel anomaly check**: litres against engine hours and kWh produced, per device. A machine that
-  burns 30% more litres for the same hours is a leak, a theft, or a fault — the centre names the deviation
-  instead of leaving it in the total.
+Then, behind **«أرقام أكثر»**: مصاريف المازوت · كم كيلوواط أنتج المولّد · كم استهلك المشتركون · **الفاقد
+ونسبته** (with the count of unread meters and the share of estimated consumption) · **كلفة الكيلوواط** ·
+**ربح الكيلوواط** · **كلفة الإعفاءات** (what the office's generosity cost it — beside the net, never inside).
 
-### 4. الصيانة — service and alerts
+The board also carries the Feature 004 disclosure lines (الخصومات · الإعانات الدائمة · قيمة الإعفاءات) and the
+per-route energy balance as a card — **not** a separate report the owner has to go looking for.
 
-- **FR-10** A service log per device: date, kind (زيت / فلتر / إصلاح / فحص), engine hours at service, cost, and
-  an optional link to the expense row it produced — the money stays in expenses, it is not duplicated here.
-- **FR-11** Alerts at configurable engine-hour thresholds (reference **250 / 500 / 2000**), shown per device,
-  so a service is decided from the log instead of from memory.
+### 2. أجهزتي — one page per machine
 
-### 5. الطاقة والتوازن — energy balance and losses
+- A single page: its name, kind, capacity, install date, hours run, **its next service date**, and one
+  **timeline** holding both what it drank (refuellings) and what was done to it (services).
+- Two buttons on that page, each one form of two or three fields: **«تعبئة مازوت»** and **«صيانة»**.
+- Its own three numbers, computed: كم كيلوواط أنتج · كم كلف كيلوواط · كم لتر لكل كيلوواط — plus a plain
+  warning when the machine's own numbers drift from its history (the fuel-anomaly check).
+- An office with one generator never sees an index: the page opens directly on «المولّد».
 
-- **FR-12** Consumption = the month's metered readings (including exempt houses) **plus** the flat houses'
-  draw, estimated at a configurable **draw factor** (default **40%**, the reference band **35–45%** displayed
-  beside the field so a buyer can check his own number).
-- **FR-13** Losses = produced − consumed, with its percentage and its classification against a configurable
-  normal band. Missing production hides the figure rather than guessing it.
-- **FR-14** The same balance **per route** (the competitor's «قطاع» is our route), with a **dated
-  reconciliation log** so a change can be explained months later.
+## Requirements
+
+**Fuel (the only new routine — two fields)**
+
+- **FR-1** Every refuelling: date, litres, price per litre (defaulted to the last price), and optionally
+  engine hours and kWh produced. **Litres and price alone are enough** for the app to compute production,
+  diesel cost, cost per kWh and losses — using the buyer-set kWh/litre rate (default filled at onboarding).
+- **FR-2** When the owner does record kWh produced or engine hours, those take precedence over the rate and
+  the row is marked «مقيس» instead of «تقديري»; the two are never averaged silently.
+- **FR-3** The fuel card shows this month's litres, this month's diesel money, and the price per litre trend
+  (a rise is a real business event the owner must see).
+
+**Equipment**
+
+- **FR-4** A device record: name, kind (مولّد / مضخة / UPS / أخرى), capacity, serial, install date, opening
+  engine hours, status (يعمل / صيانة / متوقف), notes. **One device by default and no index until a second.**
+- **FR-5** Service log per device: date, kind (زيت / فلتر / إصلاح / فحص), engine hours, cost, optional link to
+  the expense it produced (the money stays in expenses, never duplicated here).
+- **FR-6** **Next service** computed from the log and the hour thresholds (reference **250 / 500 / 2000**), said
+  in plain words («بعد 150 ساعة» — أو «متأخرة 40 ساعة») and turned into a date at the machine's average pace.
+
+**The energy picture (all derived — nothing asked)**
+
+- **FR-7** Consumption = the period's metered readings (including exempt houses) **plus** the flat houses'
+  draw estimated from their connected load (amperage) at a configurable **draw factor** (default **40%**, the
+  reference band **35–45%** shown beside the field in one sentence the owner understands).
+- **FR-8** Production = measured kWh (when recorded) or litres × the kWh/litre rate, labelled accordingly.
+- **FR-9** Losses = produced − consumed, with its percentage, its classification against a configurable band,
+  **the number of meters not read in the period**, and the share of consumption that is estimated. An unknown
+  production hides the figure instead of guessing it.
+- **FR-10** The same balance per **route**, with a dated reconciliation log so a change can be explained later.
+
+**Nothing changes the money**
+
+- **FR-11** The centre is disclosure only: no invoice, balance, collection or profit figure moves because of
+  anything on these screens. `net` stays **مكتسب − مصاريف**; «كلفة الإعفاءات» sits beside it, never inside.
 
 ## Classification (the house rule)
 
 | Kind | Items |
 |---|---|
-| **Fixed** | losses = produced − consumed; cost/kWh = (diesel + operating) ÷ produced; net = earned − expenses; the centre never changes an invoice or a balance; an estimate is always labelled; an exempt house's consumption is consumption |
-| **Configurable** | the draw factor (default 40%, band 35–45% shown); the maintenance thresholds (250/500/2000); the normal loss band; the kWh/litre rate when estimating; the default diesel price per litre |
-| **Optional** | the equipment registry, refuellings, kWh produced, engine hours, service log. Absent → the cards hide; billing is untouched |
+| **Fixed** | losses = produced − consumed; cost/kWh = (diesel + operating) ÷ produced; net = earned − expenses; the centre never moves an invoice or a balance; an estimate is always labelled; an exempt house's consumption is consumption |
+| **Configurable** | kWh per litre (filled once at onboarding); the draw factor (40%, band 35–45% shown); the maintenance thresholds (250/500/2000); the normal loss band; the default diesel price |
+| **Optional** | engine hours, kWh produced, extra devices, the service log, exact measurements of any kind. Absent → the card hides with one line; billing is untouched |
 
 ## Data
 
-- `equipment`: `name`, `kind`, `capacity`, `serial`, `installed_on`, `engine_hours_opening`, `status`,
-  `notes`, `created_by`, timestamps.
+- `equipment`: `name`, `kind`, `capacity`, `serial`, `installed_on`, `engine_hours_opening`, `status`, `notes`,
+  `created_by`, timestamps.
 - `equipment_services`: `equipment_id`, `date`, `kind`, `engine_hours`, `cost`, `expense_id` (nullable),
   `notes`, `created_by`.
 - `refuellings`: `equipment_id` (nullable), `date`, `litres`, `price_per_litre`, `engine_hours`,
-  `kwh_produced`, `kwh_source` (`measured` | `monthly` | `estimated`), `supplier` (nullable), `notes`,
-  `created_by`.
-- Settings added: `flat_draw_factor` (40), `loss_band_normal`, `maintenance_alert_hours` («250,500,2000»),
-  `kwh_per_litre` (blank = no estimation), `diesel_price_default`.
-- Existing tables are **read, not changed**: `readings`, `bills`, `payments`, `expenses`. One device per
-  installation is the default; the optional `equipment_id` means a second machine is data, not a migration.
+  `kwh_produced`, `kwh_source` (`measured` | `estimated`), `supplier` (nullable), `notes`, `created_by`.
+- Settings added: `kwh_per_litre` (onboarding answer), `flat_draw_factor` (40), `loss_band_normal`,
+  `maintenance_alert_hours` («250,500,2000»), `diesel_price_default`.
+- Existing tables are **read, not changed**: `readings`, `bills`, `payments`, `expenses`.
 
 ## Out of scope
 
-- Any tariff decision: the reference app's 0.54 $/kWh MoEW figure is a yardstick displayed beside the office's
-  own effective price, never a value the app imposes.
+- Any tariff decision (the reference app's 0.54 $/kWh MoEW is a yardstick displayed beside the office's own
+  price, never imposed).
 - Customer-facing energy accounting: subscribers are billed in money, as today.
 - Remote monitoring / SCADA: values are typed by the office, never read from a device.
 
-## Defaults chosen (change any of them by saying so)
+## Defaults chosen (change any by saying so)
 
-1. The centre is a section of its own in the sidebar, with the five areas above as tabs; the monthly picture
-   lives inside it (لوحة المركز) rather than as a separate report.
-2. Production is recorded **with each refuelling**, with monthly entry as the fallback and litres-estimation as
-   the third option — the office picks per month, and each row remembers which it was.
-3. The flat draw factor defaults to **40%** with the **35–45%** band displayed.
-4. Maintenance alerts at **250 / 500 / 2000** engine hours.
-5. **Confirmed by the owner:** the sidebar entry reads **«مركز العمليات»**, and the page heading carries the
-   full name **«مركز العمليات والأجهزة الهندسية»**.
+1. Onboarding: three questions maximum, all with defaults, all answerable with «لا أعرف».
+2. **Production comes from litres × the kWh/litre rate** unless the owner records exact kWh — and every
+   figure that used the rate says «تقديري» on it.
+3. A one-generator office never sees an equipment index.
+4. The board is six plain cards; everything engineering sits behind «أرقام أكثر».
+5. The draw factor defaults to 40% with the 35–45% band shown; maintenance alerts at 250 / 500 / 2000 hours.
