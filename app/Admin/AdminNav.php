@@ -154,6 +154,24 @@ class AdminNav
                 ],
             ],
             [
+                'label' => __('nav.ops'),
+                'items' => [
+                    [
+                        'label' => __('nav.ops_centre'),
+                        'icon' => 'ki-chart-line-up-2',
+                        'route' => 'admin.operations-centre',
+                        'match' => ['admin.operations-centre'],
+                        'component' => \App\Livewire\Admin\Pages\OperationsCentre::class,
+                    ],
+                    [
+                        'label' => __('nav.my_equipment'),
+                        'icon' => 'ki-setting-3',
+                        'route' => 'admin.equipment.redirect',
+                        'match' => ['admin.equipment.*', 'admin.device-file', 'admin.equipment.redirect'],
+                    ],
+                ],
+            ],
+            [
                 'label' => __('nav.system'),
                 'items' => [
                     [

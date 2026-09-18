@@ -323,4 +323,38 @@ class OperationsCentreTest extends TestCase
         $this->assertNull($next['date'], 'no log, no pace, no invented date');
         $this->assertNull($anomaly);
     }
+
+    public function test_the_balance_is_also_kept_per_route_and_a_route_never_vanishes(): void
+    {
+        $this->reading($this->metered('بعدّاد أ'), 100);
+        $this->flat('مقطوع ب');
+
+        $other = Route::create(['name' => 'منطقة المقطوعين فقط']);
+        Subscriber::create([
+            'route_id' => $other->id, 'name' => 'مقطوع ج', 'type' => Subscriber::TYPE_FLAT,
+            'flat_fee' => 60, 'status' => Subscriber::STATUS_ACTIVE, 'created_by' => $this->admin->id,
+        ]);
+
+        $rows = OperationsReport::forMonth(self::MONTH)->perRoute()->keyBy('route');
+
+        $this->assertCount(2, $rows, 'a route whose houses are all flat still appears — that is where a leak hides');
+        $this->assertSame(100.0, $rows['منطقة الفحص']['metered']);
+        $this->assertSame(40.0, $rows['منطقة الفحص']['flat'], 'the one metered reading (100) × 40% for its flat house');
+        $this->assertSame(140.0, $rows['منطقة الفحص']['consumed']);
+        $this->assertSame(0.0, $rows['منطقة المقطوعين فقط']['metered']);
+        $this->assertSame(40.0, $rows['منطقة المقطوعين فقط']['consumed']);
+    }
+
+    public function test_a_service_with_a_cost_records_its_expense_once(): void
+    {
+        $device = $this->device();
+
+        $service = EquipmentService::create([
+            'equipment_id' => $device->id, 'date' => self::MONTH.'-05', 'kind' => EquipmentService::KIND_OIL,
+            'engine_hours' => 250, 'cost' => 40, 'created_by' => $this->admin->id,
+        ]);
+
+        $this->assertSame(40.0, (float) $service->cost);
+        $this->assertSame(0.0, (float) Expense::query()->sum('amount'), 'a service row on its own moves no money');
+    }
 }

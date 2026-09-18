@@ -42,6 +42,26 @@ Route::middleware(['auth', 'active', 'role:admin', 'locale'])->group(function ()
         Route::get('/{subscriber}/edit', [SubscriberController::class, 'edit'])->name('edit');
     });
 
+    // One-device shortcut: when exactly one device exists the sidebar goes straight to its file.
+    Route::get('equipment/redirect', function () {
+        if (\App\Models\Equipment::query()->count() === 1) {
+            $only = \App\Models\Equipment::query()->first();
+            if ($only) {
+                return redirect()->route('admin.device-file', $only);
+            }
+        }
+
+        return redirect()->route('admin.equipment.index');
+    })->name('equipment.redirect');
+
+    // One device's own page — identity, next service, fuel anomaly, and one timeline.
+    // Constraint on the parameter so it does not swallow /equipment/create or /equipment/redirect.
+    // Uses a controller view (admin.device-file) that embeds the Livewire component, not the
+    // component directly — a class with a typed Eloquent mount param is not invokable as a route.
+    Route::get('equipment/{equipment}', function (\App\Models\Equipment $equipment) {
+        return view('admin.device-file', ['equipment' => $equipment]);
+    })->where('equipment', '[0-9]+')->name('device-file');
+
     // The page screens (reports, the billing run, settings). Their metadata lives in
     // AdminNav — label, icon, group — so a screen is described once and the sidebar, the
     // heading and the route all read the same entry.
