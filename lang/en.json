@@ -1359,5 +1359,22 @@
     "pl.subsidies_hint": "An exemption or a permanent percent written into this month's invoices",
     "pl.discounts_hint": "Waived on invoices this month",
     "pl.exempt_value": "Value of exemptions",
-    "pl.exempt_hint": "What exempt houses would have been charged this cycle"
+    "pl.exempt_hint": "What exempt houses would have been charged this cycle",
+    "eq.kind_generator": "Generator",
+    "eq.kind_pump": "Pump",
+    "eq.kind_ups": "UPS",
+    "eq.kind_other": "Other",
+    "eq.status_working": "Working",
+    "eq.status_service": "Service",
+    "eq.status_stopped": "Stopped",
+    "eq.service_oil": "Oil",
+    "eq.service_filter": "Filter",
+    "eq.service_repair": "Repair",
+    "eq.service_inspection": "Inspection",
+    "ops.basis_measured": "measured on the machine",
+    "ops.basis_estimated": "estimated from litres",
+    "ops.basis_mixed": "part measured, part estimated",
+    "ops.loss_negative": "Consumed exceeds produced — check the meter readings and the kWh/litre rate.",
+    "ops.service_in": "in :hours hours",
+    "ops.service_late": ":hours hours late"
 }

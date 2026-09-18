@@ -1361,5 +1361,22 @@
     "pl.subsidies_hint": "إعفاء أو خصم دائم مكتوب على فواتير الشهر",
     "pl.discounts_hint": "ما مُنح هذا الشهر على الفواتير",
     "pl.exempt_value": "قيمة الإعفاءات",
-    "pl.exempt_hint": "ما كان سيُحتسب على المعفين هذه الدورة لو فُوترت"
+    "pl.exempt_hint": "ما كان سيُحتسب على المعفين هذه الدورة لو فُوترت",
+    "eq.kind_generator": "مولّد",
+    "eq.kind_pump": "مضخة",
+    "eq.kind_ups": "UPS",
+    "eq.kind_other": "أخرى",
+    "eq.status_working": "يعمل",
+    "eq.status_service": "صيانة",
+    "eq.status_stopped": "متوقف",
+    "eq.service_oil": "زيت",
+    "eq.service_filter": "فلتر",
+    "eq.service_repair": "إصلاح",
+    "eq.service_inspection": "فحص",
+    "ops.basis_measured": "مقيس من المولّد",
+    "ops.basis_estimated": "تقديري من اللترات",
+    "ops.basis_mixed": "بعضه مقيس وبعضه تقديري",
+    "ops.loss_negative": "المستهلك أكبر من المنتج — راجع قراءات العدّادات ومعدّل الكيلوواط لكل لتر.",
+    "ops.service_in": "بعد :hours ساعة",
+    "ops.service_late": "متأخرة :hours ساعة"
 }
