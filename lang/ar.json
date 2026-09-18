@@ -1469,5 +1469,7 @@
     "eq.anomaly_ok": "لا شذوذ — استهلاك الوقود ضمن معدله.",
     "eq.beyond_bands": "تجاوز العتبات المحددة — حدّث الإعدادات.",
     "t.device_file_sub": "ملف الجهاز",
-    "eq.service_expense_note": "صيانة :device — :kind"
+    "eq.service_expense_note": "صيانة :device — :kind",
+    "ops.hours_unit": "ساعة",
+    "ops.service_no_hours": "سجّل ساعات المحرك مع تعبئة مازوت أو في سجل الصيانة، فيحسب النظام موعد الخدمة القادمة."
 }
