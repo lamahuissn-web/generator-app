@@ -1440,7 +1440,7 @@
     "ops.estimated_share": "Estimated readings: :count",
     "ops.no_production": "Record production with a refuelling",
     "ops.no_cost": "No production — no cost",
-    "ops.no_profit": "No consumption — no profit",
+    "ops.no_profit": "consumption unknown or zero — no profit worked out",
     "ops.no_generosity": "No waivers this month",
     "ops.default_rate_note": "Default rate (3.0) — update in Settings for precision",
     "ops.basis_label": "Basis: :basis",
@@ -1492,5 +1492,8 @@
     "eq.record_expense": "Record it in the expenses",
     "eq.record_expense_hint": "Untick if you already booked this invoice in the expenses by hand.",
     "set.ops_section": "Operations and engineering equipment centre",
-    "set.ops_section_hint": "Asked once — the centre reads these to work out production, losses, cost per kWh and the next service."
+    "set.ops_section_hint": "Asked once — the centre reads these to work out production, losses, cost per kWh and the next service.",
+    "ops.flat_unknown_short": "unknown — no metered average to anchor it",
+    "ops.generosity_unknown": "The exempt houses' kWh cannot be estimated without a metered average.",
+    "set.loss_band_order": "A band reads low-to-high — e.g. 5-15."
 }

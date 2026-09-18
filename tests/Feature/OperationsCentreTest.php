@@ -455,4 +455,72 @@ class OperationsCentreTest extends TestCase
             ->call('save')
             ->assertHasErrors('state.kwh_per_litre');
     }
+
+    // ---- the second audit's door: production with no readings at all, whoever the network holds ----------
+
+    public function test_a_fresh_install_shows_no_loss_even_though_diesel_was_bought(): void
+    {
+        // The spec's own order: the machine and its diesel come before any subscriber exists.
+        $this->device();
+        $this->refuel(100, ['kwh_produced' => 300, 'kwh_source' => Refuelling::SOURCE_MEASURED]);
+
+        $losses = OperationsReport::forMonth(self::MONTH)->losses();
+
+        $this->assertSame(300.0, OperationsReport::forMonth(self::MONTH)->production()['kwh']);
+        $this->assertNull($losses['kwh'], 'nobody has been read and nobody exists: a 100% loss is arithmetic, not a measurement');
+        $this->assertNull($losses['percent']);
+        $this->assertSame('no_readings', $losses['reason']);
+    }
+
+    public function test_a_network_of_stopped_houses_shows_no_loss_either(): void
+    {
+        $this->metered('متوقف أ')->forceFill(['status' => Subscriber::STATUS_INACTIVE])->save();
+        $this->flat('متوقف ب')->forceFill(['status' => Subscriber::STATUS_INACTIVE])->save();
+        $this->refuel(100, ['kwh_produced' => 300, 'kwh_source' => Refuelling::SOURCE_MEASURED]);
+
+        $losses = OperationsReport::forMonth(self::MONTH)->losses();
+
+        $this->assertSame('no_readings', $losses['reason'], 'no reading has been taken — the loss is unknown, not 100%');
+        $this->assertNull($losses['kwh']);
+    }
+
+    public function test_a_house_read_then_converted_to_flat_is_not_counted_twice(): void
+    {
+        $sub = $this->metered('بيت تحوّل');
+        $this->reading($sub, 120);
+
+        // The office converts him to a flat subscriber in the same month he was read.
+        $sub->forceFill(['type' => Subscriber::TYPE_FLAT, 'flat_fee' => 60])->save();
+
+        $consumption = OperationsReport::forMonth(self::MONTH)->consumption();
+
+        $this->assertSame(120.0, $consumption['metered']);
+        $this->assertSame(0, $consumption['flat_houses'], 'he is already in the metered figure');
+        $this->assertSame(120.0, $consumption['kwh'], 'the month is not inflated by counting him twice');
+    }
+
+    public function test_a_route_whose_meters_are_not_read_yet_still_appears(): void
+    {
+        $this->metered('بلا قراءة');
+
+        $rows = OperationsReport::forMonth(self::MONTH)->perRoute();
+
+        $this->assertCount(1, $rows, 'an area that vanishes reads as "no such area", not "not read yet"');
+        $this->assertSame('منطقة الفحص', $rows[0]['route']);
+        $this->assertTrue($rows[0]['known']);
+    }
+
+    public function test_a_flat_house_with_no_basis_reports_unknown_not_zero(): void
+    {
+        // Flat only: there is no metered average to anchor their draw.
+        $exempt = $this->flat('مسجد');
+        $exempt->forceFill(['exempt_at' => now(), 'exempt_reason' => 'مسجد'])->save();
+        $this->refuel(100, ['price_per_litre' => 1]);
+
+        $report = OperationsReport::forMonth(self::MONTH);
+
+        $this->assertNull($report->generosity()['kwh'], 'unknown is not zero');
+        $this->assertNull($report->consumption()['flat_estimated']);
+        $this->assertFalse($report->consumption()['known']);
+    }
 }

@@ -133,7 +133,12 @@ final class OperationsReport
         // an assumption he understands is worth more than a formula he does not.
         $factor = (float) Setting::get('flat_draw_factor', self::FLAT_FACTOR_DEFAULT);
         $averageMetered = $readCount > 0 ? round($metered / $readCount, 1) : null;
-        $flatHouses = Subscriber::query()->active()->where('type', Subscriber::TYPE_FLAT)->count();
+        // A house that was read this period and then converted to flat is already in the metered figure: it
+        // must not be counted a second time as a flat house (which inflated consumption and hid the loss).
+        $flatHouses = Subscriber::query()->active()
+            ->where('type', Subscriber::TYPE_FLAT)
+            ->whereNotIn('id', $readSubscribers)
+            ->count();
         $flatEstimated = $averageMetered === null || $flatHouses === 0
             ? ($flatHouses === 0 ? 0.0 : null)
             : round($averageMetered * $factor / 100 * $flatHouses, 1);
@@ -150,9 +155,14 @@ final class OperationsReport
             'average_metered' => $averageMetered,
             'unread_meters' => $unread,
             'estimated_readings' => $estimatedReadings,
-            'known' => $readCount > 0 || ($meteredHouses === 0 && $flatHouses === 0),
+            // ONE rule, and it is about the READINGS, not about how many houses happen to be active: a month
+            // with no reading at all has no measured consumption to subtract, so a loss computed from it is
+            // arithmetic dressed as a measurement. This also covers the fresh install (a machine and diesel
+            // before any subscriber exists) and a network whose houses are all stopped — the audit found both
+            // doors still open, both reachable from the screens.
+            'known' => $readCount > 0,
             'complete' => $unread === 0 && $meteredHouses > 0 && $flatEstimated !== null,
-            'estimated_share' => $flatEstimated === null || round($metered + $flatEstimated, 1) <= 0
+            'estimated_share' => $flatEstimated === null || $flatEstimated <= 0 || round($metered + $flatEstimated, 1) <= 0
                 ? null
                 : round($flatEstimated / ($metered + $flatEstimated) * 100, 1),
             'factor' => $factor,
@@ -338,7 +348,14 @@ final class OperationsReport
         $kwh = round($metered + $flatKwh, 1);
         $cost = $this->costPerKwh();
 
-        return ['kwh' => $kwh, 'cost' => $cost === null ? null : round($kwh * $cost, 2)];
+        // A flat-only exempt house (or one whose draw cannot be anchored) has no kWh we can honestly state:
+        // `kwh` stays null and the card says "unknown" rather than "none".
+        $known = $metered > 0 || $flatExempt === 0 || $consumed['average_metered'] !== null;
+
+        return [
+            'kwh' => $known ? $kwh : null,
+            'cost' => ! $known || $cost === null ? null : round($kwh * $cost, 2),
+        ];
     }
 
     // ---------------------------------------------------------------- one machine
@@ -507,8 +524,17 @@ final class OperationsReport
             ->selectRaw('routes.name as route_name, COUNT(*) as flats')
             ->pluck('flats', 'route_name');
 
+        // Every route that HAS houses, read or not: a route whose meters have not been read yet used to vanish
+        // from the list entirely, which reads as "no such area" instead of "not read yet".
+        $served = Subscriber::query()->active()
+            ->join('routes', 'routes.id', '=', 'subscribers.route_id')
+            ->groupBy('routes.id', 'routes.name')
+            ->selectRaw('routes.name as route_name, COUNT(*) as houses')
+            ->pluck('houses', 'route_name');
+
         return $metered->keys()
             ->merge($flats->keys())
+            ->merge($served->keys())
             ->unique()
             ->sort()
             ->values()
@@ -525,6 +551,9 @@ final class OperationsReport
                     'flat' => $flatKwh,
                     'consumed' => round($meteredKwh + $flatKwh, 1),
                     'flats' => $flatCount,
+                    // Known = nothing rests on a basis we do not have: a flat house's draw with no metered
+                    // average to anchor it is unknown, and the card says so instead of printing a zero.
+                    'known' => $flatCount === 0 || $consumption['average_metered'] !== null,
                 ];
             })
             ->values();

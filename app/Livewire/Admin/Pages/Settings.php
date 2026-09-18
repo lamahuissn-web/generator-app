@@ -68,10 +68,22 @@ class Settings extends Component
             // A rate of zero would make every litre produce nothing and every loss infinite.
             'state.kwh_per_litre' => ['required', 'numeric', 'gt:0'],
             'state.diesel_price_default' => ['nullable', 'numeric', 'min:0'],
-            'state.flat_draw_factor' => ['required', 'numeric', 'min:0', 'max:100'],
+            // Zero would say "flat houses consume nothing" while they are visibly consuming — the mirror of
+            // the zero rate the line above refuses.
+            'state.flat_draw_factor' => ['required', 'numeric', 'gt:0', 'max:100'],
             // Empty is a valid answer and means "no verdict": the centre then shows the loss without judging it.
-            'state.loss_band_normal' => ['nullable', 'string', 'max:40'],
-            'state.maintenance_alert_hours' => ['required', 'string', 'max:60'],
+            // A band reads low-to-high: «15-5» would classify every loss as the opposite of what the office
+            // meant, so it is refused rather than stored.
+            'state.loss_band_normal' => [
+                'nullable', 'string', 'max:40', 'regex:/^\s*\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\s*$/',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if (preg_match('/^\s*(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*$/', (string) $value, $m)
+                        && (float) $m[1] >= (float) $m[2]) {
+                        $fail(__('set.loss_band_order'));
+                    }
+                },
+            ],
+            'state.maintenance_alert_hours' => ['required', 'string', 'max:60', 'regex:/^\s*\d+(?:\s*,\s*\d+)*\s*$/'],
             'state.company_name' => ['nullable', 'string', 'max:120'],
             'state.company_phone' => ['nullable', 'string', 'max:40'],
             'state.company_address' => ['nullable', 'string', 'max:180'],
