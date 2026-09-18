@@ -85,7 +85,7 @@ class ConvertToMetered extends ActionDefinition
                 ],
                 [
                     'key' => 'maintenance_fee',
-                    'label' => __('t.maintenance_fee'),
+                    'label' => __('t.maint_fee'),
                     'type' => 'money',
                     'min' => 0,
                     'helper' => __('a.maintenance_hint'),

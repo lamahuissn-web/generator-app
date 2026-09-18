@@ -125,7 +125,13 @@ class EquipmentTable extends TableDefinition
     {
         return [
             ['key' => 'edit', 'label' => __('t.edit'), 'icon' => 'ki-pencil', 'url' => fn (Equipment $r) => route('admin.equipment.edit', $r)],
-            ['key' => 'delete', 'label' => __('t.delete'), 'icon' => 'ki-trash', 'variant' => 'danger', 'method' => 'deleteRecord'],
+            [
+                'key' => 'delete', 'label' => __('t.delete'), 'icon' => 'ki-trash', 'variant' => 'danger',
+                'method' => 'deleteRecord',
+                // A machine with a file does not offer the button at all: a refusal after the click is a worse
+                // way to teach the same rule.
+                'hidden' => fn (Equipment $r): bool => ! $this->canDelete($r),
+            ],
         ];
     }
 
@@ -140,6 +146,12 @@ class EquipmentTable extends TableDefinition
     public function canDelete(Model $row): bool
     {
         return $row->refuellings()->doesntExist() && $row->services()->doesntExist();
+    }
+
+    /** The table's own refusal line, in the office's words — the generic one explains nothing. */
+    public function deleteRefusal(Model $row): ?string
+    {
+        return $this->canDelete($row) ? null : __('eq.delete_has_logs', ['name' => $row->name]);
     }
 
     public function deleteRecord(Model $row): void

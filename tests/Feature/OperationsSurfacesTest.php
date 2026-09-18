@@ -337,4 +337,42 @@ class OperationsSurfacesTest extends TestCase
 
         $this->assertSame(0, Equipment::count(), 'a device entered by mistake is not a permanent record');
     }
+
+    public function test_the_settings_refuse_a_zero_factor_and_a_meaningless_band(): void
+    {
+        $component = Livewire::actingAs($this->admin)->test(\App\Livewire\Admin\Pages\Settings::class);
+
+        $component->set('state.flat_draw_factor', '0')->call('save')
+            ->assertHasErrors('state.flat_draw_factor');
+
+        $component->set('state.flat_draw_factor', '40')
+            ->set('state.maintenance_alert_hours', 'abc')
+            ->call('save')
+            ->assertHasErrors('state.maintenance_alert_hours');
+
+        $component->set('state.maintenance_alert_hours', '250,500')
+            ->set('state.loss_band_normal', '15-5')
+            ->call('save')
+            ->assertHasErrors('state.loss_band_normal');
+
+        $component->set('state.loss_band_normal', '5-15')->call('save')->assertHasNoErrors();
+        $this->assertSame('5-15', \App\Models\Setting::get('loss_band_normal'));
+    }
+
+    public function test_the_delete_refusal_says_why_and_the_button_is_hidden(): void
+    {
+        $device = $this->device();
+        Refuelling::create([
+            'equipment_id' => $device->id, 'date' => self::MONTH.'-05', 'litres' => 50,
+            'price_per_litre' => 1, 'created_by' => $this->admin->id,
+        ]);
+
+        $table = new \App\Admin\Tables\EquipmentTable();
+
+        $this->assertSame(
+            __('eq.delete_has_logs', ['name' => $device->name]),
+            $table->deleteRefusal($device->fresh()),
+            'the office is told which rule it hit, not «this record cannot be deleted»',
+        );
+    }
 }

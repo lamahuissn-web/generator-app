@@ -187,6 +187,10 @@
                                 </span>
                             </div>
                         </div>
+                    @elseif ($c['generosity']['kwh'] === null)
+                        {{-- An exempt house exists, but its kWh cannot be worked out (no metered average): the
+                             card says unknown rather than spending zero. --}}
+                        <p class="text-sm text-muted-foreground">{{ __('ops.generosity_unknown') }}</p>
                     @else
                         <p class="text-sm text-muted-foreground">{{ __('ops.no_generosity') }}</p>
                     @endif
@@ -202,7 +206,13 @@
                         @foreach ($perRoute as $row)
                             <div class="flex items-baseline justify-between gap-3 border-b border-border pb-2 last:border-b-0 last:pb-0">
                                 <span class="text-sm text-mono">{{ $row['route'] }}</span>
-                                <span class="text-sm font-medium" dir="ltr">{{ number_format($row['consumed'], 1) }} {{ __('t.kwh') }}</span>
+                                @if ($row['known'])
+                                    <span class="text-sm font-medium" dir="ltr">{{ number_format($row['consumed'], 1) }} {{ __('t.kwh') }}</span>
+                                @else
+                                    {{-- A flat house with no metered average to anchor its draw: the figure is
+                                         unknown, and a zero here would read as "this area consumes nothing". --}}
+                                    <span class="text-sm text-muted-foreground">{{ __('ops.flat_unknown_short') }}</span>
+                                @endif
                             </div>
                         @endforeach
                     </div>
