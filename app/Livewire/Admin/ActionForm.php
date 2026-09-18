@@ -109,11 +109,15 @@ class ActionForm extends Component
         // uniqueness check.
         $definition = $this->definition()->forSubject($subject);
 
-        $this->validate(
-            $definition->rules($this->state, $subject),
-            [],
-            $definition->validationAttributes(),
-        );
+        // An action that asks the operator nothing has nothing to validate — and Livewire reads an EMPTY
+        // rule set as "no rules declared at all" and throws MissingRulesException, which is a 500 on the
+        // one button a confirm-only action puts on the screen («إلغاء الإعفاء»). A form with no fields
+        // therefore skips validation entirely instead of handing Livewire an empty array.
+        $rules = $definition->rules($this->state, $subject);
+
+        if ($rules !== []) {
+            $this->validate($rules, [], $definition->validationAttributes());
+        }
 
         try {
             $result = $definition->handle($this->state, $subject);
