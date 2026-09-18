@@ -139,21 +139,29 @@ final class OperationsReport
             : round($averageMetered * $factor / 100 * $flatHouses, 1);
 
         return [
+            // The total, but the honest flags travel with it: `known` false means part of the consumption is
+            // unknowable this month — no reading has been entered and there is no metered house to average the
+            // flat draw from — and a caller that needs a real figure must refuse to print one.
             'kwh' => round($metered + ($flatEstimated ?? 0.0), 1),
             'metered' => $metered,
+            'read_count' => $readCount,
             'flat_estimated' => $flatEstimated,
             'flat_houses' => $flatHouses,
             'average_metered' => $averageMetered,
             'unread_meters' => $unread,
             'estimated_readings' => $estimatedReadings,
-            'complete' => $unread === 0 && $meteredHouses > 0,
+            'known' => $readCount > 0 || ($meteredHouses === 0 && $flatHouses === 0),
+            'complete' => $unread === 0 && $meteredHouses > 0 && $flatEstimated !== null,
+            'estimated_share' => $flatEstimated === null || round($metered + $flatEstimated, 1) <= 0
+                ? null
+                : round($flatEstimated / ($metered + $flatEstimated) * 100, 1),
             'factor' => $factor,
         ];
     }
 
     /**
      * @return array{kwh: float|null, percent: float|null, verdict: string|null, note: string|null,
-     *               unread_meters: int, reason: string|null}
+     *               unread_meters: int, estimated_share: float|null, reason: string|null}
      */
     public function losses(): array
     {
@@ -164,7 +172,19 @@ final class OperationsReport
             return [
                 'kwh' => null, 'percent' => null, 'verdict' => null,
                 'note' => null, 'unread_meters' => $consumed['unread_meters'],
-                'reason' => 'no_production',
+                'estimated_share' => null, 'reason' => 'no_production',
+            ];
+        }
+
+        // A loss needs a consumption figure that means something. Before the month's readings are in, the
+        // consumption is not small — it is UNKNOWN, and a loss printed from it (300 kWh produced − 0 consumed =
+        // 100% lost) is the most alarming number in the app and entirely fabricated. So the figure hides, with
+        // the reason being the thing that is actually missing.
+        if (! $consumed['known']) {
+            return [
+                'kwh' => null, 'percent' => null, 'verdict' => null,
+                'note' => null, 'unread_meters' => $consumed['unread_meters'],
+                'estimated_share' => null, 'reason' => 'no_readings',
             ];
         }
 
@@ -177,13 +197,22 @@ final class OperationsReport
             'verdict' => $this->verdict($percent),
             'note' => $loss < 0 ? __('ops.loss_negative') : null,
             'unread_meters' => $consumed['unread_meters'],
+            'estimated_share' => $consumed['estimated_share'],
             'reason' => null,
         ];
     }
 
-    /** A verdict only when the office has set the band it considers normal — otherwise the number stands alone. */
+    /**
+     * A verdict only when the office has set the band it considers normal — otherwise the number stands alone.
+     * A negative loss is never classified: consumption above production is a measurement question, not a
+     * band the office can be inside or outside of.
+     */
     private function verdict(float $percent): ?string
     {
+        if ($percent < 0) {
+            return null;
+        }
+
         $band = trim((string) Setting::get('loss_band_normal', ''));
 
         if ($band === '' || ! preg_match('/^\s*(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*$/', $band, $m)) {
@@ -551,6 +580,7 @@ final class OperationsReport
                 'loss_verdict' => $losses['verdict'],
                 'loss_note' => $losses['note'],
                 'loss_reason' => $losses['reason'],
+                'loss_estimated_share' => $losses['estimated_share'],
             ],
             'fuel' => $fuel,
             'cost' => [

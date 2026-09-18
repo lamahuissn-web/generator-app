@@ -43,6 +43,12 @@ class Settings extends Component
             'lbp_rate' => '0',
             'bill_rounding' => BillingService::ROUND_NONE,
             'discount_categories' => 'مسجد,قريب,حالة إنسانية,أخرى',
+            // مركز العمليات: the answers the centre needs once, so the owner is never asked for them monthly.
+            'kwh_per_litre' => (string) \App\Reports\OperationsReport::DEFAULT_KWH_PER_LITRE,
+            'diesel_price_default' => '',
+            'flat_draw_factor' => '40',
+            'loss_band_normal' => '',
+            'maintenance_alert_hours' => '250,500,2000',
         ];
     }
 
@@ -59,6 +65,13 @@ class Settings extends Component
             // would be a setting the panel silently ignores.
             'state.bill_rounding' => ['required', Rule::in([BillingService::ROUND_NONE, BillingService::ROUND_CEIL_DOLLAR])],
             'state.discount_categories' => ['required', 'string', 'max:200'],
+            // A rate of zero would make every litre produce nothing and every loss infinite.
+            'state.kwh_per_litre' => ['required', 'numeric', 'gt:0'],
+            'state.diesel_price_default' => ['nullable', 'numeric', 'min:0'],
+            'state.flat_draw_factor' => ['required', 'numeric', 'min:0', 'max:100'],
+            // Empty is a valid answer and means "no verdict": the centre then shows the loss without judging it.
+            'state.loss_band_normal' => ['nullable', 'string', 'max:40'],
+            'state.maintenance_alert_hours' => ['required', 'string', 'max:60'],
             'state.company_name' => ['nullable', 'string', 'max:120'],
             'state.company_phone' => ['nullable', 'string', 'max:40'],
             'state.company_address' => ['nullable', 'string', 'max:180'],
@@ -85,6 +98,12 @@ class Settings extends Component
             ],
             'lbp_rate' => ['key' => 'lbp_rate', 'label' => __('set.lbp_label'), 'type' => 'number', 'helper' => __('set.lbp_helper'), 'rules' => ['required'], 'min' => 0],
             'discount_categories' => ['key' => 'discount_categories', 'label' => __('set.discount_categories_label'), 'helper' => __('set.discount_categories_helper'), 'placeholder' => 'مسجد,قريب,حالة إنسانية,أخرى', 'span' => 'full', 'rules' => ['required']],
+            // ---- مركز العمليات (the machines) ----------------------------------------------------
+            'kwh_per_litre' => ['key' => 'kwh_per_litre', 'label' => __('set.kwh_per_litre_label'), 'type' => 'number', 'helper' => __('set.kwh_per_litre_helper'), 'rules' => ['required'], 'min' => 0],
+            'flat_draw_factor' => ['key' => 'flat_draw_factor', 'label' => __('set.flat_factor_label'), 'type' => 'number', 'helper' => __('set.flat_factor_helper'), 'rules' => ['required'], 'min' => 0],
+            'diesel_price_default' => ['key' => 'diesel_price_default', 'label' => __('set.diesel_price_label'), 'type' => 'money', 'helper' => __('set.diesel_price_helper'), 'rules' => ['nullable'], 'min' => 0],
+            'loss_band_normal' => ['key' => 'loss_band_normal', 'label' => __('set.loss_band_label'), 'helper' => __('set.loss_band_helper'), 'placeholder' => '5-15', 'rules' => ['nullable']],
+            'maintenance_alert_hours' => ['key' => 'maintenance_alert_hours', 'label' => __('set.maint_hours_label'), 'helper' => __('set.maint_hours_helper'), 'placeholder' => '250,500,2000', 'span' => 'full', 'rules' => ['required']],
             'company_name' => ['key' => 'company_name', 'label' => __('set.company_name'), 'placeholder' => __('prt.company_default'), 'rules' => ['nullable']],
             'company_phone' => ['key' => 'company_phone', 'label' => __('set.company_phone'), 'type' => 'tel', 'rules' => ['nullable']],
             'company_address' => ['key' => 'company_address', 'label' => __('set.company_address'), 'rules' => ['nullable']],

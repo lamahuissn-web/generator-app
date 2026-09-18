@@ -24,6 +24,14 @@
         <x-admin.field :field="$this->keys()['discount_categories']" model="state" :values="$state" id-prefix="set" />
     </x-admin.card>
 
+    {{-- مركز العمليات: the answers the centre needs ONCE (its only onboarding), so the owner is never asked
+         for a kWh figure, an efficiency or a band month after month. --}}
+    <x-admin.card :title="__('set.ops_section')" :description="__('set.ops_section_hint')" content-class="sm:grid-cols-2">
+        @foreach (['kwh_per_litre', 'flat_draw_factor', 'diesel_price_default', 'loss_band_normal', 'maintenance_alert_hours'] as $key)
+            <x-admin.field :field="$this->keys()[$key]" model="state" :values="$state" id-prefix="set" />
+        @endforeach
+    </x-admin.card>
+
     <div class="flex flex-wrap items-center gap-2.5">
         <button type="submit" class="kt-btn kt-btn-lg" wire:loading.attr="disabled" wire:target="save">
             <i class="ki-filled ki-check"></i>

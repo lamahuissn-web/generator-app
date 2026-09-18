@@ -129,13 +129,25 @@ class EquipmentTable extends TableDefinition
         ];
     }
 
+    /**
+     * A machine with a history is not deleted.
+     *
+     * Its refuellings and services ARE its file: deleting the device cascades its services away and leaves the
+     * refuellings orphaned — still counted in the centre's fuel and production, so the month would keep the
+     * consumption of a machine that no longer exists. A machine that stopped working is a STATE («متوقف»),
+     * which keeps its file and lets the centre say which device is carrying the load.
+     */
     public function canDelete(Model $row): bool
     {
-        return true;
+        return $row->refuellings()->doesntExist() && $row->services()->doesntExist();
     }
 
     public function deleteRecord(Model $row): void
     {
+        if (! $this->canDelete($row)) {
+            throw new \RuntimeException(__('eq.delete_has_logs', ['name' => $row->name]));
+        }
+
         $row->delete();
     }
 }

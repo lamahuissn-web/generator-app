@@ -137,3 +137,34 @@ per-route energy balance as a card — **not** a separate report the owner has t
 3. A one-generator office never sees an equipment index.
 4. The board is six plain cards; everything engineering sits behind «أرقام أكثر».
 5. The draw factor defaults to 40% with the 35–45% band shown; maintenance alerts at 250 / 500 / 2000 hours.
+
+## Amendment 1 — the audit's two blockers, and what is deferred on purpose
+
+**Fixed after the first independent audit (BLOCK):**
+
+1. **A loss is never printed from a month nobody has read.** The engine knew the flat houses' draw was
+   unknowable (no metered reading to average) and still published consumption as if it were complete — so on the
+   first day of a month, or on a network of flat houses only, the board showed «100% lost», the most alarming
+   number in the app, fabricated. `consumption()` now carries `known`, and `losses()` hides the figure with the
+   RIGHT reason (`no_readings` — «لم تُدخل قراءات هذا الشهر بعد») instead of a number. The loss also carries
+   `estimated_share`: how much of the consumption it was measured against is an estimate.
+2. **The five settings the centre reads have somewhere to be typed.** `kwh_per_litre`, `flat_draw_factor`,
+   `diesel_price_default`, `loss_band_normal` and `maintenance_alert_hours` are now fields on the settings
+   screen (the onboarding answer lives there rather than behind a wizard), the first refuelling is prefilled
+   with the office's default price, and a zero rate is refused (it would make every litre produce nothing).
+
+Also fixed in the same pass: the loss verdict is a KEY the screen translates rather than an English word, and a
+negative loss is no longer classified against a band; the expenses hint no longer claims to include diesel when
+the fuel card reads the refuelling sheet; «متأخرات» says it is all-periods while its neighbours follow the month
+picker; a device with any log cannot be deleted (the machine that stopped is a STATE, and deleting it would
+orphan refuellings that the centre still counts); and a service's expense is optional (FR-5) instead of forced.
+
+**Deferred on purpose (recorded, not pretended):**
+
+- **FR-3's price-per-litre trend** — the card shows this month's average; the trend needs a chart, and a chart
+  is the next pass.
+- **FR-10's dated reconciliation log** — the per-route balance is live; the log of changes over time is not
+  built yet.
+- **A tooling limit worth knowing:** the modal's DOM values could not be driven by the reviewer's browser
+  automation in this Livewire build; the click path is covered by component tests (mount → open → set → submit)
+  and by a manual browser walk-through that wrote a real refuelling.

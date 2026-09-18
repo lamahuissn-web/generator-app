@@ -267,4 +267,74 @@ class OperationsSurfacesTest extends TestCase
     {
         $this->actingAs($this->admin)->get(route('admin.equipment.create'))->assertOk();
     }
+
+    public function test_a_service_can_leave_the_expense_to_the_office(): void
+    {
+        $device = $this->device();
+
+        Livewire::actingAs($this->admin)->test(ActionForm::class, [
+            'action' => \App\Admin\Actions\RecordService::class,
+            'subjectId' => $device->id,
+        ])
+            ->call('openModal')
+            ->set('state.date', self::MONTH.'-19')
+            ->set('state.kind', EquipmentService::KIND_REPAIR)
+            ->set('state.cost', 30)
+            ->set('state.record_expense', false)
+            ->call('submit')
+            ->assertHasNoErrors();
+
+        $row = EquipmentService::latest('id')->first();
+        $this->assertSame(30.0, (float) $row->cost, 'the service is on record');
+        $this->assertNull($row->expense_id, 'the office said it already booked this repair');
+        $this->assertSame(0.0, (float) Expense::query()->sum('amount'), 'and nothing was counted twice');
+    }
+
+    public function test_the_first_refuelling_opens_on_the_offices_default_price(): void
+    {
+        \App\Models\Setting::set('diesel_price_default', '1.30');
+        $device = $this->device();
+
+        Livewire::actingAs($this->admin)->test(ActionForm::class, [
+            'action' => \App\Admin\Actions\RecordRefuelling::class,
+            'subjectId' => $device->id,
+        ])
+            ->call('openModal')
+            ->assertSet('state.price_per_litre', '1.30')
+            ->set('state.litres', '100')
+            ->call('submit')
+            ->assertHasNoErrors();
+
+        $row = Refuelling::latest('id')->first();
+        $this->assertSame(1.3, (float) $row->price_per_litre);
+        $this->assertSame(Refuelling::SOURCE_ESTIMATED, $row->kwh_source);
+        $this->assertNull($row->kwh_produced, 'zero is not a measurement: nothing is claimed');
+    }
+
+    public function test_a_machine_with_a_history_is_not_deleted(): void
+    {
+        $device = $this->device();
+        Refuelling::create([
+            'equipment_id' => $device->id, 'date' => self::MONTH.'-05', 'litres' => 50,
+            'price_per_litre' => 1, 'created_by' => $this->admin->id,
+        ]);
+
+        $table = new \App\Admin\Tables\EquipmentTable();
+
+        $this->assertFalse($table->canDelete($device->fresh()), 'a machine with a file keeps it');
+
+        $this->expectException(\RuntimeException::class);
+        $table->deleteRecord($device->fresh());
+    }
+
+    public function test_a_machine_with_no_logs_can_still_be_removed(): void
+    {
+        $device = $this->device();
+        $table = new \App\Admin\Tables\EquipmentTable();
+
+        $this->assertTrue($table->canDelete($device));
+        $table->deleteRecord($device);
+
+        $this->assertSame(0, Equipment::count(), 'a device entered by mistake is not a permanent record');
+    }
 }
