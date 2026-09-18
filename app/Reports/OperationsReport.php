@@ -450,6 +450,57 @@ final class OperationsReport
         ];
     }
 
+    /**
+     * The same balance per route — the competitor's «قطاع» is our route.
+     *
+     * Every route that has an active subscriber appears, including one whose houses are ALL flat: a route that
+     * quietly vanishes from the list is exactly how a leak stays invisible. The flat draw uses the same factor
+     * and the same network average as consumption() — one definition of it in the whole app.
+     *
+     * @return Collection<int, array{route: string, metered: float, flat: float, consumed: float, flats: int}>
+     */
+    public function perRoute(): Collection
+    {
+        $consumption = $this->consumption();
+
+        $metered = Reading::query()
+            ->where('readings.period', $this->period)
+            ->join('subscribers', 'subscribers.id', '=', 'readings.subscriber_id')
+            ->join('routes', 'routes.id', '=', 'subscribers.route_id')
+            ->groupBy('routes.id', 'routes.name')
+            ->selectRaw('routes.name as route_name, COALESCE(SUM(readings.consumption), 0) as kwh')
+            ->pluck('kwh', 'route_name');
+
+        $flats = Subscriber::query()->active()
+            ->where('subscribers.type', Subscriber::TYPE_FLAT)
+            ->join('routes', 'routes.id', '=', 'subscribers.route_id')
+            ->groupBy('routes.id', 'routes.name')
+            ->selectRaw('routes.name as route_name, COUNT(*) as flats')
+            ->pluck('flats', 'route_name');
+
+        return $metered->keys()
+            ->merge($flats->keys())
+            ->unique()
+            ->sort()
+            ->values()
+            ->map(function (string $name) use ($metered, $flats, $consumption): array {
+                $meteredKwh = round((float) ($metered[$name] ?? 0), 1);
+                $flatCount = (int) ($flats[$name] ?? 0);
+                $flatKwh = ($consumption['average_metered'] === null || $flatCount === 0)
+                    ? 0.0
+                    : round($consumption['average_metered'] * $consumption['factor'] / 100 * $flatCount, 1);
+
+                return [
+                    'route' => $name,
+                    'metered' => $meteredKwh,
+                    'flat' => $flatKwh,
+                    'consumed' => round($meteredKwh + $flatKwh, 1),
+                    'flats' => $flatCount,
+                ];
+            })
+            ->values();
+    }
+
     /** The devices that exist, newest figures first — the index a multi-machine office needs and a one-generator office never sees. */
     public function equipment(): Collection
     {
