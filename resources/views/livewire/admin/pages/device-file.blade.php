@@ -48,11 +48,13 @@
                 </div>
                 @if ($nextService['threshold'])
                     <p class="mt-1 text-xs text-muted-foreground">
-                        {{ number_format($nextService['current'] ?? 0, 0) }} / {{ number_format($nextService['threshold'], 0) }} {{ __('t.kwh') === 'ك.و.س' ? 'ساعة' : 'h' }}
+                        {{ number_format($nextService['current'] ?? 0, 0) }} / {{ number_format($nextService['threshold'], 0) }} {{ __('ops.hours_unit') }}
                     </p>
                 @endif
             @else
-                <p class="text-sm text-muted-foreground">{{ __('ops.no_production') }}</p>
+                {{-- The reason must be the RIGHT reason: this card is about engine hours, so it asks for
+                     hours — not for the production figure the board's energy cards ask for. --}}
+                <p class="text-sm text-muted-foreground">{{ __('ops.service_no_hours') }}</p>
             @endif
             @if ($nextService['beyond_bands'] ?? false)
                 <p class="mt-1 text-xs text-muted-foreground">{{ __('eq.beyond_bands') }}</p>

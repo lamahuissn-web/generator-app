@@ -1469,5 +1469,7 @@
     "eq.anomaly_ok": "No anomaly — fuel use is steady.",
     "eq.beyond_bands": "Beyond configured thresholds — update Settings.",
     "t.device_file_sub": "Device file",
-    "eq.service_expense_note": "Service :device — :kind"
+    "eq.service_expense_note": "Service :device — :kind",
+    "ops.hours_unit": "h",
+    "ops.service_no_hours": "Record the engine hours at a refuelling or in the service log and the next service date can be worked out."
 }
