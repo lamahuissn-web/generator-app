@@ -357,4 +357,102 @@ class OperationsCentreTest extends TestCase
         $this->assertSame(40.0, (float) $service->cost);
         $this->assertSame(0.0, (float) Expense::query()->sum('amount'), 'a service row on its own moves no money');
     }
+
+    // ---- what the centre refuses to say (the audit's blocker: a loss printed from a month nobody read) ----
+
+    public function test_a_month_with_no_readings_shows_no_loss_at_all(): void
+    {
+        $this->metered('بعدّاد — بلا قراءة');
+        $this->flat('مقطوع');
+        $this->refuel(100, ['kwh_produced' => 500, 'kwh_source' => Refuelling::SOURCE_MEASURED]);
+
+        $report = OperationsReport::forMonth(self::MONTH);
+        $losses = $report->losses();
+
+        $this->assertFalse($report->consumption()['known'], 'nothing has been read: consumption is unknown, not zero');
+        $this->assertNull($losses['kwh'], 'a loss needs a consumption that means something');
+        $this->assertNull($losses['percent']);
+        $this->assertSame('no_readings', $losses['reason']);
+        $this->assertNull($report->board()['energy']['loss_percent']);
+    }
+
+    public function test_the_loss_says_how_much_of_it_rests_on_an_estimate(): void
+    {
+        $this->reading($this->metered('أ'), 100);
+        $this->reading($this->metered('ب'), 200);
+        $this->flat('ج');
+        $this->refuel(100, ['kwh_produced' => 500, 'kwh_source' => Refuelling::SOURCE_MEASURED]);
+
+        $losses = OperationsReport::forMonth(self::MONTH)->losses();
+
+        // consumed = 300 metered + (150 average × 40%) = 360, produced 500 → 140 lost.
+        $this->assertSame(140.0, $losses['kwh']);
+        $this->assertSame(28.0, $losses['percent']);
+        $this->assertSame(16.7, $losses['estimated_share'], '60 of the 360 kWh consumed is an estimate');
+    }
+
+    public function test_a_negative_loss_is_reported_but_never_classified(): void
+    {
+        Setting::set('loss_band_normal', '5-15');
+        $sub = $this->metered('مستهلك كبير');
+        $this->reading($sub, 900);
+        $this->refuel(100, ['kwh_produced' => 500, 'kwh_source' => Refuelling::SOURCE_MEASURED]);
+
+        $losses = OperationsReport::forMonth(self::MONTH)->losses();
+
+        $this->assertSame(-400.0, $losses['kwh']);
+        $this->assertNull($losses['verdict'], 'consumption above production is a measurement question, not a band');
+        $this->assertSame(__('ops.loss_negative'), $losses['note']);
+    }
+
+    public function test_a_loss_inside_the_offices_own_band_is_named_normal(): void
+    {
+        Setting::set('loss_band_normal', '5-15');
+        $sub = $this->metered('مشترك');
+        $this->reading($sub, 900);
+        $this->refuel(100, ['kwh_produced' => 1000, 'kwh_source' => Refuelling::SOURCE_MEASURED]);
+
+        $losses = OperationsReport::forMonth(self::MONTH)->losses();
+
+        $this->assertSame(10.0, $losses['percent']);
+        $this->assertSame('normal', $losses['verdict'], 'a key, for the screen to translate');
+    }
+
+    // ---- the settings the centre needs have somewhere to be typed -------------------------------------
+
+    public function test_the_office_can_set_the_rate_the_factor_and_the_bands(): void
+    {
+        \Livewire\Livewire::actingAs($this->admin)
+            ->test(\App\Livewire\Admin\Pages\Settings::class)
+            ->set('state.kwh_per_litre', '2.5')
+            ->set('state.flat_draw_factor', '50')
+            ->set('state.loss_band_normal', '5-15')
+            ->set('state.maintenance_alert_hours', '100,200')
+            ->set('state.diesel_price_default', '1.30')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertSame('2.5', Setting::get('kwh_per_litre'));
+        $this->assertSame('50', Setting::get('flat_draw_factor'));
+        $this->assertSame('1.30', Setting::get('diesel_price_default'));
+
+        // And the centre obeys them immediately: 100 litres × 2.5, a flat house at 50% of the average.
+        $this->reading($this->metered('أ'), 100);
+        $this->flat('ب');
+        $this->refuel(100);
+
+        $report = OperationsReport::forMonth(self::MONTH);
+        $this->assertSame(250.0, $report->production()['kwh']);
+        $this->assertFalse($report->rateIsDefault());
+        $this->assertSame(50.0, $report->consumption()['flat_estimated'], '100 average × 50%');
+    }
+
+    public function test_a_zero_rate_is_refused(): void
+    {
+        \Livewire\Livewire::actingAs($this->admin)
+            ->test(\App\Livewire\Admin\Pages\Settings::class)
+            ->set('state.kwh_per_litre', '0')
+            ->call('save')
+            ->assertHasErrors('state.kwh_per_litre');
+    }
 }

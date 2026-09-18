@@ -84,6 +84,14 @@ class RecordService extends ActionDefinition
                     'rules' => ['nullable', 'numeric', 'min:0'],
                 ],
                 [
+                    'key' => 'record_expense',
+                    'label' => __('eq.record_expense'),
+                    'type' => 'checkbox',
+                    'default' => true,
+                    'helper' => __('eq.record_expense_hint'),
+                    'rules' => ['boolean'],
+                ],
+                [
                     'key' => 'notes',
                     'label' => __('t.note'),
                     'rules' => ['nullable', 'string', 'max:255'],
@@ -99,6 +107,7 @@ class RecordService extends ActionDefinition
             'kind' => EquipmentService::KIND_OIL,
             'engine_hours' => null,
             'cost' => null,
+            'record_expense' => true,
             'notes' => null,
         ];
     }
@@ -112,7 +121,9 @@ class RecordService extends ActionDefinition
             // The money lives in `expenses`, not in a second ledger beside it: a service that cost something
             // writes the expense row and links to it, so the office records the payment ONCE and the month's
             // costs stay honest (a service log that also counted money would double the same dinar).
-            $expense = $cost > 0
+            // The link is OPTIONAL (FR-5): an office that already booked the repair by hand unticks the box, and
+            // the same cost is not counted into `net` twice.
+            $expense = $cost > 0 && (bool) ($state['record_expense'] ?? true)
                 ? Expense::create([
                     'category' => self::expenseCategory((string) $state['kind']),
                     'description' => __('eq.service_expense_note', [

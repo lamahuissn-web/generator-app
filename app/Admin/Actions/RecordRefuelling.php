@@ -5,6 +5,7 @@ namespace App\Admin\Actions;
 use App\Admin\ActionDefinition;
 use App\Models\Equipment;
 use App\Models\Refuelling;
+use App\Models\Setting;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -100,12 +101,15 @@ class RecordRefuelling extends ActionDefinition
 
     public function defaults(?Model $subject = null): array
     {
-        $lastPrice = Refuelling::query()->orderByDesc('date')->orderByDesc('id')->value('price_per_litre');
+        // The price he paid last time, or the office's own default from the settings screen: the first
+        // refuelling of a fresh install must not open with an empty price box for him to look up.
+        $lastPrice = Refuelling::query()->orderByDesc('date')->orderByDesc('id')->value('price_per_litre')
+            ?? Setting::get('diesel_price_default');
 
         return [
             'date' => now()->toDateString(),
             'litres' => null,
-            'price_per_litre' => $lastPrice !== null ? (string) $lastPrice : null,
+            'price_per_litre' => filled($lastPrice) ? (string) $lastPrice : null,
             'engine_hours' => null,
             'kwh_produced' => null,
             'notes' => null,
@@ -123,7 +127,9 @@ class RecordRefuelling extends ActionDefinition
             'litres' => (float) $state['litres'],
             'price_per_litre' => (float) $state['price_per_litre'],
             'engine_hours' => filled($state['engine_hours'] ?? null) ? (float) $state['engine_hours'] : null,
-            'kwh_produced' => filled($state['kwh_produced'] ?? null) ? (float) $state['kwh_produced'] : null,
+            // Zero is not a measurement: it means he did not write the kWh down, so the row stores nothing and
+            // stays estimated, instead of claiming the machine produced nothing.
+            'kwh_produced' => $measured ? (float) $state['kwh_produced'] : null,
             'kwh_source' => $measured ? Refuelling::SOURCE_MEASURED : Refuelling::SOURCE_ESTIMATED,
             'notes' => $state['notes'] ?: null,
             'created_by' => auth()->id(),

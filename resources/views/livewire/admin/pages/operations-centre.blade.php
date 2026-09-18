@@ -116,6 +116,11 @@
                         @endif
                     </span>
                 </div>
+                @if ($e['flat_houses'] > 0 && $e['consumed_flat'] === null)
+                    {{-- The flat draw needs one metered reading to average; without it the part is unknown, not
+                         zero, and saying so here is what keeps the consumption figure honest. --}}
+                    <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">{{ __('ops.flat_unknown') }}</p>
+                @endif
                 @if ($e['unread_meters'] > 0)
                     <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">{{ __('ops.unread_note', ['count' => $e['unread_meters']]) }}</p>
                 @endif
@@ -127,13 +132,19 @@
             {{-- Loss --}}
             <x-admin.card :title="__('ops.loss')">
                 @if ($lossMissing)
-                    <p class="text-sm text-muted-foreground">{{ __('ops.no_production') }}</p>
+                    {{-- The RIGHT reason: without production it is a production question, without readings it is a
+                         readings question — and the two are not interchangeable. --}}
+                    <p class="text-sm text-muted-foreground">
+                        {{ $e['loss_reason'] === 'no_readings' ? __('ops.no_readings') : __('ops.no_production') }}
+                    </p>
                 @else
                     <div class="flex flex-wrap items-baseline gap-3">
                         <span class="text-2xl font-semibold" dir="ltr">{{ number_format($e['loss_kwh'], 1) }} {{ __('t.kwh') }}</span>
                         <span @class(['text-sm font-medium', 'text-amber-700 dark:text-amber-400' => ($e['loss_verdict'] ?? null) === 'high', 'text-green-700 dark:text-green-500' => ($e['loss_verdict'] ?? null) === 'normal']) dir="ltr">{{ number_format($e['loss_percent'], 1) }}%</span>
                         @if ($e['loss_verdict'])
-                            <span class="kt-badge kt-badge-sm {{ $e['loss_verdict'] === 'high' ? 'kt-badge-destructive' : ($e['loss_verdict'] === 'low' ? 'kt-badge-info' : 'kt-badge-success') }}">{{ $e['loss_verdict'] }}</span>
+                            {{-- The verdict is a key, not a word: an English slug inside an Arabic screen is not a
+                                 verdict the office can read. --}}
+                            <span class="kt-badge kt-badge-sm {{ $e['loss_verdict'] === 'high' ? 'kt-badge-destructive' : ($e['loss_verdict'] === 'low' ? 'kt-badge-info' : 'kt-badge-success') }}">{{ __('ops.loss_verdict_'.$e['loss_verdict']) }}</span>
                         @endif
                     </div>
                     @if ($e['loss_note'])
@@ -141,6 +152,11 @@
                     @endif
                     @if ($e['unread_meters'] > 0)
                         <p class="mt-1 text-xs text-amber-700 dark:text-amber-400">{{ __('ops.unread_note', ['count' => $e['unread_meters']]) }}</p>
+                    @endif
+                    @if ($e['loss_estimated_share'] !== null)
+                        {{-- How much of the consumption this loss was measured against is an estimate — the loss
+                             inherits that uncertainty and has to say so. --}}
+                        <p class="mt-1 text-xs text-muted-foreground">{{ __('ops.loss_estimated', ['percent' => number_format($e['loss_estimated_share'], 1)]) }}</p>
                     @endif
                 @endif
             </x-admin.card>
