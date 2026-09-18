@@ -108,5 +108,5 @@ it does today — it simply does not see those cards, and never sees a fabricate
    the third option — the office picks per month, and each row remembers which it was.
 3. The flat draw factor defaults to **40%** with the **35–45%** band displayed.
 4. Maintenance alerts at **250 / 500 / 2000** engine hours.
-5. If the full name is long in the sidebar, the menu entry reads **«مركز العمليات»** and the page heading
-   carries the full name — say so if you want the full name in the menu.
+5. **Confirmed by the owner:** the sidebar entry reads **«مركز العمليات»**, and the page heading carries the
+   full name **«مركز العمليات والأجهزة الهندسية»**.
