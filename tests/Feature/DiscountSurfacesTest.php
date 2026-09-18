@@ -2,16 +2,21 @@
 
 namespace Tests\Feature;
 
+use App\Admin\Actions\DiscountBill;
+use App\Admin\Actions\ExemptSubscriber;
+use App\Admin\Actions\UnexemptSubscriber;
 use App\Admin\Tables\BillsTable;
 use App\Admin\Tables\SubscribersTable;
 use App\Models\Bill;
 use App\Models\Route;
 use App\Models\Subscriber;
 use App\Models\User;
+use App\Livewire\Admin\ActionForm;
 use App\Reports\OverdueReport;
 use App\Reports\ProfitLossReport;
 use App\Services\BillingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
 use Tests\TestCase;
 
 /**
@@ -195,5 +200,67 @@ class DiscountSurfacesTest extends TestCase
 
         $summary = OverdueReport::make()->summary();
         $this->assertSame(60.0, $summary['total'], 'only the non-exempt debt is in the summary');
+    }
+
+    // ---- the modals themselves (the money layer is not enough: the operator's click must land) -----
+
+    public function test_the_unexempt_modal_submits_even_though_it_asks_nothing(): void
+    {
+        $sub = $this->flatSub(60);
+        BillingService::exemptSubscriber($sub, 'مسجد', 'مسجد', $this->admin->id);
+
+        // The regression: a confirm-only action has no fields, so it has no rules — and Livewire reads an
+        // EMPTY rule set as "no rules declared at all" and throws MissingRulesException instead of running
+        // the action. The operator sees a 500 on the one button the office presses daily.
+        Livewire::test(ActionForm::class, ['action' => UnexemptSubscriber::class, 'subjectId' => $sub->id])
+            ->call('openModal')
+            ->call('submit')
+            ->assertHasNoErrors();
+
+        $this->assertFalse($sub->fresh()->isExempt(), 'the house is off the exempt list');
+        $this->assertNull($sub->fresh()->exempt_at);
+    }
+
+    public function test_the_exempt_modal_still_validates_what_it_asks(): void
+    {
+        $sub = $this->flatSub(60);
+
+        // The operator is Arabic-only, so the refusal has to arrive in Arabic — not «The سبب الإعفاء field
+        // is required.» sitting in the middle of an otherwise Arabic screen (which is what happens while the
+        // framework has no lang/ar/validation.php and silently falls back to English).
+        app()->setLocale('ar');
+
+        $component = Livewire::test(ActionForm::class, ['action' => ExemptSubscriber::class, 'subjectId' => $sub->id])
+            ->call('openModal')
+            ->set('state.exempt_reason', '')
+            ->call('submit')
+            ->assertHasErrors();
+
+        $this->assertMatchesRegularExpression(
+            '/[\x{0600}-\x{06FF}]/u',
+            implode(' ', $component->errors()->all()),
+            'the refusal is written in Arabic',
+        );
+
+        $this->assertFalse($sub->fresh()->isExempt(), 'an exemption without a reason is never written');
+    }
+
+    public function test_the_discount_modal_applies_the_waiver(): void
+    {
+        $sub = $this->flatSub(60);
+        $bill = BillingService::ensureFlatBill($sub->fresh(), '2026-09');
+
+        Livewire::test(ActionForm::class, ['action' => DiscountBill::class, 'subjectId' => $bill->id])
+            ->call('openModal')
+            ->set('state.discount_amount', 25)
+            ->set('state.discount_reason', 'حالة إنسانية')
+            ->call('submit')
+            ->assertHasNoErrors();
+
+        $bill->refresh();
+        $this->assertSame(25.0, (float) $bill->discount_amount);
+        $this->assertSame(35.0, (float) $bill->total);
+        $this->assertSame((float) $bill->total, round($bill->charges(), 2));
+        $this->assertSame(0.0, round((float) $sub->fresh()->credit, 2), 'a waiver is never the subscriber\'s money');
     }
 }
