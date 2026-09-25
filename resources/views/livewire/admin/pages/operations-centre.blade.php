@@ -188,9 +188,12 @@
                             </div>
                         </div>
                     @elseif ($c['generosity']['kwh'] === null)
-                        {{-- An exempt house exists, but its kWh cannot be worked out (no metered average): the
-                             card says unknown rather than spending zero. --}}
-                        <p class="text-sm text-muted-foreground">{{ __('ops.generosity_unknown') }}</p>
+                        {{-- An exempt house exists but its kWh cannot be worked out: the card names WHAT is
+                             missing — a reading nobody has taken yet, or no average to anchor a flat draw —
+                             instead of spending zero. --}}
+                        <p class="text-sm text-muted-foreground">
+                            {{ ($c['generosity']['reason'] ?? null) === 'unread' ? __('ops.generosity_unread') : __('ops.generosity_unknown') }}
+                        </p>
                     @else
                         <p class="text-sm text-muted-foreground">{{ __('ops.no_generosity') }}</p>
                     @endif

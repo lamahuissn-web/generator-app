@@ -1495,5 +1495,6 @@
     "set.ops_section_hint": "Asked once — the centre reads these to work out production, losses, cost per kWh and the next service.",
     "ops.flat_unknown_short": "unknown — no metered average to anchor it",
     "ops.generosity_unknown": "The exempt houses' kWh cannot be estimated without a metered average.",
+    "ops.generosity_unread": "The exempt houses have not been read yet this month — their kWh cannot be worked out.",
     "set.loss_band_order": "A band reads low-to-high — e.g. 5-15."
 }

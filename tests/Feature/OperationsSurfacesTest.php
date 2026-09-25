@@ -375,4 +375,37 @@ class OperationsSurfacesTest extends TestCase
             'the office is told which rule it hit, not «this record cannot be deleted»',
         );
     }
+
+    // ---- the third audit's doors, on the surface the office reads -------------------------------------------
+
+    public function test_the_area_card_carries_the_same_consumption_as_the_card_above_it(): void
+    {
+        $sub = $this->metered('بيت تحوّل');
+        Reading::create([
+            'subscriber_id' => $sub->id, 'period' => self::MONTH,
+            'current_reading' => 120, 'previous_reading' => 0, 'consumption' => 120,
+        ]);
+        $sub->forceFill(['type' => Subscriber::TYPE_FLAT, 'flat_fee' => 60])->save();
+        Refuelling::create([
+            'date' => self::MONTH.'-10', 'litres' => 100, 'price_per_litre' => 1,
+            'kwh_produced' => 300, 'kwh_source' => Refuelling::SOURCE_MEASURED,
+            'created_by' => $this->admin->id,
+        ]);
+
+        Livewire::actingAs($this->admin)->test(OperationsCentre::class)
+            ->call('toggleMore')
+            ->assertSee('120.0')
+            ->assertDontSee('168.0', 'the area was counting the house twice (120 read + 48 flat draw)');
+    }
+
+    public function test_the_generosity_card_names_the_reading_that_is_missing(): void
+    {
+        $mosque = $this->metered('مسجد');
+        $mosque->forceFill(['exempt_at' => now(), 'exempt_reason' => 'مسجد'])->save();
+
+        Livewire::actingAs($this->admin)->test(OperationsCentre::class)
+            ->call('toggleMore')
+            ->assertSee(__('ops.generosity_unread'))
+            ->assertDontSee(__('ops.no_generosity'), 'an exempt house exists: the month did not waive nothing');
+    }
 }
