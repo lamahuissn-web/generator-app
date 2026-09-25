@@ -110,6 +110,20 @@ final class OperationsReport
     // ---------------------------------------------------------------- energy: consumed
 
     /**
+     * The subscribers whose meters this period HAS been read for.
+     *
+     * The metered figure already contains them, so both the network card and the per-route card must keep them
+     * out of the flat population — a house read and then converted to flat is counted once, or the month is
+     * inflated and the loss it should expose disappears.
+     *
+     * @return list<int>
+     */
+    private function readSubscriberIds(): array
+    {
+        return Reading::query()->where('period', $this->period)->pluck('subscriber_id')->all();
+    }
+
+    /**
      * @return array{kwh: float, metered: float, flat_estimated: float|null, flat_houses: int,
      *               average_metered: float|null, unread_meters: int, estimated_readings: int,
      *               complete: bool, factor: float}
@@ -124,7 +138,7 @@ final class OperationsReport
 
         $activeMetered = Subscriber::query()->active()->where('type', Subscriber::TYPE_METERED);
         $meteredHouses = (clone $activeMetered)->count();
-        $readSubscribers = (clone $readings)->pluck('subscriber_id')->all();
+        $readSubscribers = $this->readSubscriberIds();
         $unread = (clone $activeMetered)->whereNotIn('id', $readSubscribers)->count();
 
         // The flat houses' draw, estimated from the office's own average metered subscriber at the factor the
@@ -320,14 +334,14 @@ final class OperationsReport
      * consumed × the cost of producing a kWh. Shown BESIDE the net profit, never inside it — a waiver is a
      * decision, not a cost of doing business.
      *
-     * @return array{kwh: float|null, cost: float|null}
+     * @return array{kwh: float|null, cost: float|null, reason: string|null}
      */
     public function generosity(): array
     {
         $exemptIds = Subscriber::query()->whereNotNull('exempt_at')->pluck('id')->all();
 
         if ($exemptIds === []) {
-            return ['kwh' => 0.0, 'cost' => 0.0];
+            return ['kwh' => 0.0, 'cost' => 0.0, 'reason' => null];
         }
 
         $metered = round((float) Reading::query()
@@ -341,6 +355,15 @@ final class OperationsReport
             ->where('type', Subscriber::TYPE_FLAT)
             ->count();
 
+        // An exempt METERED house nobody has read this period has no kWh on record: `metered` would be 0 only
+        // because the reading is missing, and printing that zero is how the card said «بلا إعفاءات هذا الشهر»
+        // in a month whose own disclosure line carries the waived charge.
+        $unreadExempt = Subscriber::query()
+            ->whereNotNull('exempt_at')
+            ->where('type', Subscriber::TYPE_METERED)
+            ->whereNotIn('id', $this->readSubscriberIds())
+            ->count();
+
         $flatKwh = ($consumed['average_metered'] === null || $flatExempt === 0)
             ? 0.0
             : round($consumed['average_metered'] * $consumed['factor'] / 100 * $flatExempt, 1);
@@ -348,13 +371,14 @@ final class OperationsReport
         $kwh = round($metered + $flatKwh, 1);
         $cost = $this->costPerKwh();
 
-        // A flat-only exempt house (or one whose draw cannot be anchored) has no kWh we can honestly state:
-        // `kwh` stays null and the card says "unknown" rather than "none".
-        $known = $metered > 0 || $flatExempt === 0 || $consumed['average_metered'] !== null;
+        // A missing READING and a draw with no average to anchor it are two questions, not one: the card names
+        // the one that is actually missing, exactly as the loss card separates its two reasons.
+        $known = $unreadExempt === 0 && ($flatExempt === 0 || $consumed['average_metered'] !== null);
 
         return [
             'kwh' => $known ? $kwh : null,
             'cost' => ! $known || $cost === null ? null : round($kwh * $cost, 2),
+            'reason' => $known ? null : ($unreadExempt > 0 ? 'unread' : 'no_average'),
         ];
     }
 
@@ -517,8 +541,12 @@ final class OperationsReport
             ->selectRaw('routes.name as route_name, COALESCE(SUM(readings.consumption), 0) as kwh')
             ->pluck('kwh', 'route_name');
 
+        // The same population the network card uses, per area: a house read this period is in the metered sum
+        // already, so counting it as a flat house again would print an area consuming 168 while the card above
+        // it says 120 — and hide the loss of exactly the area a leak would show up in.
         $flats = Subscriber::query()->active()
             ->where('subscribers.type', Subscriber::TYPE_FLAT)
+            ->whereNotIn('subscribers.id', $this->readSubscriberIds())
             ->join('routes', 'routes.id', '=', 'subscribers.route_id')
             ->groupBy('routes.id', 'routes.name')
             ->selectRaw('routes.name as route_name, COUNT(*) as flats')

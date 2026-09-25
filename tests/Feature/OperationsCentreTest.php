@@ -523,4 +523,57 @@ class OperationsCentreTest extends TestCase
         $this->assertNull($report->consumption()['flat_estimated']);
         $this->assertFalse($report->consumption()['known']);
     }
+
+    // ---- the third audit's doors: the same house read twice per area, and a zero waiving nothing -------------
+
+    public function test_a_house_read_then_converted_to_flat_is_not_counted_again_on_its_route(): void
+    {
+        $sub = $this->metered('بيت تحوّل');
+        $this->reading($sub, 120);
+
+        // The office converts him to flat in the same month he was read.
+        $sub->forceFill(['type' => Subscriber::TYPE_FLAT, 'flat_fee' => 60])->save();
+
+        $report = OperationsReport::forMonth(self::MONTH);
+        $rows = $report->perRoute()->keyBy('route');
+
+        $this->assertSame(120.0, $report->consumption()['kwh']);
+        $this->assertSame(0, $rows['منطقة الفحص']['flats'], 'he is already in the metered figure');
+        $this->assertSame(
+            120.0,
+            $rows['منطقة الفحص']['consumed'],
+            'the card above the area says 120 — the area must not say 168 (120 read + 40% for a house already counted)',
+        );
+        $this->assertSame(
+            $report->consumption()['kwh'],
+            round((float) $rows->sum('consumed'), 1),
+            'the areas add up to the network card: that is what makes it a per-route balance',
+        );
+    }
+
+    public function test_an_exempt_house_nobody_read_yet_is_not_a_zero(): void
+    {
+        // An exempt metered house with no reading this month: 0 would be the absence of a reading, not a fact.
+        $mosque = $this->metered('مسجد');
+        $mosque->forceFill(['exempt_at' => now(), 'exempt_reason' => 'مسجد'])->save();
+        $this->refuel(100, ['price_per_litre' => 1]);
+
+        $generosity = OperationsReport::forMonth(self::MONTH)->generosity();
+
+        $this->assertNull($generosity['kwh'], 'unknown is not zero — the money card discloses a waiver beside it');
+        $this->assertSame('unread', $generosity['reason'], 'the card names the reading that is missing');
+    }
+
+    public function test_a_read_exempt_house_still_costs_what_it_consumed(): void
+    {
+        $mosque = $this->metered('مسجد');
+        $this->reading($mosque, 80);
+        $mosque->forceFill(['exempt_at' => now(), 'exempt_reason' => 'مسجد'])->save();
+        $this->refuel(100, ['kwh_produced' => 300, 'kwh_source' => Refuelling::SOURCE_MEASURED]);
+
+        $generosity = OperationsReport::forMonth(self::MONTH)->generosity();
+
+        $this->assertSame(80.0, $generosity['kwh'], 'a house that WAS read is a figure, not an unknown');
+        $this->assertNull($generosity['reason']);
+    }
 }
