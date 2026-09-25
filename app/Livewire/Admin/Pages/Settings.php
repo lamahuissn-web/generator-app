@@ -75,9 +75,9 @@ class Settings extends Component
             // A band reads low-to-high: «15-5» would classify every loss as the opposite of what the office
             // meant, so it is refused rather than stored.
             'state.loss_band_normal' => [
-                'nullable', 'string', 'max:40', 'regex:/^\s*\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\s*$/',
+                'nullable', 'string', 'max:40', 'regex:/^\s*\d+(?:\.\d+)?\s*[-–]\s*\d+(?:\.\d+)?\s*$/u',
                 function (string $attribute, mixed $value, \Closure $fail): void {
-                    if (preg_match('/^\s*(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*$/', (string) $value, $m)
+                    if (preg_match('/^\s*(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*$/u', (string) $value, $m)
                         && (float) $m[1] >= (float) $m[2]) {
                         $fail(__('set.loss_band_order'));
                     }

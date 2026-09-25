@@ -82,13 +82,22 @@ class RoutesTable extends TableDefinition
                 'icon' => 'ki-trash',
                 'variant' => 'danger',
                 'method' => 'deleteRecord',
+                // An area that still holds houses does not offer the button at all: deleting it strands its
+                // subscribers with no area, and the board would then attribute their consumption to no area.
+                'hidden' => fn (Route $r): bool => ! $this->canDelete($r),
             ],
         ];
     }
 
     public function canDelete(Model $row): bool
     {
-        return true;
+        return $row->subscribers()->doesntExist();
+    }
+
+    /** The refusal names the way out: move the houses first, or keep the area. */
+    public function deleteRefusal(Model $row): ?string
+    {
+        return $this->canDelete($row) ? null : __('a.del_route_guard');
     }
 
     public function deleteWarning(Model $row): string
@@ -100,6 +109,10 @@ class RoutesTable extends TableDefinition
 
     public function deleteRecord(Model $row): void
     {
+        if (! $this->canDelete($row)) {
+            throw new \RuntimeException(__('a.del_route_guard'));
+        }
+
         $row->delete();
     }
 }

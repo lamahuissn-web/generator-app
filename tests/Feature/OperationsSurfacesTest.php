@@ -408,4 +408,81 @@ class OperationsSurfacesTest extends TestCase
             ->assertSee(__('ops.generosity_unread'))
             ->assertDontSee(__('ops.no_generosity'), 'an exempt house exists: the month did not waive nothing');
     }
+
+    // ---- the fourth audit's doors, on the surface the office reads -------------------------------------
+
+    public function test_the_generosity_card_states_the_zero_instead_of_denying_the_waiver(): void
+    {
+        // The mosque WAS read; the meter had not moved. The month still waived its maintenance fee, and the
+        // disclosure line says so on the same screen.
+        $mosque = $this->metered('مسجد');
+        $mosque->forceFill(['exempt_at' => now(), 'exempt_reason' => 'مسجد'])->save();
+        Reading::create([
+            'subscriber_id' => $mosque->id, 'period' => self::MONTH,
+            'current_reading' => 0, 'previous_reading' => 0, 'consumption' => 0,
+        ]);
+        Refuelling::create([
+            'date' => self::MONTH.'-10', 'litres' => 100, 'price_per_litre' => 1,
+            'kwh_produced' => 300, 'kwh_source' => Refuelling::SOURCE_MEASURED,
+            'created_by' => $this->admin->id,
+        ]);
+
+        Livewire::actingAs($this->admin)->test(OperationsCentre::class)
+            ->call('toggleMore')
+            ->assertSee('$10.00', 'the fee the month waived is on the same screen')
+            ->assertDontSee(__('ops.no_generosity'), 'an exempt house exists: the month did not waive nothing')
+            ->assertDontSee(__('ops.generosity_unread'), 'it was read: nothing is missing')
+            ->assertDontSee(__('ops.generosity_unknown'));
+    }
+
+    public function test_the_area_card_keeps_a_reading_whose_area_is_gone(): void
+    {
+        $sub = $this->metered('بيت');
+        Reading::create([
+            'subscriber_id' => $sub->id, 'period' => self::MONTH,
+            'current_reading' => 120, 'previous_reading' => 0, 'consumption' => 120,
+        ]);
+        Refuelling::create([
+            'date' => self::MONTH.'-10', 'litres' => 100, 'price_per_litre' => 1,
+            'kwh_produced' => 300, 'kwh_source' => Refuelling::SOURCE_MEASURED,
+            'created_by' => $this->admin->id,
+        ]);
+
+        // A row from before the guard, or an area removed outside the panel.
+        $this->route->delete();
+
+        Livewire::actingAs($this->admin)->test(OperationsCentre::class)
+            ->call('toggleMore')
+            ->assertSee(__('ops.no_area'), 'the area card names the houses no area claims')
+            ->assertSee('120.0', 'the network card and the area card still state the same kWh')
+            ->assertDontSee(__('t.no_results'), 'the areas card is not empty while the network card counts 120');
+    }
+
+    public function test_an_area_that_still_holds_a_subscriber_is_not_deleted(): void
+    {
+        $this->metered('بيت');
+
+        $table = new \App\Admin\Tables\RoutesTable();
+
+        $this->assertFalse($table->canDelete($this->route), 'the area holds a subscriber');
+        $this->assertSame(
+            __('a.del_route_guard'),
+            $table->deleteRefusal($this->route),
+            'the refusal names the way out instead of looking broken',
+        );
+
+        $this->expectException(\RuntimeException::class);
+        $table->deleteRecord($this->route);
+    }
+
+    public function test_an_area_with_no_subscribers_is_still_removed(): void
+    {
+        $empty = Route::create(['name' => 'منطقة فارغة']);
+        $table = new \App\Admin\Tables\RoutesTable();
+
+        $this->assertTrue($table->canDelete($empty));
+        $table->deleteRecord($empty);
+
+        $this->assertSame(0, Route::query()->where('name', 'منطقة فارغة')->count(), 'an area entered by mistake is not permanent');
+    }
 }
