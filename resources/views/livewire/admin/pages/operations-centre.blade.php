@@ -178,7 +178,13 @@
                     @endif
                 </x-admin.card>
                 <x-admin.card :title="__('ops.generosity')" :description="__('ops.generosity_hint')">
-                    @if (($c['generosity']['kwh'] ?? 0) > 0)
+                    @if (($c['generosity']['exempt_houses'] ?? 0) === 0)
+                        {{-- No exempt house at all: the sentence is true and the card is finished. --}}
+                        <p class="text-sm text-muted-foreground">{{ __('ops.no_generosity') }}</p>
+                    @elseif ($c['generosity']['kwh'] !== null)
+                        {{-- An exempt house exists and its kWh are known — INCLUDING a real zero (a house that was
+                             read and had not moved): the card states the figure instead of denying the waiver the
+                             disclosure line above it is carrying. --}}
                         <div class="grid gap-1 text-sm">
                             <div class="flex items-baseline justify-between gap-3">
                                 <span class="text-muted-foreground" dir="ltr">{{ number_format($c['generosity']['kwh'], 1) }} {{ __('t.kwh') }}</span>
@@ -187,15 +193,13 @@
                                 </span>
                             </div>
                         </div>
-                    @elseif ($c['generosity']['kwh'] === null)
+                    @else
                         {{-- An exempt house exists but its kWh cannot be worked out: the card names WHAT is
                              missing — a reading nobody has taken yet, or no average to anchor a flat draw —
                              instead of spending zero. --}}
                         <p class="text-sm text-muted-foreground">
                             {{ ($c['generosity']['reason'] ?? null) === 'unread' ? __('ops.generosity_unread') : __('ops.generosity_unknown') }}
                         </p>
-                    @else
-                        <p class="text-sm text-muted-foreground">{{ __('ops.no_generosity') }}</p>
                     @endif
                 </x-admin.card>
             </div>

@@ -576,4 +576,92 @@ class OperationsCentreTest extends TestCase
         $this->assertSame(80.0, $generosity['kwh'], 'a house that WAS read is a figure, not an unknown');
         $this->assertNull($generosity['reason']);
     }
+
+    // ---- the fourth audit's doors: an area nobody owns, a lost tenth, a zero that denied a waiver ------
+
+    public function test_a_house_whose_area_is_gone_is_still_on_the_areas_card(): void
+    {
+        $sub = $this->metered('بيت بلا منطقة');
+        $this->reading($sub, 120);
+        $this->refuel(100, ['kwh_produced' => 300, 'kwh_source' => Refuelling::SOURCE_MEASURED]);
+
+        // The area is deleted (outside the panel, or a row written before the guard): the houses keep their
+        // readings, so the network card goes on counting them.
+        $this->route->delete();
+
+        $report = OperationsReport::forMonth(self::MONTH);
+        $rows = $report->perRoute()->keyBy('route');
+
+        $this->assertSame(120.0, $report->consumption()['kwh'], 'the reading is still the network measurement');
+        $this->assertArrayHasKey(__('ops.no_area'), $rows->all(), 'the areas card names the houses no area claims');
+        $this->assertSame(120.0, $rows[__('ops.no_area')]['consumed'], 'the area card must not lose the kWh');
+        $this->assertSame(
+            $report->consumption()['kwh'],
+            round((float) $report->perRoute()->sum('consumed'), 1),
+            'the areas add up to the card above them even when no area is left to name',
+        );
+    }
+
+    public function test_the_areas_add_up_to_the_network_card_to_the_last_tenth(): void
+    {
+        // Rounding every area separately and the network once are two figures a tenth apart:
+        // 35% of an 111.0 average, one flat house in each of two areas.
+        Setting::set('flat_draw_factor', '35');
+        $this->reading($this->metered('مقروء'), 111);
+
+        foreach (['منطقة المقطوعين أ', 'منطقة المقطوعين ب'] as $name) {
+            Subscriber::create([
+                'route_id' => Route::create(['name' => $name])->id, 'name' => 'مقطوع '.$name,
+                'type' => Subscriber::TYPE_FLAT, 'flat_fee' => 60,
+                'status' => Subscriber::STATUS_ACTIVE, 'created_by' => $this->admin->id,
+            ]);
+        }
+
+        $report = OperationsReport::forMonth(self::MONTH);
+        $rows = $report->perRoute()->keyBy('route');
+
+        $this->assertSame(111.0, $rows['منطقة الفحص']['consumed']);
+        $this->assertSame(38.9, $rows['منطقة المقطوعين أ']['consumed'], '35% of the 111.0 average');
+        $this->assertSame(38.9, $rows['منطقة المقطوعين ب']['consumed']);
+        $this->assertSame(188.8, $report->consumption()['kwh'], 'the card above states the sum of the areas');
+        $this->assertSame(
+            $report->consumption()['kwh'],
+            round((float) $report->perRoute()->sum('consumed'), 1),
+            'a tenth may not go missing between the two cards',
+        );
+    }
+
+    public function test_an_exempt_house_read_at_zero_is_a_figure_and_not_a_denial(): void
+    {
+        $mosque = $this->metered('مسجد');
+        $mosque->forceFill(['exempt_at' => now(), 'exempt_reason' => 'مسجد'])->save();
+        $this->reading($mosque, 0); // read this month, and the meter had not moved
+        $this->refuel(100, ['kwh_produced' => 300, 'kwh_source' => Refuelling::SOURCE_MEASURED]);
+
+        $generosity = OperationsReport::forMonth(self::MONTH)->generosity();
+
+        $this->assertSame(0.0, $generosity['kwh'], 'the house WAS read: the zero is a fact, not an absence');
+        $this->assertNull($generosity['reason']);
+        $this->assertSame(1, $generosity['exempt_houses'], 'a waiver was granted, and the card has to know it');
+    }
+
+    public function test_the_office_can_write_the_band_with_the_dash_its_keyboard_produces(): void
+    {
+        \Livewire\Livewire::actingAs($this->admin)
+            ->test(\App\Livewire\Admin\Pages\Settings::class)
+            ->set('state.loss_band_normal', '5–15')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertSame('5–15', Setting::get('loss_band_normal'), 'the band is stored as the office typed it');
+
+        $this->reading($this->metered('مشترك'), 900);
+        $this->refuel(100, ['kwh_produced' => 1000, 'kwh_source' => Refuelling::SOURCE_MEASURED]);
+
+        $this->assertSame(
+            'normal',
+            OperationsReport::forMonth(self::MONTH)->losses()['verdict'],
+            'an en-dash band classifies like any other, instead of silently never matching',
+        );
+    }
 }

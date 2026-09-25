@@ -124,6 +124,58 @@ final class OperationsReport
     }
 
     /**
+     * The flat houses' draw, grouped the way the areas card groups it: one rounded figure per area, plus the
+     * houses no area claims — and the network figure is the SUM of those groups.
+     *
+     * One definition, so the two cards cannot disagree: rounding every area separately and the network once
+     * produced 77.7 and 77.8 for the same month (35% of an 111.0 average, one flat house in each of two
+     * areas), and the areas card exists to be added up against the card above it. A house that was read this
+     * period is already inside the metered figure, so it is not counted here a second time as a flat house
+     * (that inflated consumption and hid the loss). A house with no area is grouped under one line rather
+     * than dropped, because the network card goes on counting its kWh.
+     *
+     * @return array{count: int, total: float|null, areas: array<string, array{flats: int, kwh: float}>}
+     */
+    private function flatDraw(?float $average, float $factor): array
+    {
+        $rows = Subscriber::query()->active()
+            ->where('subscribers.type', Subscriber::TYPE_FLAT)
+            ->whereNotIn('subscribers.id', $this->readSubscriberIds())
+            ->leftJoin('routes', 'routes.id', '=', 'subscribers.route_id')
+            ->groupBy('routes.id', 'routes.name')
+            ->selectRaw('routes.name as route_name, COUNT(*) as flats')
+            ->get();
+
+        $count = (int) $rows->sum('flats');
+
+        if ($count === 0) {
+            return ['count' => 0, 'total' => 0.0, 'areas' => []];
+        }
+
+        $areas = [];
+
+        foreach ($rows as $row) {
+            $flats = (int) $row->flats;
+            $areas[$this->areaName($row->route_name)] = [
+                'flats' => $flats,
+                'kwh' => $average === null ? 0.0 : round($average * $factor / 100 * $flats, 1),
+            ];
+        }
+
+        return [
+            'count' => $count,
+            'total' => $average === null ? null : round((float) array_sum(array_column($areas, 'kwh')), 1),
+            'areas' => $areas,
+        ];
+    }
+
+    /** The line the houses no area claims are shown under — a bucket, so a house can never lose its area's card. */
+    private function areaName(?string $name): string
+    {
+        return filled($name) ? $name : __('ops.no_area');
+    }
+
+    /**
      * @return array{kwh: float, metered: float, flat_estimated: float|null, flat_houses: int,
      *               average_metered: float|null, unread_meters: int, estimated_readings: int,
      *               complete: bool, factor: float}
@@ -147,15 +199,11 @@ final class OperationsReport
         // an assumption he understands is worth more than a formula he does not.
         $factor = (float) Setting::get('flat_draw_factor', self::FLAT_FACTOR_DEFAULT);
         $averageMetered = $readCount > 0 ? round($metered / $readCount, 1) : null;
-        // A house that was read this period and then converted to flat is already in the metered figure: it
-        // must not be counted a second time as a flat house (which inflated consumption and hid the loss).
-        $flatHouses = Subscriber::query()->active()
-            ->where('type', Subscriber::TYPE_FLAT)
-            ->whereNotIn('id', $readSubscribers)
-            ->count();
-        $flatEstimated = $averageMetered === null || $flatHouses === 0
-            ? ($flatHouses === 0 ? 0.0 : null)
-            : round($averageMetered * $factor / 100 * $flatHouses, 1);
+        // The flat draw comes from the one helper the areas card also reads, so the card above states the sum
+        // of the areas instead of a second rounding of the same houses.
+        $flat = $this->flatDraw($averageMetered, $factor);
+        $flatHouses = $flat['count'];
+        $flatEstimated = $flatHouses === 0 ? 0.0 : ($averageMetered === null ? null : $flat['total']);
 
         return [
             // The total, but the honest flags travel with it: `known` false means part of the consumption is
@@ -239,7 +287,7 @@ final class OperationsReport
 
         $band = trim((string) Setting::get('loss_band_normal', ''));
 
-        if ($band === '' || ! preg_match('/^\s*(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*$/', $band, $m)) {
+        if ($band === '' || ! preg_match('/^\s*(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s*$/u', $band, $m)) {
             return null;
         }
 
@@ -334,14 +382,14 @@ final class OperationsReport
      * consumed × the cost of producing a kWh. Shown BESIDE the net profit, never inside it — a waiver is a
      * decision, not a cost of doing business.
      *
-     * @return array{kwh: float|null, cost: float|null, reason: string|null}
+     * @return array{kwh: float|null, cost: float|null, reason: string|null, exempt_houses: int}
      */
     public function generosity(): array
     {
         $exemptIds = Subscriber::query()->whereNotNull('exempt_at')->pluck('id')->all();
 
         if ($exemptIds === []) {
-            return ['kwh' => 0.0, 'cost' => 0.0, 'reason' => null];
+            return ['kwh' => 0.0, 'cost' => 0.0, 'reason' => null, 'exempt_houses' => 0];
         }
 
         $metered = round((float) Reading::query()
@@ -379,6 +427,10 @@ final class OperationsReport
             'kwh' => $known ? $kwh : null,
             'cost' => ! $known || $cost === null ? null : round($kwh * $cost, 2),
             'reason' => $known ? null : ($unreadExempt > 0 ? 'unread' : 'no_average'),
+            // A month can waive a house's whole fee and still register 0 kWh (the house was read and the meter
+            // had not moved). The card needs to know an exemption EXISTS, or a real zero is printed as «nothing
+            // was waived» beside a disclosure line carrying the waived money.
+            'exempt_houses' => count($exemptIds),
         ];
     }
 
@@ -524,64 +576,61 @@ final class OperationsReport
      * The same balance per route — the competitor's «قطاع» is our route.
      *
      * Every route that has an active subscriber appears, including one whose houses are ALL flat: a route that
-     * quietly vanishes from the list is exactly how a leak stays invisible. The flat draw uses the same factor
-     * and the same network average as consumption() — one definition of it in the whole app.
+     * quietly vanishes from the list is exactly how a leak stays invisible. The flat draw uses the same factor,
+     * the same network average and the same grouping as consumption() — one definition of it in the whole app —
+     * and the houses no area claims appear under their own line, so the areas always add up to the card above
+     * them even after an area is deleted and its houses are left with no route.
      *
-     * @return Collection<int, array{route: string, metered: float, flat: float, consumed: float, flats: int}>
+     * @return Collection<int, array{route: string, metered: float, flat: float, consumed: float, flats: int, known: bool}>
      */
     public function perRoute(): Collection
     {
         $consumption = $this->consumption();
+        $draw = $this->flatDraw($consumption['average_metered'], $consumption['factor']);
 
+        // The area comes from the house, so the join is a LEFT one: a house whose area was deleted (or one
+        // written before the routes list refused the delete) is grouped under the no-area line instead of
+        // disappearing from this card while the network figure above keeps counting its kWh.
         $metered = Reading::query()
             ->where('readings.period', $this->period)
             ->join('subscribers', 'subscribers.id', '=', 'readings.subscriber_id')
-            ->join('routes', 'routes.id', '=', 'subscribers.route_id')
+            ->leftJoin('routes', 'routes.id', '=', 'subscribers.route_id')
             ->groupBy('routes.id', 'routes.name')
             ->selectRaw('routes.name as route_name, COALESCE(SUM(readings.consumption), 0) as kwh')
-            ->pluck('kwh', 'route_name');
+            ->get()
+            ->mapWithKeys(fn (object $row): array => [$this->areaName($row->route_name) => (float) $row->kwh]);
 
-        // The same population the network card uses, per area: a house read this period is in the metered sum
-        // already, so counting it as a flat house again would print an area consuming 168 while the card above
-        // it says 120 — and hide the loss of exactly the area a leak would show up in.
-        $flats = Subscriber::query()->active()
-            ->where('subscribers.type', Subscriber::TYPE_FLAT)
-            ->whereNotIn('subscribers.id', $this->readSubscriberIds())
-            ->join('routes', 'routes.id', '=', 'subscribers.route_id')
-            ->groupBy('routes.id', 'routes.name')
-            ->selectRaw('routes.name as route_name, COUNT(*) as flats')
-            ->pluck('flats', 'route_name');
-
-        // Every route that HAS houses, read or not: a route whose meters have not been read yet used to vanish
+        // Every area that HAS houses, read or not: a route whose meters have not been read yet used to vanish
         // from the list entirely, which reads as "no such area" instead of "not read yet".
         $served = Subscriber::query()->active()
-            ->join('routes', 'routes.id', '=', 'subscribers.route_id')
+            ->leftJoin('routes', 'routes.id', '=', 'subscribers.route_id')
             ->groupBy('routes.id', 'routes.name')
             ->selectRaw('routes.name as route_name, COUNT(*) as houses')
-            ->pluck('houses', 'route_name');
+            ->get()
+            ->mapWithKeys(fn (object $row): array => [$this->areaName($row->route_name) => (int) $row->houses]);
 
         return $metered->keys()
-            ->merge($flats->keys())
+            ->merge(array_keys($draw['areas']))
             ->merge($served->keys())
             ->unique()
             ->sort()
             ->values()
-            ->map(function (string $name) use ($metered, $flats, $consumption): array {
+            ->map(function (string $name) use ($metered, $draw, $consumption): array {
+                $flat = $draw['areas'][$name] ?? ['flats' => 0, 'kwh' => 0.0];
                 $meteredKwh = round((float) ($metered[$name] ?? 0), 1);
-                $flatCount = (int) ($flats[$name] ?? 0);
-                $flatKwh = ($consumption['average_metered'] === null || $flatCount === 0)
+                $flatKwh = $consumption['average_metered'] === null || $flat['flats'] === 0
                     ? 0.0
-                    : round($consumption['average_metered'] * $consumption['factor'] / 100 * $flatCount, 1);
+                    : (float) $flat['kwh'];
 
                 return [
                     'route' => $name,
                     'metered' => $meteredKwh,
                     'flat' => $flatKwh,
                     'consumed' => round($meteredKwh + $flatKwh, 1),
-                    'flats' => $flatCount,
+                    'flats' => (int) $flat['flats'],
                     // Known = nothing rests on a basis we do not have: a flat house's draw with no metered
                     // average to anchor it is unknown, and the card says so instead of printing a zero.
-                    'known' => $flatCount === 0 || $consumption['average_metered'] !== null,
+                    'known' => (int) $flat['flats'] === 0 || $consumption['average_metered'] !== null,
                 ];
             })
             ->values();
