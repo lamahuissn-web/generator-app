@@ -94,11 +94,28 @@
                             <div class="flex flex-wrap items-baseline gap-2">
                                 <span class="text-sm font-medium text-mono">{{ $entry['label'] }}</span>
                                 <span class="text-xs text-muted-foreground" dir="ltr">{{ $entry['date'] }}</span>
+                                @if ($entry['locked'])
+                                    {{-- The row is in a month that was reported and collected against: the buttons
+                                         become a correction that asks a reason, and no delete. --}}
+                                    <span class="text-xs text-muted-foreground">{{ __('ops.timeline_locked') }}</span>
+                                @endif
                             </div>
                             @if ($entry['detail'])
                                 <p class="mt-0.5 text-xs text-muted-foreground">{{ $entry['detail'] }}</p>
                             @endif
                         </div>
+                        @if ($entry['actions'] !== [])
+                            <div class="flex shrink-0 items-start gap-1">
+                                @foreach ($entry['actions'] as $action)
+                                    <livewire:admin.action-form
+                                        :action="$action"
+                                        :subject-id="$entry['id']"
+                                        :return-to="$returnTo"
+                                        :icon-only="true"
+                                        :key="'log-'.$entry['kind'].'-'.$entry['id'].'-'.$loop->index" />
+                                @endforeach
+                            </div>
+                        @endif
                     </div>
                 @endforeach
             </div>
