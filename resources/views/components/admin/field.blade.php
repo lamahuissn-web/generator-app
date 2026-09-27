@@ -181,8 +181,13 @@
         </div>
 
     @else
+        {{-- A number input's `step` is NOT cosmetic and its default is a trap: HTML gives it step=1 with the
+             step BASE at `min`, so `min="0.01"` (the litres box) makes the only valid values 0.01, 1.01, 2.01 …
+             and the browser refuses 200 — the office's own daily figure — in its own language, before any
+             request is sent, so nothing in PHP ever sees it. `step="any"` removes that constraint and leaves
+             `min`/`max` doing their job; a definition that wants whole steps still declares its own. --}}
         <input id="{{ $idPrefix }}-{{ $key }}" type="{{ $type }}"
-               @if ($type === 'number') inputmode="numeric" @endif
+               @if ($type === 'number') inputmode="decimal" step="{{ $field['step'] ?? 'any' }}" @endif
                @if (isset($field['min'])) min="{{ $field['min'] }}" @endif
                @if (isset($field['max'])) max="{{ $field['max'] }}" @endif
                @if (! empty($field['placeholder'])) placeholder="{{ $field['placeholder'] }}" @endif
