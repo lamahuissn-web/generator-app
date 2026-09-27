@@ -152,7 +152,7 @@ class RecordService extends ActionDefinition
     }
 
     /** Which expense category a service belongs to, so the books read like the office's own language. */
-    private static function expenseCategory(string $kind): string
+    public static function expenseCategory(string $kind): string
     {
         return match ($kind) {
             EquipmentService::KIND_OIL, EquipmentService::KIND_FILTER => Expense::CAT_OIL,
