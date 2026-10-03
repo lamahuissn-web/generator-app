@@ -35,8 +35,9 @@
     $full = ($span ?? $field['span'] ?? 1) === 'full';
 
     // A checkbox draws its own box beside a caption, so it does not get the stacked label
-    // treatment — the caption IS the label.
-    $stacked = $type !== 'checkbox';
+    // treatment — the caption IS the label. A static line carries its own caption above the value,
+    // for the same reason: two labels over one read-only value is one too many.
+    $stacked = ! in_array($type, ['checkbox', 'static'], true);
 @endphp
 
 <div @class([
@@ -116,6 +117,15 @@
             <input id="{{ $idPrefix }}-{{ $key }}" type="text" inputmode="decimal" wire:model="{{ $path }}"
                    @if (isset($field['min'])) min="{{ $field['min'] }}" @endif
                    placeholder="0.00" class="amount-cell">
+        </div>
+
+    @elseif ($type === 'static')
+        {{-- A read-only line: its caption above, its value below, wrapping. Used where nothing may be edited
+             (the audit trail's detail): an input that LOOKS editable invites a change that goes nowhere, and
+             a value the operator cannot select is a value they cannot quote to whoever asked. --}}
+        <div class="flex flex-col gap-0.5">
+            <span class="text-xs text-muted-foreground">{{ $field['label'] }}</span>
+            <span class="text-sm text-mono break-words">{{ $field['value'] ?? '—' }}</span>
         </div>
 
     @elseif ($type === 'textarea')
