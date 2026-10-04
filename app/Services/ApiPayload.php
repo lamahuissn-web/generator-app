@@ -200,6 +200,9 @@ final class ApiPayload
                 ->all(),
             'house' => self::houseSummary($subscriber),
             'receipt_url' => '/api/v1/receipts/'.$payment->id,
+            // The receipt as words, so a collector can hand it to the household's phone in the street
+            // rather than only print it later. Built from the same pieces as the paper (ReceiptText).
+            'receipt_text' => ReceiptText::for($payment, $subscriber),
         ];
     }
 
