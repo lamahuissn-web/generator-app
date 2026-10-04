@@ -63,6 +63,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // APP_DEBUG is on, so a broken endpoint is loud in development and quiet in the street.
         $exceptions->render(fn (ApiRefusal $e, Request $request) => $e->toResponse($request));
 
+        // A refusal is an ANSWER — the office's own sentence about a door that stayed shut — not an
+        // incident. Reported as an ERROR it fills the log the office reads when something is really
+        // wrong, and a phone retrying in a dead spot would empty its queue into that log all afternoon.
+        // Only the API's channel is silenced: the panel's refusals are unchanged.
+        $exceptions->dontReport([ApiRefusal::class]);
+
         $exceptions->render(function (ValidationException $e, Request $request) {
             if (! $request->is('api/*')) {
                 return null;
