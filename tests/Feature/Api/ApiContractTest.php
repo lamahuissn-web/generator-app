@@ -4,6 +4,7 @@ namespace Tests\Feature\Api;
 
 use App\Models\Payment;
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
 
 /**
  * The channel itself: one error shape for every failure, money as strings on the wire, and no
@@ -75,5 +76,50 @@ class ApiContractTest extends ApiTestCase
 
         $this->assertSame($this->collector->id, $payment->collector_id);
         $this->assertSame(60.0, (float) $payment->applied);
+    }
+
+    public function test_a_phone_that_asks_for_arabic_gets_arabic_months_and_sentences(): void
+    {
+        // Found on the live app, not in a test: the office opens the collector's sheet and reads
+        // «Oct 2026» over a house. The month label has two renderers and the panel already chooses
+        // between them by locale — the phone must get the same choice.
+        $house = $this->flatHouse('محمد عيتاني', 60, ['2026-09']);
+        $unbilled = $this->flatHouse('بيت بلا فاتورة', 60);
+        $arabic = ['Accept-Language' => 'ar'];
+
+        $cards = $this->api($this->collector, 'GET', '/api/v1/areas/'.$this->area->id.'/houses', [], $arabic)
+            ->assertOk()
+            ->json('houses');
+
+        $mine = collect($cards)->firstWhere('id', $house->id);
+        $this->assertNotNull($mine, 'the house is on the sheet');
+        $this->assertSame(period_label_ar('2026-09'), $mine['unpaid_months'][0]['label']);
+
+        $message = $this->api($this->collector, 'POST', '/api/v1/collections', [
+            'subscriber_id' => $unbilled->id, 'amount' => '60',
+        ], $arabic + ['Idempotency-Key' => 'arabic-refusal-key1'])
+            ->assertStatus(422)
+            ->json('error.message');
+
+        $this->assertSame(__('refuse.period_not_invoiced', ['period' => $this->period], 'ar'), $message);
+    }
+
+    public function test_a_business_refusal_is_an_incident_only_when_it_is_a_bug(): void
+    {
+        // A refusal is the office's own sentence about a door that stayed shut — an answer, not a
+        // crash. Logging it as ERROR fills the log the office reads when something is really wrong,
+        // and a phone retrying in a dead spot would do it all afternoon.
+        Log::spy();
+
+        $unbilled = $this->flatHouse('بيت بلا فاتورة', 60);
+
+        $this->api($this->collector, 'POST', '/api/v1/collections', [
+            'subscriber_id' => $unbilled->id, 'amount' => '60',
+        ], ['Idempotency-Key' => 'quiet-refusal-key-01'])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'refuse.period_not_invoiced');
+
+        Log::shouldNotHaveReceived('error');
+        Log::shouldNotHaveReceived('critical');
     }
 }

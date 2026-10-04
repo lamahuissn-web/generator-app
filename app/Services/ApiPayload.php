@@ -61,7 +61,7 @@ final class ApiPayload
             'unpaid_months' => $unpaid
                 ->map(fn (Bill $bill): array => [
                     'period' => (string) $bill->period,
-                    'label' => period_label((string) $bill->period),
+                    'label' => self::label((string) $bill->period),
                     'remaining' => self::dec($bill->unpaidAmount()),
                     'type' => $bill->type,
                 ])
@@ -85,7 +85,7 @@ final class ApiPayload
                     'id' => $bill->id,
                     'number' => $bill->number,
                     'period' => (string) $bill->period,
-                    'label' => period_label((string) $bill->period),
+                    'label' => self::label((string) $bill->period),
                     'type' => $bill->type,
                     'total' => self::dec($bill->total),
                     'paid' => self::dec($bill->paid_amount),
@@ -123,7 +123,7 @@ final class ApiPayload
                 'id' => $reading->id,
                 'subscriber_id' => $reading->subscriber_id,
                 'period' => (string) $reading->period,
-                'label' => period_label((string) $reading->period),
+                'label' => self::label((string) $reading->period),
                 'current_reading' => self::dec($reading->current_reading),
                 'previous_reading' => self::dec($reading->previous_reading),
                 'consumption' => self::dec($reading->consumption),
@@ -144,7 +144,7 @@ final class ApiPayload
             'id' => $bill->id,
             'number' => $bill->number,
             'period' => (string) $bill->period,
-            'label' => period_label((string) $bill->period),
+            'label' => self::label((string) $bill->period),
             'type' => $bill->type,
             'consumption' => $bill->consumption === null ? null : self::dec($bill->consumption),
             'kwh_price' => $bill->kwh_price === null ? null : number_format((float) $bill->kwh_price, 4, '.', ''),
@@ -192,7 +192,7 @@ final class ApiPayload
                 ->map(fn ($allocation): array => [
                     'bill_id' => $allocation->bill_id,
                     'period' => $allocation->bill?->period === null ? null : (string) $allocation->bill->period,
-                    'label' => $allocation->bill?->period === null ? null : period_label((string) $allocation->bill->period),
+                    'label' => $allocation->bill?->period === null ? null : self::label((string) $allocation->bill->period),
                     'amount' => self::dec($allocation->amount),
                     'remaining' => self::dec($allocation->bill?->fresh()?->unpaidAmount() ?? 0),
                 ])
@@ -207,6 +207,18 @@ final class ApiPayload
     public static function dec(float|int|string|null $value): string
     {
         return number_format((float) $value, 2, '.', '');
+    }
+
+    /**
+     * The month as the office writes it: «تشرين الأول ٢٠٢٦» for an Arabic phone, `Oct 2026` otherwise.
+     *
+     * The program has two renderers and the panel already chooses between them by locale (`period_label_ar`
+     * when the office reads Arabic). Found on the live app: the collector's sheet said «Oct 2026» over a
+     * house, which is a month a household cannot read back.
+     */
+    private static function label(string $period): string
+    {
+        return app()->isLocale('ar') ? period_label_ar($period) : period_label($period);
     }
 
     /** A subscription invoice for the cycle — a one-off part is not this month's bill. */
