@@ -6,6 +6,7 @@ use App\Models\Reading;
 use App\Models\Route;
 use App\Models\Subscriber;
 use App\Services\ApiPayload;
+use App\Services\Currency;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -76,7 +77,14 @@ class RouteSheetController extends ApiController
             );
         }
 
-        return response()->json(['period' => $period, 'areas' => $areas]);
+        return response()->json([
+            'period' => $period,
+            'label' => ApiPayload::label($period),
+            // The office's own rate, or null when the office has not set one: the phone must never
+            // convert by a rate it guessed (see Currency).
+            'lbp_rate' => Currency::isConfigured() ? Currency::rate() : null,
+            'areas' => $areas,
+        ]);
     }
 
     public function houses(Request $request, Route $route): JsonResponse
@@ -92,6 +100,8 @@ class RouteSheetController extends ApiController
 
         return response()->json([
             'period' => $period,
+            'label' => ApiPayload::label($period),
+            'lbp_rate' => Currency::isConfigured() ? Currency::rate() : null,
             'area' => ['id' => $route->id, 'name' => $route->name],
             'houses' => $houses,
         ]);

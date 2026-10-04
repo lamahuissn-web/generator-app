@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use App\Models\Bill;
+use App\Models\Setting;
 use App\Models\Subscriber;
 use App\Services\BillingService;
 
@@ -173,6 +174,67 @@ class ApiRouteSheetTest extends ApiTestCase
 
         $this->assertContains(__('mobile.no_area'), $names);
         $this->assertSame('60.00', $areas[array_search(__('mobile.no_area'), $names, true)]['owed']);
+    }
+
+    public function test_the_sheet_carries_the_offices_own_lira_rate(): void
+    {
+        // The street pays in lira and the collector must not invent the rate: the office sets one
+        // rate, and the phone asks for it rather than a man converting in his head at a door.
+        Setting::set('lbp_rate', '90000');
+        $house = $this->flatHouse('محمد عيتاني', 60, ['2026-09']);
+
+        $this->assertSame(
+            90000.0,
+            (float) $this->api($this->collector, 'GET', '/api/v1/areas')->assertOk()->json('lbp_rate'),
+        );
+
+        $this->assertSame(
+            90000.0,
+            (float) $this->api($this->collector, 'GET', '/api/v1/areas/'.$this->area->id.'/houses')
+                ->assertOk()
+                ->assertJsonPath('houses.0.id', $house->id)
+                ->json('lbp_rate'),
+        );
+    }
+
+    public function test_with_no_rate_set_the_sheet_says_so_rather_than_zero(): void
+    {
+        // «الليرة بلا سعر» is not «سعر صفر»: a phone that showed 0 would be inviting a collector to
+        // convert at his own guess, and a phone that showed a stale rate would be worse.
+        $this->flatHouse('محمد عيتاني', 60, ['2026-09']);
+
+        $this->api($this->collector, 'GET', '/api/v1/areas')
+            ->assertOk()
+            ->assertJsonPath('lbp_rate', null);
+
+        $this->api($this->collector, 'GET', '/api/v1/areas/'.$this->area->id.'/houses')
+            ->assertOk()
+            ->assertJsonPath('lbp_rate', null);
+    }
+
+    public function test_the_sheet_names_the_month_in_arabic_for_an_arabic_phone(): void
+    {
+        $this->flatHouse('محمد عيتاني', 60, ['2026-09']);
+
+        $this->api($this->collector, 'GET', '/api/v1/areas', [], ['Accept-Language' => 'ar'])
+            ->assertOk()
+            ->assertJsonPath('label', period_label_ar($this->period));
+    }
+
+    /**
+     * The English case lives in its OWN test on purpose.
+     *
+     * A test process keeps the application it booted, so the locale an earlier request switched to
+     * survives into the next request of the same test — a second assertion in the same method would
+     * measure the test harness, not the API. A real phone gets a fresh request each time.
+     */
+    public function test_the_sheet_names_the_month_in_english_for_an_english_phone(): void
+    {
+        $this->flatHouse('محمد عيتاني', 60, ['2026-09']);
+
+        $this->api($this->collector, 'GET', '/api/v1/areas', [], ['Accept-Language' => 'en'])
+            ->assertOk()
+            ->assertJsonPath('label', period_label($this->period));
     }
 
     /** The card for one house out of the area's list. */
