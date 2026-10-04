@@ -212,11 +212,14 @@ final class ApiPayload
     /**
      * The month as the office writes it: «تشرين الأول ٢٠٢٦» for an Arabic phone, `Oct 2026` otherwise.
      *
-     * The program has two renderers and the panel already chooses between them by locale (`period_label_ar`
-     * when the office reads Arabic). Found on the live app: the collector's sheet said «Oct 2026» over a
-     * house, which is a month a household cannot read back.
+     * The program has two renderers and the panel already chooses between them by locale
+     * (`period_label_ar` when the office reads Arabic). Found on the live app: the collector's sheet
+     * said «Oct 2026» over a house, which is a month a household cannot read back.
+     *
+     * Public because the sheet itself (not only the rows inside it) has to name the cycle a collector
+     * is walking.
      */
-    private static function label(string $period): string
+    public static function label(string $period): string
     {
         return app()->isLocale('ar') ? period_label_ar($period) : period_label($period);
     }
