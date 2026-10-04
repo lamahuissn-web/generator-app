@@ -1631,5 +1631,17 @@
     "aud.sec_happened": "What happened",
     "aud.sec_changed": "What changed",
     "aud.sec_all": "Everything recorded",
-    "aud.readonly": "Read-only — nothing changed."
+    "aud.readonly": "Read-only — nothing changed.",
+    "mobile.no_area": "No area",
+    "mobile.invalid": "The request is missing a field or carries an unusable one — see the marked fields.",
+    "mobile.unauthenticated": "The session has ended — sign in again.",
+    "mobile.not_found": "That request points at something that does not exist.",
+    "mobile.forbidden": "This account may not do that.",
+    "mobile.server_error": "The server hit an unexpected error — report this to the office.",
+    "mobile.future_collected_on": "A collection cannot be recorded for a day that has not come.",
+    "mobile.idempotency_key_missing": "The request carries no attempt key — money is never recorded without one.",
+    "mobile.idempotency_key_malformed": "The attempt key is unusable: at least 16 characters, letters, digits, dots, colons and dashes only.",
+    "mobile.idempotency_key_in_body": "The attempt key travels in the header only, never in the body.",
+    "mobile.idempotency_conflict": "That key already signed a different attempt — send this one under a new key.",
+    "mobile.operation_in_progress": "The same attempt is being processed right now — retry with the same key in a moment."
 }

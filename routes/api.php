@@ -1,0 +1,41 @@
+<?php
+
+use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CollectionController;
+use App\Http\Controllers\Api\ReadingController;
+use App\Http\Controllers\Api\ReceiptController;
+use App\Http\Controllers\Api\RouteSheetController;
+use Illuminate\Support\Facades\Route;
+
+/*
+ | The mobile API (feature 008, specs/008-mobile-app/spec.md).
+ |
+ | A collector's phone and the panel write the SAME ledger: every endpoint below calls the service
+ | the corresponding screen calls, so a rule changed in one place is changed for both — and no
+ | amount, balance or invoice number is ever accepted from the phone.
+ |
+ | Two doors only stay shut on purpose: the sign-in is throttled (a phone that guesses is a phone
+ | that must slow down), and every money-writing route demands an `Idempotency-Key` (a queue flushed
+ | twice must not charge twice).
+ */
+Route::prefix('v1')->group(function (): void {
+    Route::post('login', [AuthController::class, 'login'])
+        ->middleware('throttle:10,1')
+        ->name('api.login');
+
+    Route::middleware(['auth:sanctum', 'api.active'])->group(function (): void {
+        Route::post('logout', [AuthController::class, 'logout'])->name('api.logout');
+        Route::get('me', [AuthController::class, 'me'])->name('api.me');
+
+        Route::middleware('api.role:collector,admin')->group(function (): void {
+            Route::get('areas', [RouteSheetController::class, 'areas'])->name('api.areas');
+            Route::get('areas/{route}/houses', [RouteSheetController::class, 'houses'])->name('api.areas.houses');
+            Route::get('houses/{subscriber}', [RouteSheetController::class, 'house'])->name('api.house');
+
+            Route::post('readings', [ReadingController::class, 'store'])->name('api.readings.store');
+            Route::post('collections', [CollectionController::class, 'store'])->name('api.collections.store');
+
+            Route::get('receipts/{payment}', [ReceiptController::class, 'show'])->name('api.receipts.show');
+        });
+    });
+});
