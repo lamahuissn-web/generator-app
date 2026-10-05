@@ -6,6 +6,7 @@ use App\Models\Reading;
 use App\Models\Route;
 use App\Models\Subscriber;
 use App\Services\ApiPayload;
+use App\Services\CollectorStats;
 use App\Services\Currency;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -77,6 +78,8 @@ class RouteSheetController extends ApiController
             );
         }
 
+        $user = $request->user();
+
         return response()->json([
             'period' => $period,
             'label' => ApiPayload::label($period),
@@ -84,6 +87,8 @@ class RouteSheetController extends ApiController
             // convert by a rate it guessed (see Currency).
             'lbp_rate' => Currency::isConfigured() ? Currency::rate() : null,
             'areas' => $areas,
+            // The collector's own day, beside the areas: what he took, what is still in his pocket.
+            'stats' => ApiPayload::stats(CollectorStats::for($user), CollectorStats::handovers($user)),
         ]);
     }
 
