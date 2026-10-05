@@ -6,6 +6,7 @@ use App\Models\Bill;
 use App\Models\Payment;
 use App\Models\Reading;
 use App\Models\Subscriber;
+use Illuminate\Support\Collection;
 
 /**
  * The shape the phone receives.
@@ -111,6 +112,62 @@ final class ApiPayload
             'id' => $subscriber->id,
             'balance' => self::dec($subscriber->outstanding()),
             'credit' => self::dec($subscriber->credit),
+        ];
+    }
+
+    /**
+     * The collector's own money, as his dashboard shows it.
+     *
+     * The figures come from `CollectorStats` — the same service the office's dashboard reads — so the
+     * phone and the desk cannot hold two different versions of «today».
+     *
+     * @param  array<string, mixed>  $stats
+     * @param  \Illuminate\Support\Collection<int, \App\Models\CashHandover>  $handovers
+     * @return array<string, mixed>
+     */
+    public static function stats(array $stats, Collection $handovers): array
+    {
+        return [
+            'today' => [
+                'total' => self::dec($stats['today_total'] ?? 0),
+                'count' => (int) ($stats['today_count'] ?? 0),
+            ],
+            'month' => [
+                'total' => self::dec($stats['month_total'] ?? 0),
+                'count' => (int) ($stats['month_count'] ?? 0),
+            ],
+            'in_hand' => self::dec($stats['in_hand'] ?? 0),
+            'handed_total' => self::dec($stats['handed_total'] ?? 0),
+            'handovers' => $handovers->map(fn ($handover): array => [
+                'date' => $handover->handover_date?->toDateString(),
+                'amount' => self::dec($handover->amount),
+                'note' => $handover->note,
+            ])->values()->all(),
+        ];
+    }
+
+    /**
+     * One household, as a search answer: enough to recognise the door before walking to it.
+     *
+     * The balance is `houseSummary`'s — the same figure the household's own screen shows — because a
+     * search result that disagrees with the screen it opens is worse than no search at all.
+     *
+     * @return array<string, mixed>
+     */
+    public static function searchRow(Subscriber $subscriber): array
+    {
+        $summary = self::houseSummary($subscriber);
+
+        return [
+            'id' => $subscriber->id,
+            'name' => $subscriber->name,
+            'meter_no' => $subscriber->meter_no,
+            'type' => $subscriber->type,
+            'status' => $subscriber->status,
+            'route' => $subscriber->route?->name,
+            'balance' => $summary['balance'],
+            'credit' => $summary['credit'],
+            'owes' => (float) $summary['balance'] > 0,
         ];
     }
 

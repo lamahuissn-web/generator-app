@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\CollectionController;
 use App\Http\Controllers\Api\ReadingController;
 use App\Http\Controllers\Api\ReceiptController;
 use App\Http\Controllers\Api\RouteSheetController;
+use App\Http\Controllers\Api\SearchController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -31,6 +32,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('areas', [RouteSheetController::class, 'areas'])->name('api.areas');
             Route::get('areas/{route}/houses', [RouteSheetController::class, 'houses'])->name('api.areas.houses');
             Route::get('houses/{subscriber}', [RouteSheetController::class, 'house'])->name('api.house');
+
+            Route::get('search', [SearchController::class, 'index'])->name('api.search');
 
             Route::post('readings', [ReadingController::class, 'store'])->name('api.readings.store');
             Route::post('collections', [CollectionController::class, 'store'])->name('api.collections.store');
