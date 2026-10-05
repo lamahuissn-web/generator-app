@@ -7,6 +7,7 @@ use App\Models\Bill;
 use App\Models\Payment;
 use App\Models\Subscriber;
 use App\Services\BillingService;
+use App\Services\OfficeBoard;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -21,48 +22,24 @@ class DashboardController extends Controller
     public function __invoke(): View
     {
         $period = now()->format('Y-m');
-        $previous = now()->subMonthNoOverflow();
-        $prevPeriod = $previous->format('Y-m');
 
-        $invoiced = (float) Bill::query()->where('period', $period)->sum('total');
-        // The day the money was collected, not the day it was typed in: this rate says how much of
-        // the month's billing actually came in during that month.
-        $collected = (float) Payment::query()
-            ->collectedInRange(now()->copy()->startOfMonth()->toDateString(), now()->copy()->endOfMonth()->toDateString())
-            ->sum('amount');
-        $rate = $invoiced > 0 ? round($collected / $invoiced * 100, 1) : 0.0;
+        // Every figure below comes from OfficeBoard — the same service the manager's phone reads, so the
+        // desk and the pocket cannot disagree about the month. Only labels, icons and tones are decided
+        // here; the numbers are the office's.
+        $numbers = OfficeBoard::numbers($period);
 
-        // Exempt houses are outside the chase (see Feature 004): the office said it does not claim from
-        // them, so their old debt is not part of what the panel is working on. It stays on their own file.
-        $outstanding = (float) Bill::query()
-            ->whereHas('subscriber', fn ($query) => $query->whereNull('exempt_at'))
-            ->selectRaw('COALESCE(SUM(total - paid_amount), 0) as o')
-            ->whereRaw('paid_amount < total')
-            ->value('o');
-
-        // How much of that sits on STOPPED accounts. It is collected the same way (see principle
-        // VI), but money nobody is chasing is money the panel is quietly not working on, and the
-        // office cannot decide about a figure it cannot see.
-        $inactiveOutstanding = (float) Bill::query()
-            ->whereHas('subscriber', fn ($query) => $query->where('status', Subscriber::STATUS_INACTIVE)->whereNull('exempt_at'))
-            ->selectRaw('COALESCE(SUM(total - paid_amount), 0) as o')
-            ->whereRaw('paid_amount < total')
-            ->value('o');
-
-        $active = Subscriber::query()->active();
-        $activeCount = (clone $active)->count();
-        $meteredCount = (clone $active)->metered()->count();
-
-        $kwh = (float) Bill::query()->where('period', $period)->sum('consumption');
-
-        $prevInvoiced = (float) Bill::query()->where('period', $prevPeriod)->sum('total');
-        $prevCollected = (float) Payment::query()
-            ->collectedInRange($previous->copy()->startOfMonth()->toDateString(), $previous->copy()->endOfMonth()->toDateString())
-            ->sum('amount');
-        $prevRate = $prevInvoiced > 0 ? round($prevCollected / $prevInvoiced * 100, 1) : 0.0;
-
-        $tariff = BillingService::kwhPrice($period);
-        $tariffSource = BillingService::priceSource($period);
+        $invoiced = $numbers['invoiced'];
+        $collected = $numbers['collected'];
+        $rate = $numbers['rate'];
+        $outstanding = $numbers['outstanding'];
+        $inactiveOutstanding = $numbers['outstanding_inactive'];
+        $activeCount = $numbers['active'];
+        $meteredCount = $numbers['metered'];
+        $kwh = $numbers['kwh'];
+        $prevRate = $numbers['prev_rate'];
+        $prevInvoiced = $numbers['prev_invoiced'];
+        $tariff = $numbers['tariff'];
+        $tariffSource = $numbers['tariff_source'];
 
         $stats = [
             [

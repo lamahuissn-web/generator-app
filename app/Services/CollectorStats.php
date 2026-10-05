@@ -61,4 +61,30 @@ class CollectorStats
             ->limit($limit)
             ->get();
     }
+
+    /**
+     * Today's takings for EVERY collector at once, keyed by collector id.
+     *
+     * The manager's board needs the same «today» for a whole staff; calling `for()` in a loop would be a
+     * handful of queries per collector. One query, one business-date rule, same answer.
+     *
+     * @return array<int, array{total: float, count: int}>
+     */
+    public static function todayByCollector(): array
+    {
+        $businessDate = 'date(coalesce(payments.collected_on, payments.created_at))';
+
+        return Payment::query()
+            ->whereRaw("$businessDate = ?", [now()->toDateString()])
+            ->selectRaw('collector_id, COUNT(*) as payments_count, COALESCE(SUM(amount), 0) as collected')
+            ->groupBy('collector_id')
+            ->get()
+            ->mapWithKeys(fn ($row): array => [
+                (int) $row->collector_id => [
+                    'total' => round((float) $row->collected, 2),
+                    'count' => (int) $row->payments_count,
+                ],
+            ])
+            ->all();
+    }
 }

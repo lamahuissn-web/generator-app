@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CollectionController;
+use App\Http\Controllers\Api\ManagerController;
 use App\Http\Controllers\Api\ReadingController;
 use App\Http\Controllers\Api\ReceiptController;
 use App\Http\Controllers\Api\RouteSheetController;
@@ -39,6 +40,12 @@ Route::prefix('v1')->group(function (): void {
             Route::post('collections', [CollectionController::class, 'store'])->name('api.collections.store');
 
             Route::get('receipts/{payment}', [ReceiptController::class, 'show'])->name('api.receipts.show');
+        });
+
+        // The manager's phone (spec 009): read-only, and only for a manager — a collector must never
+        // see the cash his colleagues are carrying.
+        Route::middleware('api.role:admin')->group(function (): void {
+            Route::get('manager/board', [ManagerController::class, 'board'])->name('api.manager.board');
         });
     });
 });

@@ -171,6 +171,78 @@ final class ApiPayload
         ];
     }
 
+    /**
+     * The manager's board (spec 009, phase A): the office's month, and what each collector is holding.
+     *
+     * Every figure is a service's — `OfficeBoard`, `CollectionService`, `CollectorStats` — so the phone
+     * and the desk cannot disagree. There is nothing to write here and nothing to compute: a manager
+     * away from his desk reads, he does not post.
+     *
+     * @param  array<string, mixed>  $numbers  OfficeBoard::numbers()
+     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $collectors  CollectionService::byCollector()
+     * @param  array<int, array{total: float, count: int}>  $today  CollectorStats::todayByCollector()
+     * @param  \Illuminate\Support\Collection<int, Payment>  $recent
+     * @return array<string, mixed>
+     */
+    public static function managerBoard(
+        string $period,
+        array $numbers,
+        Collection $collectors,
+        array $today,
+        Collection $recent,
+    ): array {
+        return [
+            'period' => $period,
+            'label' => self::label($period),
+            'money' => [
+                'invoiced' => self::dec($numbers['invoiced']),
+                'collected' => self::dec($numbers['collected']),
+                'rate' => (float) $numbers['rate'],
+                'rate_previous' => (float) $numbers['prev_rate'],
+                'outstanding' => self::dec($numbers['outstanding']),
+                'outstanding_inactive' => self::dec($numbers['outstanding_inactive']),
+            ],
+            'houses' => [
+                'active' => (int) $numbers['active'],
+                'metered' => (int) $numbers['metered'],
+                'flat' => max(0, (int) $numbers['active'] - (int) $numbers['metered']),
+            ],
+            'kwh' => [
+                'total' => self::dec($numbers['kwh']),
+                'price' => self::dec($numbers['tariff']),
+            ],
+            'collectors' => $collectors
+                ->map(function (array $collector) use ($today): array {
+                    $id = (int) $collector['collector_id'];
+
+                    return [
+                        'id' => $id,
+                        'name' => $collector['name'],
+                        'today_total' => self::dec($today[$id]['total'] ?? 0),
+                        'today_count' => (int) ($today[$id]['count'] ?? 0),
+                        'collected' => self::dec($collector['collected']),
+                        'payments_count' => (int) $collector['payments_count'],
+                        'handed' => self::dec($collector['handed']),
+                        'in_hand' => self::dec($collector['in_hand']),
+                    ];
+                })
+                ->values()
+                ->all(),
+            'recent_payments' => $recent
+                ->map(fn (Payment $payment): array => [
+                    'id' => $payment->id,
+                    'subscriber_id' => $payment->subscriber_id,
+                    'number' => $payment->number,
+                    'amount' => self::dec($payment->amount),
+                    'subscriber' => $payment->subscriber?->name,
+                    'collector' => $payment->collector?->name,
+                    'collected_on' => $payment->collectedOn()->toDateString(),
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
     /** @param array{reading: Reading, bill: Bill} $result */
     /** @return array<string, mixed> */
     public static function reading(Reading $reading, Bill $bill, Subscriber $subscriber): array
