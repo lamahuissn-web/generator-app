@@ -1639,6 +1639,8 @@
     "mobile.forbidden": "This account may not do that.",
     "mobile.server_error": "The server hit an unexpected error — report this to the office.",
     "mobile.future_collected_on": "A collection cannot be recorded for a day that has not come.",
+    "mobile.future_handover_date": "A handover cannot be dated in the future.",
+    "mobile.unknown_collector": "No account with that id — check the list.",
     "mobile.idempotency_key_missing": "The request carries no attempt key — money is never recorded without one.",
     "mobile.idempotency_key_malformed": "The attempt key is unusable: at least 16 characters, letters, digits, dots, colons and dashes only.",
     "mobile.idempotency_key_in_body": "The attempt key travels in the header only, never in the body.",

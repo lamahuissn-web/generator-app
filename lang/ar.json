@@ -1639,6 +1639,8 @@
     "mobile.forbidden": "هذا الإجراء ليس لهذا الحساب.",
     "mobile.server_error": "صار خطأ غير متوقع في الخادم — أبلغ المكتب بهذه الواقعة.",
     "mobile.future_collected_on": "لا يمكن تسجيل قبض بتاريخ في المستقبل.",
+    "mobile.future_handover_date": "لا يمكن تسجيل تسليم بتاريخ في المستقبل.",
+    "mobile.unknown_collector": "لا يوجد حساب بهذا المعرّف — راجع القائمة.",
     "mobile.idempotency_key_missing": "الطلب بلا مفتاح محاولة — لا يُسجَّل مال بلا مفتاح.",
     "mobile.idempotency_key_malformed": "مفتاح المحاولة غير صالح: 16 خانة على الأقل، وبحروف وأرقام ونقاط وشرطات فقط.",
     "mobile.idempotency_key_in_body": "مفتاح المحاولة يُرسَل في الترويسة فقط، لا في متن الطلب.",

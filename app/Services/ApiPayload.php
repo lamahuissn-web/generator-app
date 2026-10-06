@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Models\Bill;
+use App\Models\CashHandover;
 use App\Models\Payment;
 use App\Models\Reading;
 use App\Models\Subscriber;
+use App\Models\User;
 use Illuminate\Support\Collection;
 
 /**
@@ -240,6 +242,25 @@ final class ApiPayload
                 ])
                 ->values()
                 ->all(),
+        ];
+    }
+
+    /**
+     * A handover as the manager's phone reads it back: what was recorded, and where the collector stands
+     * now — the figure the office reconciles its drawer against.
+     */
+    public static function handover(CashHandover $handover, User $collector): array
+    {
+        return [
+            'handover' => [
+                'id' => $handover->id,
+                'collector_id' => (int) $handover->collector_id,
+                'collector' => $collector->name,
+                'amount' => self::dec($handover->amount),
+                'handover_date' => $handover->handover_date->toDateString(),
+                'note' => $handover->note,
+            ],
+            'collector_in_hand' => self::dec(CollectionService::inHand($collector->id)),
         ];
     }
 

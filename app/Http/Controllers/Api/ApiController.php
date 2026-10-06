@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Exceptions\ApiRefusal;
 use App\Http\Controllers\Controller;
 use App\Models\Subscriber;
+use App\Models\User;
 use App\Services\BillingService;
 
 /**
@@ -29,5 +30,19 @@ abstract class ApiController extends Controller
     protected function subscriber(int $id): Subscriber
     {
         return Subscriber::query()->findOrFail($id);
+    }
+
+    /**
+     * The person a handover is about.
+     *
+     * Any user, not only a collector by role: the desk's handover modal offers whoever appears in the
+     * collections register, and a manager who collected cash has cash to hand over too. What actually
+     * guards this is the ceiling in `CashHandoverService` — somebody with no collections holds nothing,
+     * and «hand over what you do not hold» is refused by name whatever the role.
+     */
+    protected function person(int $id): User
+    {
+        return User::query()->find($id)
+            ?? throw new ApiRefusal('mobile.unknown_collector', __('mobile.unknown_collector'));
     }
 }

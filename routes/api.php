@@ -46,6 +46,9 @@ Route::prefix('v1')->group(function (): void {
         // see the cash his colleagues are carrying.
         Route::middleware('api.role:admin')->group(function (): void {
             Route::get('manager/board', [ManagerController::class, 'board'])->name('api.manager.board');
+
+            // Phase B: the one write a manager's phone makes — a collector handing cash to the office.
+            Route::post('manager/handovers', [ManagerController::class, 'handover'])->name('api.manager.handovers.store');
         });
     });
 });
