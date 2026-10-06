@@ -46,6 +46,8 @@ class TodayQueueTest extends TestCase
     {
         parent::setUp();
 
+        $this->freezeAtTheSeptemberCycle();
+
         app()->setLocale('ar');
 
         $this->period = BillingService::currentPeriod();

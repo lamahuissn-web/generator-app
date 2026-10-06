@@ -2,10 +2,26 @@
 
 namespace Tests;
 
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
 {
+    /**
+     * Freeze the clock at the cycle this suite describes — September 2026.
+     *
+     * The panel's screens show the CURRENT month while these tests pin their fixtures to 2026-09. While the
+     * suite ran in October the two disagreed: a page that was RIGHT (October) failed an assertion written
+     * for September, and «8 failed» became background noise — which is exactly how a real regression slips
+     * through a green-looking run. Pinning the clock is what makes «September» mean September on both sides.
+     *
+     * A test that needs a different moment calls this with its own instant, or travels on its own.
+     */
+    protected function freezeAtTheSeptemberCycle(string $at = '2026-09-15 10:00:00'): void
+    {
+        $this->travelTo(Carbon::parse($at));
+    }
+
     /**
      * Hard stop before the framework boots: the suite runs RefreshDatabase, which drops
      * and recreates every table. Pointed at a real database it silently destroys live

@@ -31,6 +31,12 @@ class CleanSlateTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->freezeAtTheSeptemberCycle();
+    }
+
     private const DOMAIN_MODELS = [
         Subscriber::class,
         Reading::class,

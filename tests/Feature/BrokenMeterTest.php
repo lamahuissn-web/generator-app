@@ -35,6 +35,8 @@ class BrokenMeterTest extends TestCase
     {
         parent::setUp();
 
+        $this->freezeAtTheSeptemberCycle();
+
         $this->admin = User::create([
             'name' => 'Admin', 'email' => 'admin@x.com', 'password' => 'x',
             'role' => 'admin', 'locale' => 'en',

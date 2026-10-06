@@ -27,6 +27,7 @@ class TariffAndNumbersTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->freezeAtTheSeptemberCycle();
         $this->admin = User::create(['name' => 'Admin', 'email' => 'admin@x.com', 'password' => 'x', 'role' => 'admin', 'locale' => 'en']);
         $this->route = Route::create(['name' => 'Corniche']);
     }

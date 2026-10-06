@@ -39,6 +39,7 @@ class OperationsSurfacesTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->freezeAtTheSeptemberCycle();
         app()->setLocale('ar');
 
         $this->admin = User::create([
