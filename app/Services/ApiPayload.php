@@ -264,6 +264,34 @@ final class ApiPayload
         ];
     }
 
+    /**
+     * The identity of one receipt, read BEFORE it is removed from the ledger.
+     *
+     * A reversal deletes the row (that is what reversing means here), so the phone is answered from what
+     * was read while it still existed: what went, whose it was, and the date it was taken.
+     */
+    public static function receiptIdentity(Payment $payment): array
+    {
+        return [
+            'id' => $payment->id,
+            'number' => $payment->number,
+            'subscriber_id' => $payment->subscriber_id,
+            'amount' => self::dec($payment->amount),
+            'collector_id' => $payment->collector_id,
+            'collector' => $payment->collector?->name,
+            'collected_on' => $payment->collectedOn()->toDateString(),
+        ];
+    }
+
+    /** A receipt that was taken back, and where the household stands now. */
+    public static function reversed(array $receipt, Subscriber $subscriber): array
+    {
+        return [
+            'reversed' => $receipt,
+            'subscriber_balance' => self::dec($subscriber->outstanding()),
+        ];
+    }
+
     /** @param array{reading: Reading, bill: Bill} $result */
     /** @return array<string, mixed> */
     public static function reading(Reading $reading, Bill $bill, Subscriber $subscriber): array

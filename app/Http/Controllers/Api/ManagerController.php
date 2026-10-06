@@ -6,6 +6,7 @@ use App\Exceptions\ApiRefusal;
 use App\Models\Payment;
 use App\Services\ApiIdempotency;
 use App\Services\ApiPayload;
+use App\Services\BillingService;
 use App\Services\CashHandoverService;
 use App\Services\CollectionService;
 use App\Services\CollectorStats;
@@ -110,6 +111,61 @@ class ManagerController extends ApiController
                 ], $manager->id));
 
                 return ApiPayload::handover($handover, $collector);
+            },
+        );
+
+        return response()->json($attempt['payload'] + ['replay' => $attempt['replay']], 201);
+    }
+
+    /**
+     * Take one receipt back (spec 009, phase C) — the most dangerous thing this app does.
+     *
+     * It removes money from the books and leaves a household owing again, so three guards travel with it:
+     * a **written reason** (ten characters at least — «خطأ» explains nothing to the person reading the trail
+     * in six months), the phone's own **double confirmation**, and the trail: the reversal is audited with
+     * the manager's name on it, exactly as the desk's is.
+     *
+     * Nothing about the act is re-decided: `BillingService::reversePayment` restores the allocations, keeps
+     * the engine's refusal when the credited money was already spent on a discounted month, and deletes the
+     * row. The endpoint adds the reason to that trail and answers with what went and the household's new
+     * balance — read while the receipt still existed, because reversing removes it.
+     */
+    public function reversal(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'payment_id' => ['required', 'integer', 'min:1'],
+            'reason' => ['required', 'string', 'min:10', 'max:200'],
+        ]);
+
+        $manager = $request->user();
+        $reason = trim((string) $data['reason']);
+        $paymentId = (int) $data['payment_id'];
+
+        // The canonical payload is what the REQUEST said, never what the ledger holds. A reversal deletes the
+        // receipt it names, so a repeated attempt has to be answered from the first attempt's own record:
+        // looking the receipt up out here would turn a retry (a timeout the phone sent again) into «no such
+        // receipt» — the one answer a retry must never get.
+        $payload = [
+            'payment_id' => $paymentId,
+            'reason' => $reason,
+        ];
+
+        $attempt = ApiIdempotency::run(
+            $request,
+            $manager,
+            'reversal',
+            $payload,
+            function () use ($paymentId, $reason): array {
+                $payment = Payment::query()->find($paymentId)
+                    ?? throw new ApiRefusal('mobile.unknown_payment', __('mobile.unknown_payment'));
+
+                // Read while it still exists: reversing removes the row.
+                $receipt = ApiPayload::receiptIdentity($payment);
+                $subscriber = $payment->subscriber;
+
+                ApiRefusal::business(fn () => BillingService::reversePayment($payment, $reason));
+
+                return ApiPayload::reversed($receipt, $subscriber);
             },
         );
 

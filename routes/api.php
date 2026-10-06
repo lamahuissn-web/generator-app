@@ -49,6 +49,9 @@ Route::prefix('v1')->group(function (): void {
 
             // Phase B: the one write a manager's phone makes — a collector handing cash to the office.
             Route::post('manager/handovers', [ManagerController::class, 'handover'])->name('api.manager.handovers.store');
+
+            // Phase C: taking one receipt back — with a written reason, an audit entry, and no undo.
+            Route::post('manager/reversals', [ManagerController::class, 'reversal'])->name('api.manager.reversals.store');
         });
     });
 });

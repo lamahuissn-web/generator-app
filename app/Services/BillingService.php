@@ -1249,13 +1249,18 @@ class BillingService
      * Reverse a mistaken payment: restore every allocated amount to its bill,
      * then delete the payment. Fully audited.
      *
+     * `$reason` is the phone's doing (spec 009, phase C): the desk confirms with a dialog, but a manager
+     * standing in a street taking a receipt back must say why in writing, and the trail keeps it. The rule
+     * itself is unchanged — the same restoration, the same refusal when the money a receipt credited has
+     * already been spent on a discounted month.
+     *
      * @throws \RuntimeException when the payment no longer exists
      */
-    public static function reversePayment(Payment $payment): void
+    public static function reversePayment(Payment $payment, ?string $reason = null): void
     {
         $payment->loadMissing('allocations');
 
-        DB::transaction(function () use ($payment) {
+        DB::transaction(function () use ($payment, $reason) {
             // Money this receipt took above the charge was credited to the subscriber (see collect):
             // taking the receipt back has to take that credit back too, or reversing a mistyped
             // amount leaves a balance on the books that nobody ever handed over.
@@ -1293,6 +1298,7 @@ class BillingService
                 'amount' => (float) $payment->amount,
                 'collector_id' => $payment->collector_id,
                 'note' => $payment->note,
+                'reason' => $reason,
             ]);
 
             $payment->delete();
