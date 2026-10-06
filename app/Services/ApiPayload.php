@@ -23,6 +23,14 @@ use Illuminate\Support\Collection;
  */
 final class ApiPayload
 {
+    /**
+     * How many receipts a household's file carries on the phone.
+     *
+     * The panel's log is complete and paged; a pocket file is not a search tool — it is what a manager reads
+     * before taking a receipt back, and 50 covers a household's whole year at the usual rhythm.
+     */
+    private const FILE_RECEIPTS = 50;
+
     /** @return array<string, mixed> */
     public static function area(?int $id, string $name, int $houses, int $active, string $owed, int $readingDone, int $readingTotal): array
     {
@@ -37,8 +45,16 @@ final class ApiPayload
         ];
     }
 
-    /** @return array<string, mixed> */
-    public static function house(Subscriber $subscriber, string $period, bool $withBills = false): array
+    /**
+     * One household, as the phone reads it.
+     *
+     * `$full` is the household's FILE — his invoices and his receipts — and it is asked for one house at a
+     * time only. The area sheet asks for the card alone (`$full` false) for every house in a street, and a
+     * whole ledger per house there would be a lot of bytes for figures nobody reads in a list.
+     *
+     * @return array<string,mixed>
+     */
+    public static function house(Subscriber $subscriber, string $period, bool $full = false): array
     {
         $subscriber->loadMissing('route');
 
@@ -78,7 +94,7 @@ final class ApiPayload
             'previous_value' => self::dec(BillingService::previousValue($subscriber, $period)),
         ];
 
-        if ($withBills) {
+        if ($full) {
             $card['bills'] = $subscriber->bills()
                 ->orderBy('period')
                 ->orderByRaw("type = '".Bill::TYPE_SPECIAL."'")
@@ -96,6 +112,40 @@ final class ApiPayload
                     'consumption' => $bill->consumption === null ? null : self::dec($bill->consumption),
                     'discount' => self::dec($bill->discount_amount),
                     'subsidy' => self::dec($bill->subsidy_amount),
+                ])
+                ->values()
+                ->all();
+
+            // The household's receipts, newest first by the day they were taken — the same log the panel's
+            // file shows. A reversed receipt is not here and should not be: reversing removes it from the
+            // ledger, and the story of what happened to it lives in the audit trail.
+            $card['payments'] = $subscriber->payments()
+                ->with(['allocations.bill', 'collector'])
+                ->orderByDesc('collected_on')
+                ->orderByDesc('id')
+                ->limit(self::FILE_RECEIPTS)
+                ->get()
+                ->map(fn (Payment $payment): array => [
+                    'id' => $payment->id,
+                    'number' => $payment->number,
+                    'amount' => self::dec($payment->amount),
+                    'method' => $payment->method,
+                    'method_label' => $payment->methodLabel(),
+                    'collected_on' => $payment->collectedOn()->toDateString(),
+                    'created_at' => $payment->created_at?->toIso8601String(),
+                    'collector' => $payment->collector?->name,
+                    'note' => $payment->note,
+                    'lbp_amount' => $payment->lbp_amount === null ? null : (int) $payment->lbp_amount,
+                    'lbp_rate' => $payment->lbp_rate === null ? null : (float) $payment->lbp_rate,
+                    'settled' => $payment->allocations
+                        ->sortBy('id')
+                        ->map(fn ($allocation): array => [
+                            'period' => $allocation->bill?->period === null ? null : (string) $allocation->bill->period,
+                            'label' => $allocation->bill?->period === null ? null : self::label((string) $allocation->bill->period),
+                            'amount' => self::dec($allocation->amount),
+                        ])
+                        ->values()
+                        ->all(),
                 ])
                 ->values()
                 ->all();
