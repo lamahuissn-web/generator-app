@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Bill;
 use App\Models\CashHandover;
 use App\Models\Payment;
 use App\Models\Reading;
@@ -50,6 +51,44 @@ class CollectorStats
             'in_hand' => CollectionService::inHand($collector->id),
             'handed_total' => CollectionService::handedOverAllTime($collector->id),
         ];
+    }
+
+    /**
+     * His last receipts, newest first — the lines behind the cash in his pocket (spec 011).
+     *
+     * The list is what he matches his money against at the end of a day, so it is ordered by the BUSINESS
+     * date (`collected_on`), the same date the day's total is summed by: a list ordered differently from the
+     * figure above it is how a man concludes he is short.
+     */
+    public static function receipts(User $collector, int $limit = 30): Collection
+    {
+        return Payment::query()
+            ->with('subscriber')
+            ->where('collector_id', $collector->id)
+            ->orderByRaw('date(coalesce(payments.collected_on, payments.created_at)) desc')
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
+    }
+
+    /**
+     * The invoices his own readings produced this cycle (spec 011).
+     *
+     * The link is the engine's (`bills.reading_id`), not a guess by name or date. A reading that produced no
+     * invoice — a meter's baseline, or a cycle the office has not billed yet — is simply absent: the panel
+     * says «لا فاتورة» on its own screen, and there is no money in it for this list.
+     */
+    public static function invoices(User $collector, string $period, int $limit = 20): Collection
+    {
+        return Bill::query()
+            ->with('subscriber')
+            ->whereIn('reading_id', Reading::query()
+                ->select('id')
+                ->where('entered_by', $collector->id)
+                ->where('period', $period))
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get();
     }
 
     /**

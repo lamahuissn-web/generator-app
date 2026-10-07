@@ -116,6 +116,62 @@ class ApiWalletTest extends ApiTestCase
         $this->assertSame(0, $theirs['today']);
     }
 
+    public function test_his_receipts_are_the_lines_behind_the_cash_he_carries(): void
+    {
+        $house = $this->flatHouse('بيت أبو علي', 100, [$this->period]);
+        $other = $this->flatHouse('بيت الجار', 100, [$this->period]);
+
+        $this->pay($house, 20, $this->collector, now()->subDay()->toDateString());
+        $this->pay($house, 25, $this->collector, now()->toDateString());
+
+        // Somebody else's receipt is not his day's work, and a list that mixed them would make him «short».
+        $otherCollector = $this->person('جابٍ آخر', 'other2@generator.test', \App\Models\User::ROLE_COLLECTOR);
+        $this->pay($other, 99, $otherCollector, now()->toDateString());
+
+        $receipts = $this->wallet($this->collector)->assertStatus(200)->json('receipts');
+
+        $this->assertCount(2, $receipts);
+
+        // Newest first, by the day the money was taken.
+        $this->assertSame('25.00', $receipts[0]['amount']);
+        $this->assertSame(now()->toDateString(), $receipts[0]['collected_on']);
+        $this->assertSame('بيت أبو علي', $receipts[0]['subscriber']);
+        $this->assertNotNull($receipts[0]['number']);
+        $this->assertSame('20.00', $receipts[1]['amount']);
+    }
+
+    public function test_the_invoices_his_own_readings_produced_are_listed_for_this_cycle(): void
+    {
+        $mine = $this->meteredHouse('بيت قراءتي', 1000);
+        $theirs = $this->meteredHouse('بيت جارٍ', 1000);
+
+        $otherCollector = $this->person('جابٍ آخر', 'other3@generator.test', \App\Models\User::ROLE_COLLECTOR);
+
+        // His reading this cycle, another collector's reading this cycle, and his own reading of the cycle
+        // BEFORE — which is not this cycle's work and must not appear.
+        $this->api($this->collector, 'POST', '/api/v1/readings', [
+            'subscriber_id' => $mine->id, 'period' => $this->period, 'current_reading' => '1150',
+        ], ['Idempotency-Key' => 'moto-review-reading-1'])->assertCreated();
+
+        $this->api($otherCollector, 'POST', '/api/v1/readings', [
+            'subscriber_id' => $theirs->id, 'period' => $this->period, 'current_reading' => '1080',
+        ], ['Idempotency-Key' => 'moto-review-reading-2'])->assertCreated();
+
+        $this->api($this->collector, 'POST', '/api/v1/readings', [
+            'subscriber_id' => $mine->id, 'period' => '2026-09', 'current_reading' => '1050',
+        ], ['Idempotency-Key' => 'moto-review-reading-3'])->assertCreated();
+
+        $invoices = $this->wallet($this->collector)->assertStatus(200)->json('invoices');
+
+        $this->assertCount(1, $invoices);
+        $this->assertSame('بيت قراءتي', $invoices[0]['subscriber']);
+        $this->assertSame($this->period, $invoices[0]['period']);
+        $this->assertSame('150.00', $invoices[0]['consumption']);
+        $this->assertNotNull($invoices[0]['number']);
+        $this->assertNotNull($invoices[0]['total']);
+        $this->assertSame($invoices[0]['total'], $invoices[0]['remaining']);
+    }
+
     public function test_a_manager_may_ask_and_gets_his_own_zeroes(): void
     {
         // No role gate on purpose: refusing would hide a mistake, and the honest answer — nobody collects in

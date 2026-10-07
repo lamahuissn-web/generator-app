@@ -349,9 +349,19 @@ final class ApiPayload
      * @param  array<string,mixed>  $money
      * @param  array{today: int, cycle: int}  $readings
      * @param  Collection<int, CashHandover>  $handovers
+     * @param  Collection<int, Payment>  $receipts
+     * @param  Collection<int, Bill>  $invoices
      * @return array<string, mixed>
      */
-    public static function wallet(User $user, array $money, array $readings, Collection $handovers, string $period): array
+    public static function wallet(
+        User $user,
+        array $money,
+        array $readings,
+        Collection $handovers,
+        Collection $receipts,
+        Collection $invoices,
+        string $period,
+    ): array
     {
         return [
             'user' => ['id' => $user->id, 'name' => $user->name, 'role' => $user->role],
@@ -366,6 +376,34 @@ final class ApiPayload
                 'handed_total' => self::dec($money['handed_total']),
             ],
             'readings' => ['today' => (int) $readings['today'], 'cycle' => (int) $readings['cycle']],
+            // His own review (spec 011 §7): what he collected, and what his readings produced. The wallet
+            // told him HOW MUCH; these are the lines that make up the figure, which is what a man matches
+            // his money against before he signs it over.
+            'receipts' => $receipts
+                ->map(fn (Payment $payment): array => [
+                    'id' => $payment->id,
+                    'number' => $payment->number,
+                    'subscriber_id' => $payment->subscriber_id,
+                    'subscriber' => $payment->subscriber?->name,
+                    'amount' => self::dec($payment->amount),
+                    'collected_on' => $payment->collectedOn()->toDateString(),
+                ])
+                ->values()
+                ->all(),
+            'invoices' => $invoices
+                ->map(fn (Bill $bill): array => [
+                    'id' => $bill->id,
+                    'number' => $bill->number,
+                    'subscriber_id' => $bill->subscriber_id,
+                    'subscriber' => $bill->subscriber?->name,
+                    'period' => (string) $bill->period,
+                    'label' => self::label((string) $bill->period),
+                    'total' => self::dec($bill->total),
+                    'consumption' => $bill->consumption === null ? null : self::dec($bill->consumption),
+                    'remaining' => self::dec($bill->unpaidAmount()),
+                ])
+                ->values()
+                ->all(),
             // The dates behind `handed_total`, with the man who signed for each: a handover is an act
             // between two people, and the collector's copy of it should say so.
             'handovers' => $handovers

@@ -30,6 +30,8 @@ class MeController extends ApiController
             CollectorStats::for($user),
             CollectorStats::readings($user, $period),
             CollectorStats::handovers($user, 5),
+            CollectorStats::receipts($user),
+            CollectorStats::invoices($user, $period),
             $period,
         ));
     }
