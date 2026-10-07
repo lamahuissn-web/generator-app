@@ -135,6 +135,9 @@ final class ApiPayload
                     'collected_on' => $payment->collectedOn()->toDateString(),
                     'created_at' => $payment->created_at?->toIso8601String(),
                     'collector' => $payment->collector?->name,
+                    // So the phone knows which receipts are his own to send again (spec 011 §8): the same
+                    // rule the receipt endpoint enforces, answered before the tap rather than after it.
+                    'collector_id' => $payment->collector_id,
                     'note' => $payment->note,
                     'lbp_amount' => $payment->lbp_amount === null ? null : (int) $payment->lbp_amount,
                     'lbp_rate' => $payment->lbp_rate === null ? null : (float) $payment->lbp_rate,

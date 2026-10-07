@@ -119,6 +119,71 @@ class ApiReceiptTextTest extends ApiTestCase
         $this->assertStringContainsString('دفع عند الباب', $text);      // his own note travels too
     }
 
+    /** One receipt, taken by the collector, and its row in the ledger. */
+    private function collected(): Payment
+    {
+        $house = $this->flatHouse('بيت أبو علي', 60, [$this->period]);
+
+        // The phone's own call, and the words the office answers with.
+        $this->collect([
+            'subscriber_id' => $house->id,
+            'amount' => '20',
+        ], 'moto-receipt-again-0001')->assertCreated();
+
+        return Payment::query()->sole();
+    }
+
+    public function test_a_receipt_can_be_sent_again_in_the_same_words(): void
+    {
+        $payment = $this->collected();
+
+        $again = $this->api($this->collector, 'GET', "/api/v1/receipts/{$payment->id}/text", [], [
+            'Accept-Language' => 'ar',
+        ])->assertStatus(200);
+
+        $text = $again->json('receipt_text');
+
+        // The office's own receipt, for THIS receipt: the number, the household, the amount — and the same
+        // words if it is asked for twice, because a receipt sent again in the evening must not differ from
+        // the one handed over at the door.
+        $this->assertStringContainsString((string) $payment->number, $text);
+        $this->assertStringContainsString('بيت أبو علي', $text);
+        $this->assertStringContainsString('20.00', $text);
+
+        $this->assertSame(
+            $text,
+            $this->api($this->collector, 'GET', "/api/v1/receipts/{$payment->id}/text", [], ['Accept-Language' => 'ar'])
+                ->assertStatus(200)->json('receipt_text'),
+        );
+
+        $this->assertSame($payment->id, $again->json('payment.id'));
+        $this->assertSame($payment->collector_id, $again->json('payment.collector_id'));
+    }
+
+    public function test_a_collector_cannot_read_back_a_colleagues_receipt(): void
+    {
+        $payment = $this->collected();
+        $other = $this->person('جابٍ آخر', 'receipt-other@generator.test', \App\Models\User::ROLE_COLLECTOR);
+
+        $this->api($other, 'GET', "/api/v1/receipts/{$payment->id}/text", [], ['Accept-Language' => 'ar'])
+            ->assertStatus(403)
+            ->assertJsonPath('error.code', 'forbidden');
+    }
+
+    public function test_the_office_reads_any_receipt_as_words(): void
+    {
+        $payment = $this->collected();
+
+        $this->api($this->admin, 'GET', "/api/v1/receipts/{$payment->id}/text", [], ['Accept-Language' => 'ar'])
+            ->assertStatus(200)
+            ->assertJsonPath('payment.id', $payment->id);
+    }
+
+    public function test_the_receipt_words_need_a_token(): void
+    {
+        $this->getJson('/api/v1/receipts/1/text')->assertStatus(401);
+    }
+
     public function test_a_replayed_collection_carries_the_same_receipt_words(): void
     {
         $house = $this->flatHouse('بيت أبو علي', 60, ['2026-09']);

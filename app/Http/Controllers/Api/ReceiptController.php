@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Exceptions\ApiRefusal;
 use App\Models\Payment;
+use App\Services\ApiPayload;
 use App\Services\PdfService;
+use App\Services\ReceiptText;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -17,10 +20,39 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * A collector reads back his own receipts; the office reads any. That is the whole authorisation
  * rule, and it is checked here rather than in the query, so a wrong id is a 403 rather than an
- * empty document.
+ * empty document. It is the same rule for both shapes the receipt has — the printed page and the
+ * text (spec 011 §8) — so a collector can never read back a colleague's receipt in one form while
+ * being refused it in the other.
  */
 class ReceiptController extends ApiController
 {
+    /**
+     * The same receipt as words (spec 011 §8).
+     *
+     * The owner's decision was «الإيصال نصًّا لا PDF», and a household that lost the message in WhatsApp
+     * needs the words again — not a file. The words come from `ReceiptText`, the same service the phone
+     * reads at the moment of collection, so a receipt sent again in the evening is character for character
+     * the one that was handed over at the door.
+     */
+    public function text(Request $request, Payment $payment): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user->isAdmin() && (int) $payment->collector_id !== (int) $user->id) {
+            throw new ApiRefusal('forbidden', __('mobile.forbidden'), 403);
+        }
+
+        return response()->json([
+            'receipt_text' => ReceiptText::for($payment, $payment->subscriber),
+            'payment' => [
+                'id' => $payment->id,
+                'number' => $payment->number,
+                'amount' => ApiPayload::dec($payment->amount),
+                'collector_id' => $payment->collector_id,
+            ],
+        ]);
+    }
+
     public function show(Request $request, Payment $payment): Response
     {
         $user = $request->user();

@@ -56,6 +56,8 @@ class ApiHouseFileTest extends ApiTestCase
         $this->assertSame((string) $this->period, $payments[0]['settled'][0]['period']);
         $this->assertNotNull($payments[0]['settled'][0]['label']);
         $this->assertSame($this->collector->name, $payments[0]['collector']);
+        // The id beside the name: it is what tells the phone whose receipt it may send again.
+        $this->assertSame($this->collector->id, $payments[0]['collector_id']);
         $this->assertNotNull($payments[0]['method_label']);
     }
 

@@ -45,6 +45,8 @@ Route::prefix('v1')->group(function (): void {
             Route::post('collections', [CollectionController::class, 'store'])->name('api.collections.store');
 
             Route::get('receipts/{payment}', [ReceiptController::class, 'show'])->name('api.receipts.show');
+            // The same receipt as words, for a household that lost the message (spec 011 §8).
+            Route::get('receipts/{payment}/text', [ReceiptController::class, 'text'])->name('api.receipts.text');
         });
 
         // The manager's phone (spec 009): read-only, and only for a manager — a collector must never
