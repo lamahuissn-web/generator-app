@@ -340,6 +340,47 @@ final class ApiPayload
     }
 
     /**
+     * A collector's own purse, as his phone reads it (spec 011).
+     *
+     * Every figure is a service's, not a sum done here: `CollectorStats::for()` for the day, the month and
+     * the cash in his pocket (`CollectionService::inHand`), plus his readings and his handovers. The phone
+     * computes no money anywhere, and its owner's purse is no exception.
+     *
+     * @param  array<string,mixed>  $money
+     * @param  array{today: int, cycle: int}  $readings
+     * @param  Collection<int, CashHandover>  $handovers
+     * @return array<string, mixed>
+     */
+    public static function wallet(User $user, array $money, array $readings, Collection $handovers, string $period): array
+    {
+        return [
+            'user' => ['id' => $user->id, 'name' => $user->name, 'role' => $user->role],
+            'period' => $period,
+            'label' => self::label($period),
+            'money' => [
+                'in_hand' => self::dec($money['in_hand']),
+                'today_total' => self::dec($money['today_total']),
+                'today_count' => (int) $money['today_count'],
+                'month_total' => self::dec($money['month_total']),
+                'month_count' => (int) $money['month_count'],
+                'handed_total' => self::dec($money['handed_total']),
+            ],
+            'readings' => ['today' => (int) $readings['today'], 'cycle' => (int) $readings['cycle']],
+            // The dates behind `handed_total`, with the man who signed for each: a handover is an act
+            // between two people, and the collector's copy of it should say so.
+            'handovers' => $handovers
+                ->map(fn (CashHandover $handover): array => [
+                    'date' => $handover->handover_date?->toDateString(),
+                    'amount' => self::dec($handover->amount),
+                    'note' => $handover->note,
+                    'received_by' => $handover->recordedBy?->name,
+                ])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    /**
      * The identity of one receipt, read BEFORE it is removed from the ledger.
      *
      * A reversal deletes the row (that is what reversing means here), so the phone is answered from what

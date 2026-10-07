@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CollectionController;
 use App\Http\Controllers\Api\ManagerController;
+use App\Http\Controllers\Api\MeController;
 use App\Http\Controllers\Api\ReadingController;
 use App\Http\Controllers\Api\ReceiptController;
 use App\Http\Controllers\Api\RouteSheetController;
@@ -35,6 +36,10 @@ Route::prefix('v1')->group(function (): void {
             Route::get('houses/{subscriber}', [RouteSheetController::class, 'house'])->name('api.house');
 
             Route::get('search', [SearchController::class, 'index'])->name('api.search');
+
+            // The collector's own purse (spec 011): his cash, his day, his readings, his handovers — about
+            // whoever holds the token, and nobody else, because the route carries no id.
+            Route::get('me/summary', [MeController::class, 'summary'])->name('api.me.summary');
 
             Route::post('readings', [ReadingController::class, 'store'])->name('api.readings.store');
             Route::post('collections', [CollectionController::class, 'store'])->name('api.collections.store');

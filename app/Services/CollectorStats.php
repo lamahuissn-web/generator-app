@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\CashHandover;
 use App\Models\Payment;
+use App\Models\Reading;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -51,10 +52,34 @@ class CollectorStats
         ];
     }
 
+    /**
+     * How many readings this collector wrote: today's work, and the cycle's.
+     *
+     * Two different questions, both his own: «كم قراءة سجّلت اليوم» is the day, and «كم قراءة لهذا الشهر»
+     * is the cycle he is billing for. `entered_by` is the only honest key — a reading he did not enter is
+     * not his day, whatever else it is.
+     *
+     * @return array{today: int, cycle: int}
+     */
+    public static function readings(User $collector, string $period): array
+    {
+        return [
+            'today' => Reading::query()
+                ->where('entered_by', $collector->id)
+                ->whereDate('created_at', now()->toDateString())
+                ->count(),
+            'cycle' => Reading::query()
+                ->where('entered_by', $collector->id)
+                ->where('period', $period)
+                ->count(),
+        ];
+    }
+
     /** The last few handovers, newest first — the dates behind `handed_total`. */
     public static function handovers(User $collector, int $limit = 3): Collection
     {
         return CashHandover::query()
+            ->with('recordedBy')
             ->where('collector_id', $collector->id)
             ->latest('handover_date')
             ->latest('id')
