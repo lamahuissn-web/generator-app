@@ -24,12 +24,12 @@ use Illuminate\Support\Collection;
 final class ApiPayload
 {
     /**
-     * How many receipts a household's file carries on the phone.
+     * How many rows of a household's ledger the phone carries.
      *
-     * The panel's log is complete and paged; a pocket file is not a search tool — it is what a manager reads
-     * before taking a receipt back, and 50 covers a household's whole year at the usual rhythm.
+     * The panel's logs are complete and paged; a pocket file is not a search tool — it is what a person reads
+     * before deciding something about a house, and 50 of each covers its whole year at the usual rhythm.
      */
-    private const FILE_RECEIPTS = 50;
+    private const FILE_ROWS = 50;
 
     /** @return array<string, mixed> */
     public static function area(?int $id, string $name, int $houses, int $active, string $owed, int $readingDone, int $readingTotal): array
@@ -123,7 +123,7 @@ final class ApiPayload
                 ->with(['allocations.bill', 'collector'])
                 ->orderByDesc('collected_on')
                 ->orderByDesc('id')
-                ->limit(self::FILE_RECEIPTS)
+                ->limit(self::FILE_ROWS)
                 ->get()
                 ->map(fn (Payment $payment): array => [
                     'id' => $payment->id,
@@ -146,6 +146,30 @@ final class ApiPayload
                         ])
                         ->values()
                         ->all(),
+                ])
+                ->values()
+                ->all();
+
+            // The meter log — the third record the panel's file is made of, and the one a household disputes
+            // more often than the others. The pair travels as two figures («15 → 66») because that is how the
+            // office says it out loud, and an estimated month SAYS it is estimated: that is a different fact
+            // from a month somebody stood at the meter and read.
+            $card['readings'] = $subscriber->readings()
+                ->with('enteredBy')
+                ->orderByDesc('period')
+                ->orderByDesc('id')
+                ->limit(self::FILE_ROWS)
+                ->get()
+                ->map(fn (Reading $reading): array => [
+                    'id' => $reading->id,
+                    'period' => (string) $reading->period,
+                    'label' => self::label((string) $reading->period),
+                    'previous' => self::dec($reading->previous_reading),
+                    'current' => self::dec($reading->current_reading),
+                    'consumption' => $reading->consumption === null ? null : self::dec($reading->consumption),
+                    'estimated' => (bool) $reading->is_estimated,
+                    'reader' => $reading->enteredBy?->name,
+                    'read_on' => $reading->created_at?->toDateString(),
                 ])
                 ->values()
                 ->all();

@@ -92,7 +92,79 @@ class ApiHouseFileTest extends ApiTestCase
         ])->assertStatus(200)->json('houses.0');
 
         $this->assertArrayNotHasKey('payments', $sheet);
+        $this->assertArrayNotHasKey('readings', $sheet);
         $this->assertArrayNotHasKey('bills', $sheet);
+    }
+
+    /** Two months of readings on one meter: 1000 → 1150, then 1150 → 1240. */
+    private function houseWithTwoReadings(): \App\Models\Subscriber
+    {
+        $house = $this->meteredHouse('بيت أبو أحمد', 1000);
+
+        foreach ([['2026-09', '1150'], ['2026-10', '1240']] as $i => [$period, $value]) {
+            $this->api($this->collector, 'POST', '/api/v1/readings', [
+                'subscriber_id' => $house->id,
+                'period' => $period,
+                'current_reading' => $value,
+            ], ['Idempotency-Key' => 'moto-file-reading-'.str_pad((string) $i, 4, '0', STR_PAD_LEFT)])->assertCreated();
+        }
+
+        return $house;
+    }
+
+    public function test_the_file_carries_the_months_readings_newest_first(): void
+    {
+        $house = $this->houseWithTwoReadings();
+
+        $readings = $this->file($house->id)->assertStatus(200)->json('house.readings');
+
+        $this->assertCount(2, $readings);
+
+        // Newest month first, and the pair as the office says it out loud.
+        $this->assertSame('2026-10', $readings[0]['period']);
+        $this->assertSame('1150.00', $readings[0]['previous']);
+        $this->assertSame('1240.00', $readings[0]['current']);
+        $this->assertSame('90.00', $readings[0]['consumption']);
+        $this->assertFalse($readings[0]['estimated']);
+        $this->assertSame($this->collector->name, $readings[0]['reader']);
+        $this->assertNotNull($readings[0]['label']);
+
+        $this->assertSame('2026-09', $readings[1]['period']);
+        $this->assertSame('1000.00', $readings[1]['previous']);
+        $this->assertSame('1150.00', $readings[1]['current']);
+    }
+
+    public function test_a_household_never_read_answers_with_an_empty_meter_log(): void
+    {
+        $house = $this->meteredHouse('بيت بلا قراءة', 1000);
+
+        $body = $this->file($house->id)->assertStatus(200)->json('house');
+
+        $this->assertArrayHasKey('readings', $body);
+        $this->assertSame([], $body['readings']);
+    }
+
+    public function test_an_estimated_month_says_so(): void
+    {
+        $house = $this->meteredHouse('بيت قراءة تقديرية', 1000);
+
+        \App\Models\Reading::create([
+            'subscriber_id' => $house->id,
+            'period' => '2026-09',
+            'previous_reading' => 1000,
+            'current_reading' => 1150,
+            'consumption' => 150,
+            'entered_by' => $this->collector->id,
+            'is_estimated' => true,
+            'estimate_reason' => 'البيت مغلق',
+        ]);
+
+        $reading = $this->file($house->id)->assertStatus(200)->json('house.readings.0');
+
+        // An estimate and a reading somebody stood at the meter for are different facts, and the log says
+        // which one it is holding.
+        $this->assertTrue($reading['estimated']);
+        $this->assertSame('150.00', $reading['consumption']);
     }
 
     public function test_the_collector_reads_his_households_file(): void
