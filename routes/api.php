@@ -42,6 +42,9 @@ Route::prefix('v1')->group(function (): void {
             Route::get('me/summary', [MeController::class, 'summary'])->name('api.me.summary');
 
             Route::post('readings', [ReadingController::class, 'store'])->name('api.readings.store');
+            // A mistaken reading, taken back with a written reason (spec 012): the engine's own correction,
+            // behind the two guards a phone needs — whose reading it is, and whether it is still the day.
+            Route::post('readings/{readingId}/correction', [ReadingController::class, 'correct'])->name('api.readings.correct');
             Route::post('collections', [CollectionController::class, 'store'])->name('api.collections.store');
 
             Route::get('receipts/{payment}', [ReceiptController::class, 'show'])->name('api.receipts.show');

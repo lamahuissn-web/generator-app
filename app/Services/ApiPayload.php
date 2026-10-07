@@ -54,8 +54,12 @@ final class ApiPayload
      *
      * @return array<string,mixed>
      */
-    public static function house(Subscriber $subscriber, string $period, bool $full = false): array
-    {
+    public static function house(
+        Subscriber $subscriber,
+        string $period,
+        bool $full = false,
+        ?User $viewer = null,
+    ): array {
         $subscriber->loadMissing('route');
 
         $unpaid = $subscriber->unpaidBills();
@@ -173,7 +177,14 @@ final class ApiPayload
                     'consumption' => $reading->consumption === null ? null : self::dec($reading->consumption),
                     'estimated' => (bool) $reading->is_estimated,
                     'reader' => $reading->enteredBy?->name,
+                    'entered_by' => $reading->entered_by,
                     'read_on' => $reading->created_at?->toDateString(),
+                    // A FLOOR, not a promise: the door the phone may draw. The engine keeps the last word
+                    // (a paid invoice, or a reading with no invoice at all) and says so in its own words.
+                    'correctable' => $viewer !== null && (
+                        $viewer->isAdmin()
+                        || ((int) $reading->entered_by === (int) $viewer->id && ($reading->created_at?->isToday() ?? false))
+                    ),
                 ])
                 ->values()
                 ->all();
@@ -437,6 +448,15 @@ final class ApiPayload
             'collector_id' => $payment->collector_id,
             'collector' => $payment->collector?->name,
             'collected_on' => $payment->collectedOn()->toDateString(),
+        ];
+    }
+
+    /** A reading that was taken back, and where the household stands now (spec 012). */
+    public static function correction(array $gone, Subscriber $subscriber): array
+    {
+        return [
+            'corrected' => $gone,
+            'house' => self::houseSummary($subscriber),
         ];
     }
 

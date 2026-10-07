@@ -118,7 +118,7 @@ class RouteSheetController extends ApiController
 
         return response()->json([
             'period' => $period,
-            'house' => ApiPayload::house($subscriber, $period, true),
+            'house' => ApiPayload::house($subscriber, $period, true, $request->user()),
         ]);
     }
 
