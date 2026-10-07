@@ -938,6 +938,8 @@
     "refuse.old_meter_lower": "The old meter's final reading cannot be lower than the previous reading.",
     "refuse.new_meter_lower_than_start": "The new meter reading cannot be lower than its starting value.",
     "refuse.reading_lower": "The new reading cannot be lower than the previous one.",
+    "refuse.anomaly_zero": "Zero consumption: the meter has not moved since the last reading. If the number is right, confirm it and send again.",
+    "refuse.anomaly_jump": "A large reading: :consumption kWh against the household's average of :avg. Check the number — if it is right, confirm it and send again.",
     "refuse.estimate_policy": "One estimate is allowed per dead-meter report (since :since) and it has been used. A decision is required: replace the meter, move to a flat rate, or grant an exceptional extension.",
     "refuse.flat_bill_only_for_flat": "Flat bills only apply to flat-rate subscribers.",
     "refuse.nothing_to_collect": "This subscriber has no outstanding balance to collect.",

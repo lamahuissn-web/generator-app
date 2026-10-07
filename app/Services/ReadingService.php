@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Reading;
 use App\Models\Subscriber;
+use App\Models\User;
 
 /**
  * Recording a meter reading — the operator's daily operation.
@@ -57,6 +58,14 @@ final class ReadingService
     {
         $period = (string) $data['period'];
 
+        // The suspicious-reading gate (spec 013) reaches every path that records a reading, this one
+        // included. On a panel screen the OFFICE is the reviewer: the person typing is the one who would
+        // otherwise be asked, so asking him to confirm himself is ceremony — and the reading board's
+        // «قراءات مشكوكة» list still shows what came through. A phone collector is a different case: his
+        // reading is gated, and the app asks him at the meter.
+        $confirmed = (bool) ($data['confirmed_anomaly'] ?? false)
+            || (User::query()->find($userId)?->isAdmin() ?? false);
+
         return match ($data['reading_mode'] ?? self::MODE_NORMAL) {
             self::MODE_ESTIMATED => BillingService::enterEstimatedReading(
                 $subscriber,
@@ -83,6 +92,7 @@ final class ReadingService
                         'new_meter_no' => $data['new_meter_no'],
                         'new_start' => (float) ($data['new_meter_start'] ?? 0),
                     ],
+                    'confirmed_anomaly' => $confirmed,
                 ],
             ),
 
@@ -92,6 +102,7 @@ final class ReadingService
                 (float) $data['current_reading'],
                 $userId,
                 ($data['note'] ?? null) ?: null,
+                ['confirmed_anomaly' => $confirmed],
             ),
         };
     }

@@ -11,7 +11,7 @@ class Reading extends Model
     protected $fillable = [
         'subscriber_id', 'period', 'current_reading', 'previous_reading',
         'consumption', 'entered_by', 'note',
-        'is_estimated', 'estimate_reason',
+        'is_estimated', 'estimate_reason', 'anomaly_confirmed',
         'old_meter_no', 'old_meter_reading', 'new_meter_no', 'new_meter_start',
     ];
 
@@ -19,6 +19,7 @@ class Reading extends Model
     {
         return [
             'is_estimated' => 'boolean',
+            'anomaly_confirmed' => 'boolean',
             'old_meter_reading' => 'float',
             'new_meter_start' => 'float',
         ];

@@ -178,6 +178,8 @@ final class ApiPayload
                     'estimated' => (bool) $reading->is_estimated,
                     'reader' => $reading->enteredBy?->name,
                     'entered_by' => $reading->entered_by,
+                    // «أكّدها الجابي»: a suspicious number somebody waved through (spec 013).
+                    'anomaly_confirmed' => (bool) $reading->anomaly_confirmed,
                     'read_on' => $reading->created_at?->toDateString(),
                     // A FLOOR, not a promise: the door the phone may draw. The engine keeps the last word
                     // (a paid invoice, or a reading with no invoice at all) and says so in its own words.

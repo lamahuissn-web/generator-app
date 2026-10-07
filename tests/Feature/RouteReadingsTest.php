@@ -9,6 +9,7 @@ use App\Models\Route;
 use App\Models\Subscriber;
 use App\Models\User;
 use App\Services\BillingService;
+use App\Services\ReadingQuality;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -210,6 +211,31 @@ class RouteReadingsTest extends TestCase
         // …and its value stays typed so it can be corrected without re-walking the street.
         $this->assertSame('1490', (string) $component->get('values')[$this->first->id]);
         $this->assertArrayNotHasKey($this->second->id, $component->get('values'), 'a saved row is cleared');
+    }
+
+    public function test_a_suspect_row_saves_because_its_warning_was_on_the_screen(): void
+    {
+        // Three months of ~300: a fourth month of 2000 is a jump, and the sheet says so WHILE he types it.
+        $this->reading($this->first, $this->pastMonth(3), 1000, 300);
+        $this->reading($this->first, $this->pastMonth(2), 1300, 300);
+        $this->reading($this->first, $this->pastMonth(1), 1600, 300);
+
+        $this->actingAs($this->collector);
+
+        $component = Livewire::test(RouteReadingSheet::class, ['route' => $this->route])
+            ->set("values.{$this->first->id}", 3600);   // 2000 kWh against a habit of 300
+
+        // The warning the collector is looking at is his chance to check the number — and the save he makes
+        // with it on screen is the confirmation the engine asks for (spec 013). The sheet draws that warning
+        // from the same verdict the save passes to the engine, so the two cannot disagree.
+        $component->call('save');
+
+        $this->assertDatabaseHas('readings', [
+            'subscriber_id' => $this->first->id,
+            'period' => $this->period,
+            'anomaly_confirmed' => true,
+            'consumption' => 2000,
+        ]);
     }
 
     public function test_a_house_already_recorded_this_cycle_is_never_recorded_twice(): void

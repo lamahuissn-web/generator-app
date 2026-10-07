@@ -70,7 +70,11 @@ class BillingServiceTest extends TestCase
         $sub = $this->meteredSub(15);
         $this->baseline($sub, '2026-06', 1000);
 
-        $result = BillingService::enterMeteredReading($sub, '2026-07', 1000, $this->admin->id);
+        // The meter has not moved since the baseline, and a zero is now a QUESTION before it is an invoice
+        // (spec 013). The office answered it here; the bill itself is unchanged — maintenance only.
+        $result = BillingService::enterMeteredReading($sub, '2026-07', 1000, $this->admin->id, null, [
+            'confirmed_anomaly' => true,
+        ]);
 
         $this->assertSame(0.0, (float) $result['bill']->consumption);
         $this->assertSame(0.0, (float) $result['bill']->usage_amount);

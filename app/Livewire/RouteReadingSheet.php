@@ -314,8 +314,19 @@ final class RouteReadingSheet extends Component
                 continue;
             }
 
+            // The sheet shows this row's warning WHILE he types it (see preview()) — so a save with the
+            // warning on screen is a save he was warned about, and the gate is satisfied by it (spec 013).
+            $warned = ReadingQuality::verdict($subscriber, $this->period, (float) $value) !== null;
+
             try {
-                BillingService::enterMeteredReading($subscriber, $this->period, $value, auth()->id());
+                BillingService::enterMeteredReading(
+                    $subscriber,
+                    $this->period,
+                    $value,
+                    auth()->id(),
+                    null,
+                    ['confirmed_anomaly' => $warned],
+                );
                 $saved++;
                 unset($this->values[$row['id']]);
             } catch (\RuntimeException $e) {

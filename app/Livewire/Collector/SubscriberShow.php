@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Collector;
 
+use App\Exceptions\ApiRefusal;
 use App\Models\Bill;
 use App\Models\Payment;
 use App\Models\Subscriber;
@@ -171,6 +172,14 @@ class SubscriberShow extends Component
         }
     }
 
+    /**
+     * The value the engine questioned on the last press, if any (spec 013).
+     *
+     * Bound to the VALUE, not to the screen: a second press confirms the number that was questioned, and a
+     * different number starts the question over.
+     */
+    public ?string $anomalyConfirmedFor = null;
+
     public function saveReading(): void
     {
         $this->resetErrorBag();
@@ -215,12 +224,24 @@ class SubscriberShow extends Component
                 (float) $input,
                 auth()->id(),
                 null,
+                // The suspicious-reading gate (spec 013). This screen shows no live warning as the sheet
+                // does, so the engine's sentence IS the warning — and it ends with «أكِّده ثم أعِد الإرسال»,
+                // which is exactly what the next press does: the confirmation is bound to the value that was
+                // questioned, so pressing again after typing a different number asks about THAT one.
+                ['confirmed_anomaly' => $this->anomalyConfirmedFor === $input],
             );
             $this->subscriber->refresh();
             $this->readingInput = null;
+            $this->anomalyConfirmedFor = null;
             $this->flashMessage(__('portal.flash_reading_ok'));
             $this->view = 'reading';
         } catch (\RuntimeException $e) {
+            // A questioned reading: remember WHICH value was questioned, and let the next press of the same
+            // button be the confirmation the sentence asks for.
+            if (str_starts_with(ApiRefusal::fromBusiness($e)->machineCode, 'refuse.anomaly_')) {
+                $this->anomalyConfirmedFor = $input;
+            }
+
             $this->addError('reading', $e->getMessage());
         }
     }

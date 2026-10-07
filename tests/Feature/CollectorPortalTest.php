@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Livewire\Collector\GlobalSearch;
 use App\Livewire\Collector\SubscriberShow;
 use App\Models\Bill;
+use App\Models\Reading;
 use App\Models\Route;
 use App\Models\Subscriber;
 use App\Models\User;
@@ -190,6 +191,40 @@ class CollectorPortalTest extends TestCase
      * of "3 مناطق", "4 دفعة" instead of "4 دفعات" — which is what the operator sees
      * on the dashboard and the collector on a route list.
      */
+    public function test_a_questioned_reading_on_the_portal_needs_the_second_press(): void
+    {
+        // Three months of habit (300 each), so a fourth month of 2000 is worth a question.
+        foreach ([3 => 1300, 2 => 1600, 1 => 1900] as $back => $value) {
+            Reading::create([
+                'subscriber_id' => $this->metered->id,
+                'period' => now()->startOfMonth()->subMonths($back)->format('Y-m'),
+                'current_reading' => $value,
+                'previous_reading' => $value - 300,
+                'consumption' => 300,
+            ]);
+        }
+
+        $month = now()->format('Y-m');
+
+        $this->actingAs($this->collector);
+
+        $component = Livewire::test(SubscriberShow::class, ['subscriber' => $this->metered->fresh()])
+            ->set('readingInput', '3900')
+            ->call('saveReading');
+
+        // This screen shows no live warning as the route sheet does, so the engine's sentence IS the
+        // warning — and it ends with «أكِّده ثم أعِد الإرسال». Nothing was written on the first press.
+        $component->assertHasErrors('reading');
+        $this->assertSame(0, Reading::where('subscriber_id', $this->metered->id)->where('period', $month)->count());
+
+        // The second press of the same number is the confirmation (spec 013) — bound to that value, so a
+        // different number would start the question over.
+        $component->call('saveReading');
+
+        $this->assertSame(1, Reading::where('subscriber_id', $this->metered->id)->where('period', $month)->count());
+        $this->assertTrue((bool) Reading::where('subscriber_id', $this->metered->id)->where('period', $month)->value('anomaly_confirmed'));
+    }
+
     public function test_counted_labels_use_the_arabic_plural_form(): void
     {
         app()->setLocale('ar');

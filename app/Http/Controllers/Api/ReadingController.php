@@ -106,6 +106,9 @@ class ReadingController extends ApiController
             'estimated_kwh' => [Rule::requiredIf($estimated), 'nullable', 'numeric', 'min:0'],
             'reason' => [Rule::requiredIf($estimated), 'nullable', 'string', 'max:255'],
             'note' => ['nullable', 'string', 'max:255'],
+            // The collector looked at a number the engine found strange and said it was right (spec 013).
+            // Without it the engine refuses to bill — and says why, in a sentence that carries the average.
+            'confirmed_anomaly' => ['sometimes', 'boolean'],
         ]);
 
         $user = $request->user();
@@ -120,6 +123,7 @@ class ReadingController extends ApiController
             'estimated_kwh' => $estimated ? (string) $data['estimated_kwh'] : null,
             'reason' => $estimated ? (string) $data['reason'] : null,
             'note' => $data['note'] ?? null,
+            'confirmed_anomaly' => (bool) ($data['confirmed_anomaly'] ?? false),
         ];
 
         $attempt = ApiIdempotency::run($request, $user, 'reading', $payload, function () use ($subscriber, $period, $user, $data, $estimated): array {
@@ -137,6 +141,7 @@ class ReadingController extends ApiController
                     (float) $data['current_reading'],
                     $user->id,
                     $data['note'] ?? null,
+                    ['confirmed_anomaly' => (bool) ($data['confirmed_anomaly'] ?? false)],
                 ));
 
             return ApiPayload::reading($result['reading'], $result['bill'], $subscriber);

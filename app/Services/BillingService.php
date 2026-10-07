@@ -260,6 +260,7 @@ class BillingService
         $estimateReason = $options['estimate_reason'] ?? null;
         $extension = (bool) ($options['estimate_extension'] ?? false);
         $swap = $options['swap'] ?? null;
+        $confirmedAnomaly = (bool) ($options['confirmed_anomaly'] ?? false);
 
         // The dead-meter policy: one estimated cycle per report.
         //
@@ -296,6 +297,25 @@ class BillingService
             $consumption = round($currentReading - $prevValue, 2);
         }
 
+        // ── The suspicious-reading gate (spec 013) ──────────────────────────────────────────────
+        //
+        // A reading far above the household's own habit, or a zero where the meter was turning, is usually
+        // a mistyped number or the neighbour's meter — and the one person who can still fix it for free is
+        // standing at the door. So the ENGINE refuses to bill it until somebody has looked and said so: the
+        // collector at the meter, or the office on its desk.
+        //
+        // Here rather than on a screen for the reason the dead-meter policy above is here: three screens
+        // record readings, and a rule kept in one of them is a rule the others break. A caller that has
+        // already taken the confirmation says so in `$options['confirmed_anomaly']`.
+        // Estimates are exempt ON PURPOSE: an estimate is not a measurement — the office is saying «the meter
+        // is dead, here is what I charge» — and it already carries a written reason and its own policy. Asking
+        // it again would be ceremony on top of a deliberate act.
+        $anomaly = $estimated ? null : ReadingQuality::verdict($subscriber, $period, $consumption);
+
+        if ($anomaly !== null && ! $confirmedAnomaly) {
+            throw new \RuntimeException(self::anomalyQuestion($anomaly, $subscriber, $period, $consumption));
+        }
+
         $price = self::kwhPrice($period);
         $usage = round($consumption * $price, 2);
         $maintenance = $subscriber->effectiveMaintenanceFee();
@@ -324,6 +344,7 @@ class BillingService
             $subscriber, $period, $currentReading, $prevValue, $consumption,
             $userId, $note, $price, $usage, $maintenance, $prevDebt, $total, $creditApplied,
             $credit, $subsidyAmount, $estimated, $estimateReason, $swap, $caseOpen, $extension,
+            $anomaly, $confirmedAnomaly,
         ) {
             $reading = Reading::create([
                 'subscriber_id' => $subscriber->id,
@@ -335,6 +356,9 @@ class BillingService
                 'note' => $note,
                 'is_estimated' => $estimated,
                 'estimate_reason' => $estimated ? $estimateReason : null,
+                // Somebody looked at a suspicious number and said it was right (spec 013). Kept on the row
+                // so the office's board can point a supervisor at the readings that were waved through.
+                'anomaly_confirmed' => $anomaly !== null && $confirmedAnomaly,
                 'old_meter_no' => $swap['old_meter_no'] ?? null,
                 'old_meter_reading' => $swap['old_reading'] ?? null,
                 'new_meter_no' => $swap['new_meter_no'] ?? null,
@@ -403,6 +427,20 @@ class BillingService
                     'new_start' => (float) ($swap['new_start'] ?? 0),
                 ] : null,
             ]);
+
+            // And the fact that it WAS flagged, separately: «أكّدها الجابي» is the sentence a supervisor
+            // needs, and it must survive even when the reading itself is later corrected away.
+            if ($anomaly !== null && $confirmedAnomaly) {
+                Audit::log('reading.anomaly_confirmed', $reading, [
+                    'subscriber_id' => $subscriber->id,
+                    'period' => $period,
+                    'current_reading' => $currentReading,
+                    'consumption' => $consumption,
+                    'verdict' => $anomaly,
+                    'average' => ReadingQuality::average($subscriber, $period),
+                    'confirmed_by' => $userId,
+                ]);
+            }
 
             return ['reading' => $reading, 'bill' => $bill];
         });
@@ -1303,6 +1341,27 @@ class BillingService
 
             $payment->delete();
         });
+    }
+
+    /**
+     * The sentence the gate refuses with (spec 013): a QUESTION, not an error.
+     *
+     * It names the household's own habit rather than a number in the abstract — «400 كيلوواط ومعدّل البيت
+     * 100» — because the man reading it is standing at that meter, and the average is the fact that tells him
+     * whether he mistyped or the house really changed.
+     */
+    private static function anomalyQuestion(string $verdict, Subscriber $subscriber, string $period, float $consumption): string
+    {
+        $average = ReadingQuality::average($subscriber, $period);
+
+        return $verdict === ReadingQuality::ZERO
+            ? __('refuse.anomaly_zero', [
+                'consumption' => number_format($consumption, 0),
+            ])
+            : __('refuse.anomaly_jump', [
+                'consumption' => number_format($consumption, 0),
+                'avg' => number_format((float) $average, 0),
+            ]);
     }
 
     /**
