@@ -7,6 +7,7 @@ use App\Models\Payment;
 use App\Services\ApiPayload;
 use App\Services\PdfService;
 use App\Services\ReceiptText;
+use App\Services\WhatsAppService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -42,8 +43,16 @@ class ReceiptController extends ApiController
             throw new ApiRefusal('forbidden', __('mobile.forbidden'), 403);
         }
 
+        $subscriber = $payment->subscriber;
+        $text = ReceiptText::for($payment, $subscriber);
+
         return response()->json([
-            'receipt_text' => ReceiptText::for($payment, $payment->subscriber),
+            'receipt_text' => $text,
+            // The office's own wa.me link, when it can vouch for the household's number
+            // (`WhatsAppService::normalizePhone` answers null rather than guessing a country code). The phone
+            // opens this and lands IN the household's chat with the receipt already written; a number the
+            // office cannot vouch for is not invented on the phone — the share sheet is used instead.
+            'wa_link' => WhatsAppService::waLink($subscriber?->phone, $text),
             'payment' => [
                 'id' => $payment->id,
                 'number' => $payment->number,

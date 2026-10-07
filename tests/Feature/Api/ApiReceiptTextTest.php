@@ -160,6 +160,41 @@ class ApiReceiptTextTest extends ApiTestCase
         $this->assertSame($payment->collector_id, $again->json('payment.collector_id'));
     }
 
+    public function test_the_office_offers_the_households_own_whatsapp_chat(): void
+    {
+        $house = $this->flatHouse('بيت أبو علي', 60, [$this->period], ['phone' => '70 555123']);
+
+        $this->collect(['subscriber_id' => $house->id, 'amount' => '20'], 'moto-receipt-wa-0001')->assertCreated();
+        $payment = Payment::query()->sole();
+
+        $body = $this->api($this->collector, 'GET', "/api/v1/receipts/{$payment->id}/text", [], ['Accept-Language' => 'ar'])
+            ->assertStatus(200)
+            ->json();
+
+        // The office's own normalisation (8-digit local → 961…), and the receipt itself as the message: the
+        // link and the words are one document on two roads.
+        $this->assertNotNull($body['wa_link']);
+        $this->assertStringStartsWith('https://wa.me/96170555123?text=', $body['wa_link']);
+        $this->assertSame($body['receipt_text'], rawurldecode(explode('?text=', $body['wa_link'])[1]));
+    }
+
+    public function test_a_number_the_office_cannot_vouch_for_gets_no_link(): void
+    {
+        // No phone at all: nothing to open, and no country code guessed on the phone's behalf. The words
+        // still travel — the share sheet is what carries them.
+        $house = $this->flatHouse('بيت بلا هاتف', 60, [$this->period]);
+
+        $this->collect(['subscriber_id' => $house->id, 'amount' => '20'], 'moto-receipt-wa-0002')->assertCreated();
+        $payment = Payment::query()->sole();
+
+        $body = $this->api($this->collector, 'GET', "/api/v1/receipts/{$payment->id}/text", [], ['Accept-Language' => 'ar'])
+            ->assertStatus(200)
+            ->json();
+
+        $this->assertNull($body['wa_link']);
+        $this->assertNotEmpty($body['receipt_text']);
+    }
+
     public function test_a_collector_cannot_read_back_a_colleagues_receipt(): void
     {
         $payment = $this->collected();
