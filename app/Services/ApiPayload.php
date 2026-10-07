@@ -87,6 +87,7 @@ final class ApiPayload
                 ->values()
                 ->all(),
             'unpaid_months_count' => $unpaid->count(),
+            'period' => $period,
             'period_invoiced' => self::invoicedFor($subscriber, $period),
             'reading_done' => $reading !== null,
             'reading_value' => $reading === null ? null : self::dec($reading->current_reading),

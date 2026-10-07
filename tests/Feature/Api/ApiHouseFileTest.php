@@ -71,6 +71,17 @@ class ApiHouseFileTest extends ApiTestCase
         $this->assertSame('25.00', $bills[0]['remaining']);
     }
 
+    public function test_the_file_says_which_cycle_it_is_read_as_of(): void
+    {
+        $house = $this->flatHouse('بيت الدورة', 60, [$this->period]);
+
+        // The phone marks «هذا الشهر» on the meter log with it: a log that repeats this month's pair under
+        // this month's card has to say which row it is repeating.
+        $this->file($house->id)
+            ->assertStatus(200)
+            ->assertJsonPath('house.period', (string) $this->period);
+    }
+
     public function test_a_household_that_never_paid_carries_an_empty_log_not_a_missing_one(): void
     {
         $house = $this->flatHouse('بيت بلا دفعات', 60, [$this->period]);
